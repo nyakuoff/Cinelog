@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark-first theme. Values are RGB channel triplets so Tailwind's
+   `rgb(var(--x) / <alpha>)` works. A light theme can later override these
+   under `:root.light` without touching any component. */
+:root,
+:root.dark {
+  --bg: 14 15 19; /* #0e0f13 */
+  --surface: 22 24 31; /* #16181f */
+  --surface-2: 30 33 43; /* #1e212b */
+  --border: 38 42 53; /* #262a35 */
+  --content: 231 233 238; /* #e7e9ee */
+  --muted: 154 160 173; /* #9aa0ad */
+  --accent: 240 169 43; /* #f0a92b warm amber */
+  --accent-fg: 20 16 6; /* near-black for text on accent */
+}
+
+:root.light {
+  --bg: 247 248 250;
+  --surface: 255 255 255;
+  --surface-2: 241 243 247;
+  --border: 224 227 233;
+  --content: 24 27 34;
+  --muted: 96 103 116;
+  --accent: 201 132 12;
+  --accent-fg: 255 255 255;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-bg text-content font-sans antialiased;
+}
+
+/* Subtle, quick transitions site-wide (kept short and unobtrusive). */
+a,
+button {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full;
+  background-color: rgb(var(--border));
+}
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}

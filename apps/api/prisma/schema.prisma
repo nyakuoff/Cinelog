@@ -1,0 +1,180 @@
+// Cinelog — Prisma schema (SQLite).
+//
+// Notes on SQLite constraints (deliberate design choices):
+//  - Prisma enums are unsupported on SQLite, so enum-like columns are String
+//    and validated by the shared Zod contracts at the API boundary.
+//  - JSON blobs are stored as String (Json scalar support on SQLite varies by
+//    version); we serialize/parse in the service layer.
+//  - Arrays are modeled as relations (e.g. Genre m:n) or JSON strings.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & auth
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String?  @unique
+  passwordHash String
+  role         String   @default("USER") // UserRole: ADMIN | USER
+  avatarUrl    String?
+  bannerUrl    String?
+  bio          String?
+  ratingScale  String   @default("TEN") // RatingScale
+  settings     String   @default("{}") // JSON: misc per-user prefs
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+  statuses      UserMediaStatus[]
+  watchHistory  WatchHistory[]
+  ratings       Rating[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Canonical cached media metadata (shared across all users)
+// ---------------------------------------------------------------------------
+
+model MediaItem {
+  id             String   @id @default(cuid())
+  type           String // MediaType
+  provider       String // ProviderId
+  externalId     String
+  title          String
+  originalTitle  String?
+  releaseDate    String?
+  runtime        Int?
+  overview       String?
+  tagline        String?
+  posterPath     String? // provider path/URL; served via the artwork proxy
+  backdropPath   String?
+  logoPath       String?
+  providerRating Float? // provider's own average, normalized 0..100
+  rawMetadata    String   @default("{}") // JSON: full provider detail (cast, crew, studios, trailer, artwork options)
+  cachedAt       DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  genres   Genre[]           @relation("MediaGenres")
+  statuses UserMediaStatus[]
+  history  WatchHistory[]
+  ratings  Rating[]
+
+  @@unique([provider, externalId])
+  @@index([type])
+  @@map("media_items")
+}
+
+model Genre {
+  id    String @id @default(cuid())
+  name  String @unique
+  media MediaItem[] @relation("MediaGenres")
+
+  @@map("genres")
+}
+
+// ---------------------------------------------------------------------------
+// Per-user tracking (the isolation boundary)
+// ---------------------------------------------------------------------------
+
+model UserMediaStatus {
+  id            String    @id @default(cuid())
+  userId        String
+  mediaItemId   String
+  status        String? // TrackingStatus | null
+  isFavorite    Boolean   @default(false)
+  isWatchlisted Boolean   @default(false)
+  rewatchCount  Int       @default(0)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime  @default(now())
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
+  @@index([userId])
+  @@map("user_media_status")
+}
+
+model WatchHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  watchedAt   DateTime @default(now())
+  isRewatch   Boolean  @default(false)
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([mediaItemId])
+  @@map("watch_history")
+}
+
+// Per-user rating. Season/episode targets (nullable FKs) arrive with the
+// episodes phase; Phase 1 rates media only.
+model Rating {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  value       Float // normalized 0..100
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
+  @@index([mediaItemId])
+  @@map("ratings")
+}
+
+// ---------------------------------------------------------------------------
+// Artwork cache & global settings
+// ---------------------------------------------------------------------------
+
+model ArtworkCache {
+  id          String   @id @default(cuid())
+  sourceUrl   String   @unique
+  localPath   String
+  hash        String
+  bytes       Int
+  contentType String?
+  fetchedAt   DateTime @default(now())
+
+  @@map("artwork_cache")
+}
+
+model Setting {
+  key   String @id
+  value String // JSON
+
+  @@map("settings")
+}

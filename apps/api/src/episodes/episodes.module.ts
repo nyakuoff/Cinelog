@@ -8,5 +8,6 @@ import { EpisodesService } from './episodes.service';
   imports: [MetadataModule, ArtworkModule],
   controllers: [EpisodesController],
   providers: [EpisodesService],
+  exports: [EpisodesService],
 })
 export class EpisodesModule {}

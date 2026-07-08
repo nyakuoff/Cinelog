@@ -1,6 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ImportMode, ImportSummary, LetterboxdItem } from '@cinelog/contracts';
+import type {
+  BackupImportResult,
+  ImportMode,
+  ImportSummary,
+  LetterboxdItem,
+} from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
 import { parseCsv } from '../lib/csv';
 import { cn } from '../lib/cn';
@@ -12,15 +17,143 @@ export function ImportPage(): JSX.Element {
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
       <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
-        Import
+        Import &amp; backup
       </p>
       <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">
-        Sync from Letterboxd
+        Your data
       </h1>
 
+      <BackupCard />
       <LetterboxdSyncCard />
       <CsvImportCard />
     </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Cinelog backup — export/import the user's full library as JSON.
+// -------------------------------------------------------------------------
+
+function BackupCard(): JSX.Element {
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BackupImportResult | null>(null);
+
+  async function onExport(): Promise<void> {
+    setError(null);
+    setExporting(true);
+    try {
+      const data = await api.exportBackup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cinelog-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Export failed.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function onImportFile(file: File): Promise<void> {
+    setError(null);
+    setResult(null);
+    setImporting(true);
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const res = await api.importBackup(parsed as never);
+      setResult(res);
+      void queryClient.invalidateQueries({ queryKey: ['library'] });
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof SyntaxError
+            ? 'That file isn’t valid JSON.'
+            : 'Import failed.',
+      );
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <Card className="mt-6 p-6">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-gold" />
+        <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
+          Backup &amp; restore
+        </h2>
+      </div>
+      <p className="text-sm text-muted">
+        Download everything you’ve tracked — statuses, ratings, watch history, episode ratings, and
+        artwork picks — as a single JSON file. Import it to restore onto this or another account
+        (it merges, never wipes).
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="primary" disabled={exporting} onClick={() => void onExport()}>
+          {exporting ? 'Exporting…' : '↓ Export backup'}
+        </Button>
+        <Button variant="secondary" disabled={importing} onClick={() => inputRef.current?.click()}>
+          {importing ? 'Restoring…' : '↑ Import backup'}
+        </Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onImportFile(f);
+            e.target.value = '';
+          }}
+        />
+      </div>
+
+      {importing && (
+        <p className="mt-3 text-xs text-muted-2">
+          Restoring — titles not already cached are re-fetched from TMDB, so a large library can take
+          a moment.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-3 rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+          {error}
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-4 rounded-xl border border-border bg-surface-2/50 p-4 text-sm">
+          <p>
+            <span className="font-cond text-lg font-extrabold text-gold">{result.itemsImported}</span>{' '}
+            of {result.itemsProcessed} titles restored · {result.ratingsImported} ratings ·{' '}
+            {result.watchEventsImported} watches · {result.episodeRatingsImported} episode ratings.
+          </p>
+          {result.failures.length > 0 && (
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-muted-2 hover:text-content">
+                {result.failed} couldn’t be restored
+              </summary>
+              <ul className="mt-2 max-h-40 overflow-y-auto text-xs text-muted">
+                {result.failures.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

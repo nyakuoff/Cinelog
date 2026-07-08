@@ -133,6 +133,13 @@ export class EpisodesService {
     });
   }
 
+  /** Guarantee a show's seasons/episodes are cached — used by backup restore
+   *  before re-attaching per-episode ratings. No-op for non-episodic media. */
+  async ensureEpisodesCached(mediaId: string): Promise<void> {
+    const media = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
+    if (media) await this.ensureCached(media);
+  }
+
   // -- helpers ---------------------------------------------------------------
 
   private async seasonAverage(userId: string, seasonId: string): Promise<number | null> {

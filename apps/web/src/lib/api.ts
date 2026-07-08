@@ -6,6 +6,8 @@ import type {
   ArtworkKind,
   ArtworkOptionsResponse,
   AuthResponse,
+  BackupData,
+  BackupImportResult,
   ChangePasswordRequest,
   ConnectLetterboxdRequest,
   EpisodeRatingResponse,
@@ -199,6 +201,10 @@ export const api = {
   // -- import ----------------------------------------------------------------
   importLetterboxd: (req: LetterboxdImportRequest) =>
     request<ImportSummary>('POST', '/import/letterboxd', req),
+
+  // -- backup ----------------------------------------------------------------
+  exportBackup: () => request<BackupData>('GET', '/backup/export'),
+  importBackup: (data: BackupData) => request<BackupImportResult>('POST', '/backup/import', data),
 
   // -- admin -----------------------------------------------------------------
   adminListUsers: () => request<AdminUserListResponse>('GET', '/admin/users'),

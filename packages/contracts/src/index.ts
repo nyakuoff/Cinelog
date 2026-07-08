@@ -8,4 +8,5 @@ export * from './imports.js';
 export * from './profile.js';
 export * from './artwork.js';
 export * from './admin.js';
+export * from './backup.js';
 export * from './rating-scale.js';

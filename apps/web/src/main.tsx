@@ -18,3 +18,13 @@ createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>,
 );
+
+// Register the PWA service worker in production only (keeps the Vite dev server's
+// HMR untouched). Served from the app root, so its scope is "/".
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').catch(() => {
+      /* best-effort; the app works fine without it */
+    });
+  });
+}

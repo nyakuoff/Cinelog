@@ -3,7 +3,7 @@
 FROM node:22-slim AS build
 RUN corepack enable
 WORKDIR /repo
-COPY pnpm-workspace.yaml package.json tsconfig.base.json turbo.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json turbo.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile

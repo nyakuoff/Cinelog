@@ -6,7 +6,7 @@ RUN corepack enable
 WORKDIR /repo
 
 FROM base AS build
-COPY pnpm-workspace.yaml package.json tsconfig.base.json turbo.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml package.json tsconfig.base.json turbo.json ./
 COPY packages/contracts/package.json packages/contracts/
 COPY apps/api/package.json apps/api/
 RUN pnpm install --frozen-lockfile
@@ -20,7 +20,10 @@ RUN pnpm --filter @cinelog/contracts build \
 # from the store, so the client generated above may not survive. `prisma` is a
 # prod dependency, so both the CLI (for `migrate deploy` at boot) and the freshly
 # generated client are present in /app.
-RUN pnpm --filter @cinelog/api --prod deploy /app \
+# --legacy: pnpm 10+ refuses `deploy` without inject-workspace-packages unless
+# you opt into the classic behavior (our only workspace dep, @cinelog/contracts,
+# isn't injected — it's a normal built package).
+RUN pnpm --filter @cinelog/api --prod deploy --legacy /app \
   && cd /app && node_modules/.bin/prisma generate --schema prisma/schema.prisma
 
 FROM base AS runtime

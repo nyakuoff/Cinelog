@@ -50,14 +50,14 @@ export function WatchlistPage(): JSX.Element {
           Want to watch
         </h1>
         {watchlist.length > 0 && (
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <div className="flex shrink-0 gap-1 rounded-xl border border-border bg-surface p-1">
               {GROUPS.map((g) => (
                 <button
                   key={g.key}
                   onClick={() => setGroup(g.key)}
                   className={cn(
-                    'rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                    'shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
                     group === g.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
                   )}
                 >

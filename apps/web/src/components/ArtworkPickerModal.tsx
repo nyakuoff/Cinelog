@@ -63,9 +63,11 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface shadow-soft"
       >
-        <div className="flex items-center gap-3 border-b border-border p-4">
-          <h2 className="font-cond text-lg font-extrabold uppercase tracking-tight">Edit artwork</h2>
-          <div className="ml-auto flex gap-1 rounded-xl border border-border bg-surface-2 p-1">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
+          <h2 className="w-full font-cond text-lg font-extrabold uppercase tracking-tight sm:w-auto sm:mr-auto">
+            Edit artwork
+          </h2>
+          <div className="flex gap-1 rounded-xl border border-border bg-surface-2 p-1">
             {TABS.map((t) => (
               <button
                 key={t.key}
@@ -82,7 +84,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="grid h-8 w-8 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-content"
+            className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-content sm:ml-0"
           >
             ✕
           </button>

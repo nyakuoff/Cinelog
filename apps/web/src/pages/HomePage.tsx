@@ -102,13 +102,13 @@ export function HomePage(): JSX.Element {
               <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
                 Your library
               </h2>
-              <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+              <div className="flex shrink-0 gap-1 rounded-xl border border-border bg-surface p-1">
                 {GROUPS.map((g) => (
                   <button
                     key={g.key}
                     onClick={() => setGroup(g.key)}
                     className={cn(
-                      'rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                      'shrink-0 whitespace-nowrap rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
                       group === g.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
                     )}
                   >
@@ -120,14 +120,14 @@ export function HomePage(): JSX.Element {
                 ))}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1">
                 {TABS.map((t) => (
                   <button
                     key={t.key}
                     onClick={() => setFilter(t.key)}
                     className={cn(
-                      'rounded-lg px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                      'shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
                       filter === t.key ? 'bg-surface-2 text-content' : 'text-muted hover:text-content',
                     )}
                   >

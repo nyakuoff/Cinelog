@@ -1,9 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { MediaItem, Prisma } from '@prisma/client';
 import {
+  ArtworkKind,
   MediaType,
   ProviderId,
   TrackingStatus,
+  type ArtworkChoice,
+  type ArtworkOptionsResponse,
   type MediaDetail,
   type MediaRef,
   type SearchResponse,
@@ -82,20 +85,7 @@ export class MediaService {
 
   private async cacheDetails(d: ProviderMediaDetails): Promise<MediaItem> {
     const data: Prisma.MediaItemCreateInput = {
-      type: d.type,
-      provider: d.provider,
-      externalId: d.externalId,
-      title: d.title,
-      originalTitle: d.originalTitle,
-      releaseDate: d.releaseDate,
-      runtime: d.runtime,
-      overview: d.overview,
-      tagline: d.tagline,
-      posterPath: d.posterUrl,
-      backdropPath: d.backdropUrl,
-      logoPath: d.logoUrl,
-      providerRating: d.providerRating,
-      rawMetadata: JSON.stringify(d),
+      ...this.scalarFields(d),
       genres: {
         connectOrCreate: d.genres.map((name) => ({
           where: { name },
@@ -110,6 +100,71 @@ export class MediaService {
     });
   }
 
+  private scalarFields(d: ProviderMediaDetails) {
+    return {
+      type: d.type,
+      provider: d.provider,
+      externalId: d.externalId,
+      title: d.title,
+      originalTitle: d.originalTitle,
+      releaseDate: d.releaseDate,
+      runtime: d.runtime,
+      overview: d.overview,
+      tagline: d.tagline,
+      posterPath: d.posterUrl,
+      backdropPath: d.backdropUrl,
+      logoPath: d.logoUrl,
+      providerRating: d.providerRating,
+      rawMetadata: JSON.stringify(d),
+    };
+  }
+
+  /** Re-point a mismatched cached title at the correct provider match. The
+   *  Cinelog id — and every user's tracking/ratings/history hanging off it —
+   *  is preserved; only the cached metadata (and derived season/episode/
+   *  artwork-override data, which would otherwise describe the wrong title)
+   *  is replaced. */
+  async rematch(
+    userId: string,
+    mediaId: string,
+    provider: ProviderId,
+    externalId: string,
+    type: MediaType,
+  ): Promise<MediaDetail> {
+    const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
+    if (!item) throw new NotFoundException('Media not found');
+
+    const conflict = await this.prisma.mediaItem.findUnique({
+      where: { provider_externalId: { provider, externalId } },
+    });
+    if (conflict && conflict.id !== mediaId) {
+      throw new ConflictException('That title is already in your library as a separate entry');
+    }
+
+    const details = await this.registry.getDetails(provider, externalId, type);
+
+    await this.prisma.$transaction([
+      this.prisma.season.deleteMany({ where: { mediaItemId: mediaId } }),
+      this.prisma.userArtwork.deleteMany({ where: { mediaItemId: mediaId } }),
+      this.prisma.mediaItem.update({
+        where: { id: mediaId },
+        data: {
+          ...this.scalarFields(details),
+          cachedAt: new Date(),
+          genres: {
+            set: [],
+            connectOrCreate: details.genres.map((name) => ({
+              where: { name },
+              create: { name },
+            })),
+          },
+        },
+      }),
+    ]);
+
+    return this.getDetail(userId, mediaId);
+  }
+
   /** Assemble the full detail payload for a user, merging their personal state. */
   async getDetail(userId: string, mediaId: string): Promise<MediaDetail> {
     const item = await this.prisma.mediaItem.findUnique({
@@ -119,7 +174,7 @@ export class MediaService {
     if (!item) throw new NotFoundException('Media not found');
 
     const raw = this.parseRaw(item.rawMetadata);
-    const [status, rating, community] = await Promise.all([
+    const [status, rating, community, artworkOverrides] = await Promise.all([
       this.prisma.userMediaStatus.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
@@ -130,7 +185,10 @@ export class MediaService {
         where: { mediaItemId: mediaId },
         _avg: { value: true },
       }),
+      this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } }),
     ]);
+    const posterOverride = artworkOverrides.find((a) => a.type === 'POSTER')?.url;
+    const backdropOverride = artworkOverrides.find((a) => a.type === 'BACKDROP')?.url;
 
     const userState: UserMediaState = {
       status: status?.status ? (TrackingStatus.safeParse(status.status).data ?? null) : null,
@@ -153,8 +211,8 @@ export class MediaService {
       runtime: item.runtime,
       overview: item.overview,
       tagline: item.tagline,
-      posterUrl: this.artwork.toProxyUrl(item.posterPath),
-      backdropUrl: this.artwork.toProxyUrl(item.backdropPath),
+      posterUrl: this.artwork.toProxyUrl(posterOverride ?? item.posterPath),
+      backdropUrl: this.artwork.toProxyUrl(backdropOverride ?? item.backdropPath),
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
       studios: raw?.studios ?? [],
@@ -179,6 +237,100 @@ export class MediaService {
       communityRating: community._avg.value ?? null,
       userState,
     };
+  }
+
+  /** Every poster/backdrop the provider offers, plus which one is currently
+   *  effective for this user (their override, or the shared default). */
+  async getArtworkOptions(userId: string, mediaId: string): Promise<ArtworkOptionsResponse> {
+    const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
+    if (!item) throw new NotFoundException('Media not found');
+
+    const raw = this.parseRaw(item.rawMetadata);
+    const overrides = await this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } });
+    const posterOverride = overrides.find((a) => a.type === 'POSTER')?.url ?? null;
+    const backdropOverride = overrides.find((a) => a.type === 'BACKDROP')?.url ?? null;
+
+    const posters = this.artworkChoices(raw, 'POSTER', item.posterPath);
+    const backdrops = this.artworkChoices(raw, 'BACKDROP', item.backdropPath);
+
+    return {
+      mediaId,
+      posters,
+      backdrops,
+      selectedPoster: posterOverride ?? item.posterPath,
+      selectedBackdrop: backdropOverride ?? item.backdropPath,
+      hasPosterOverride: posterOverride !== null,
+      hasBackdropOverride: backdropOverride !== null,
+    };
+  }
+
+  /** Set (or clear, when sourceUrl is null) the user's artwork override. The
+   *  chosen URL must be one of the options actually offered for this media. */
+  async setArtwork(
+    userId: string,
+    mediaId: string,
+    kind: ArtworkKind,
+    sourceUrl: string | null,
+  ): Promise<void> {
+    if (sourceUrl === null) {
+      await this.prisma.userArtwork.deleteMany({
+        where: { userId, mediaItemId: mediaId, type: kind },
+      });
+      return;
+    }
+
+    const options = await this.getArtworkOptions(userId, mediaId);
+    const valid = (kind === 'POSTER' ? options.posters : options.backdrops).some(
+      (c) => c.sourceUrl === sourceUrl,
+    );
+    if (!valid) throw new BadRequestException('That artwork is not available for this title');
+
+    await this.prisma.userArtwork.upsert({
+      where: { userId_mediaItemId_type: { userId, mediaItemId: mediaId, type: kind } },
+      create: { userId, mediaItemId: mediaId, type: kind, url: sourceUrl },
+      update: { url: sourceUrl },
+    });
+  }
+
+  private artworkChoices(
+    raw: ProviderMediaDetails | null,
+    kind: ArtworkKind,
+    defaultUrl: string | null,
+  ): ArtworkChoice[] {
+    const fromProvider = (raw?.artwork ?? []).filter((a) => a.type === kind);
+    const seen = new Set<string>();
+    const choices: ArtworkChoice[] = [];
+
+    // Ensure the current default is always selectable, even if the cached
+    // artwork list predates this feature or the provider omitted it.
+    const ordered = defaultUrl
+      ? [
+          ...fromProvider.filter((a) => a.url === defaultUrl),
+          ...fromProvider.filter((a) => a.url !== defaultUrl),
+        ]
+      : fromProvider;
+
+    for (const a of ordered) {
+      if (seen.has(a.url)) continue;
+      seen.add(a.url);
+      choices.push({
+        sourceUrl: a.url,
+        previewUrl: this.artwork.toProxyUrl(a.url)!,
+        width: a.width,
+        height: a.height,
+        language: a.language,
+      });
+    }
+    if (defaultUrl && !seen.has(defaultUrl)) {
+      choices.unshift({
+        sourceUrl: defaultUrl,
+        previewUrl: this.artwork.toProxyUrl(defaultUrl)!,
+        width: null,
+        height: null,
+        language: null,
+      });
+    }
+    return choices;
   }
 
   private parseRaw(json: string): ProviderMediaDetails | null {

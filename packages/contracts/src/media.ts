@@ -22,6 +22,16 @@ export const SearchResponse = z.object({
 });
 export type SearchResponse = z.infer<typeof SearchResponse>;
 
+/** PUT /media/:id/rematch — re-point a mismatched cached title at the correct
+ *  provider match. The Cinelog id (and every user's tracking/ratings/history
+ *  hanging off it) is preserved; only the cached metadata is replaced. */
+export const RematchRequest = z.object({
+  provider: ProviderId,
+  externalId: z.string(),
+  type: MediaType,
+});
+export type RematchRequest = z.infer<typeof RematchRequest>;
+
 export const Genre = z.object({
   id: z.string(),
   name: z.string(),

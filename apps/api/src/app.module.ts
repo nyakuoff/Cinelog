@@ -10,7 +10,11 @@ import { UsersModule } from './users/users.module';
 import { MediaModule } from './media/media.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { RatingsModule } from './ratings/ratings.module';
+import { EpisodesModule } from './episodes/episodes.module';
+import { ImportModule } from './import/import.module';
 import { ArtworkModule } from './artwork/artwork.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { OgModule } from './og/og.module';
 import { AppController } from './app.controller';
 import { JwtAuthGuard } from './common/jwt-auth.guard';
 import { RolesGuard } from './common/roles.guard';
@@ -33,7 +37,11 @@ import { RolesGuard } from './common/roles.guard';
     MediaModule,
     TrackingModule,
     RatingsModule,
+    EpisodesModule,
+    ImportModule,
     ArtworkModule,
+    UploadsModule,
+    OgModule,
   ],
   controllers: [AppController],
   providers: [

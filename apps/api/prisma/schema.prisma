@@ -31,13 +31,20 @@ model User {
   bio          String?
   ratingScale  String   @default("TEN") // RatingScale
   settings     String   @default("{}") // JSON: misc per-user prefs
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
-  refreshTokens RefreshToken[]
-  statuses      UserMediaStatus[]
-  watchHistory  WatchHistory[]
-  ratings       Rating[]
+  // Letterboxd live sync: pulls the user's public diary RSS feed on demand.
+  letterboxdUsername String?
+  letterboxdSyncedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens  RefreshToken[]
+  statuses       UserMediaStatus[]
+  watchHistory   WatchHistory[]
+  ratings        Rating[]
+  episodeRatings EpisodeRating[]
+  artwork        UserArtwork[]
 
   @@map("users")
 }
@@ -84,10 +91,90 @@ model MediaItem {
   statuses UserMediaStatus[]
   history  WatchHistory[]
   ratings  Rating[]
+  seasons  Season[]
+  artwork  UserArtwork[]
 
   @@unique([provider, externalId])
   @@index([type])
   @@map("media_items")
+}
+
+// Per-user artwork override: lets a user pick a different poster/backdrop than
+// the media's default, from the set of images the provider offers. Never
+// affects other users. Absence of a row means "use the provider default".
+model UserArtwork {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  type        String // ArtworkKind: POSTER | BACKDROP
+  url         String // raw provider source URL (proxied for display at read time)
+  createdAt   DateTime @default(now())
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId, type])
+  @@index([mediaItemId])
+  @@map("user_artwork")
+}
+
+// ---------------------------------------------------------------------------
+// Seasons & episodes (first-class; cached from the provider)
+// ---------------------------------------------------------------------------
+
+model Season {
+  id           String   @id @default(cuid())
+  mediaItemId  String
+  seasonNumber Int
+  name         String?
+  overview     String?
+  posterPath   String?
+  airDate      String?
+  episodeCount Int      @default(0)
+  cachedAt     DateTime @default(now())
+
+  media    MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+  episodes Episode[]
+
+  @@unique([mediaItemId, seasonNumber])
+  @@index([mediaItemId])
+  @@map("seasons")
+}
+
+model Episode {
+  id            String   @id @default(cuid())
+  seasonId      String
+  episodeNumber Int
+  name          String?
+  overview      String?
+  stillPath     String?
+  airDate       String?
+  runtime       Int?
+
+  season  Season          @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  ratings EpisodeRating[]
+
+  @@unique([seasonId, episodeNumber])
+  @@index([seasonId])
+  @@map("episodes")
+}
+
+// Per-user episode rating (normalized 0..100). Season/show averages are
+// computed from these — never stored.
+model EpisodeRating {
+  id        String   @id @default(cuid())
+  userId    String
+  episodeId String
+  value     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, episodeId])
+  @@index([episodeId])
+  @@map("episode_ratings")
 }
 
 model Genre {

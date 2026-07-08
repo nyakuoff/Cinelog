@@ -54,6 +54,24 @@ export interface ProviderMediaDetails {
   artwork: ProviderArtwork[];
 }
 
+export interface ProviderSeason {
+  seasonNumber: number;
+  name: string | null;
+  overview: string | null;
+  posterUrl: string | null;
+  airDate: string | null;
+  episodeCount: number;
+}
+
+export interface ProviderEpisode {
+  episodeNumber: number;
+  name: string | null;
+  overview: string | null;
+  stillUrl: string | null;
+  airDate: string | null;
+  runtime: number | null;
+}
+
 /**
  * The extensibility seam. A new metadata source is added by implementing this
  * interface and registering it — nothing else in the app touches provider APIs.
@@ -64,6 +82,9 @@ export interface MetadataProvider {
   supports(type: MediaType): boolean;
   search(query: string, type?: MediaType): Promise<ProviderSearchResult[]>;
   getDetails(externalId: string, type: MediaType): Promise<ProviderMediaDetails>;
+  /** Episodic providers implement these; movie-only ones may omit them. */
+  getSeasons?(externalId: string): Promise<ProviderSeason[]>;
+  getEpisodes?(externalId: string, seasonNumber: number): Promise<ProviderEpisode[]>;
 }
 
 /** DI token for the array of registered providers. */

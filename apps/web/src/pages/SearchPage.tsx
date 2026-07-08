@@ -38,28 +38,37 @@ export function SearchPage(): JSX.Element {
   }
 
   return (
-    <div>
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">
-        Results for <span className="text-accent">“{q}”</span>
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <h1 className="mb-6 font-cond text-2xl font-extrabold uppercase tracking-tight">
+        {q ? (
+          <>
+            Results for <span className="text-gold">“{q}”</span>
+          </>
+        ) : (
+          'Search'
+        )}
       </h1>
 
-      {isLoading || opening ? (
+      {!q ? (
+        <p className="text-muted">Type in the search bar above to find something to log.</p>
+      ) : isLoading || opening ? (
         <div className="flex justify-center py-24">
           <Spinner />
         </div>
       ) : isError ? (
-        <p className="text-sm text-red-400">Search failed. Is TMDB configured?</p>
+        <p className="text-sm text-rose">Search failed. Is TMDB configured?</p>
       ) : (data?.results.length ?? 0) === 0 ? (
         <p className="text-muted">No results found.</p>
       ) : (
         <div className="grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-          {data?.results.map((r) => (
+          {data?.results.map((r, i) => (
             <PosterCard
               key={`${r.provider}:${r.externalId}`}
               title={r.title}
               year={r.year}
               type={r.type}
               posterUrl={r.posterUrl}
+              index={i}
               onClick={() => void open(r)}
             />
           ))}

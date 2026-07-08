@@ -6,8 +6,10 @@ import type {
   MetadataProvider,
   ProviderArtwork,
   ProviderCredit,
+  ProviderEpisode,
   ProviderMediaDetails,
   ProviderSearchResult,
+  ProviderSeason,
 } from './provider.types';
 
 const API_BASE = 'https://api.themoviedb.org/3';
@@ -64,6 +66,36 @@ export class TmdbProvider implements MetadataProvider {
       include_image_language: 'en,null',
     });
     return this.mapDetails(kind, data);
+  }
+
+  async getSeasons(externalId: string): Promise<ProviderSeason[]> {
+    const { kind, id } = decodeExternalId(externalId);
+    if (kind !== 'tv') return [];
+    const data = await this.request<TmdbDetails>(`/tv/${id}`, {});
+    return (data.seasons ?? [])
+      .filter((s) => (s.season_number ?? 0) >= 1) // skip "Specials" (season 0)
+      .map((s) => ({
+        seasonNumber: s.season_number,
+        name: s.name ?? null,
+        overview: s.overview || null,
+        posterUrl: img(s.poster_path, 'w342'),
+        airDate: s.air_date ?? null,
+        episodeCount: s.episode_count ?? 0,
+      }));
+  }
+
+  async getEpisodes(externalId: string, seasonNumber: number): Promise<ProviderEpisode[]> {
+    const { kind, id } = decodeExternalId(externalId);
+    if (kind !== 'tv') return [];
+    const data = await this.request<TmdbSeasonDetail>(`/tv/${id}/season/${seasonNumber}`, {});
+    return (data.episodes ?? []).map((e) => ({
+      episodeNumber: e.episode_number,
+      name: e.name ?? null,
+      overview: e.overview || null,
+      stillUrl: img(e.still_path, 'w300'),
+      airDate: e.air_date ?? null,
+      runtime: e.runtime ?? null,
+    }));
   }
 
   // -- mapping ---------------------------------------------------------------
@@ -222,4 +254,23 @@ interface TmdbDetails {
   };
   images?: { posters?: TmdbImage[]; backdrops?: TmdbImage[]; logos?: TmdbImage[] };
   videos?: { results?: { site: string; type: string; key: string }[] };
+  seasons?: TmdbSeason[];
+}
+interface TmdbSeason {
+  season_number: number;
+  name?: string;
+  overview?: string;
+  poster_path?: string | null;
+  air_date?: string;
+  episode_count?: number;
+}
+interface TmdbSeasonDetail {
+  episodes?: {
+    episode_number: number;
+    name?: string;
+    overview?: string;
+    still_path?: string | null;
+    air_date?: string;
+    runtime?: number | null;
+  }[];
 }

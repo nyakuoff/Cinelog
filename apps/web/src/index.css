@@ -2,30 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dark-first theme. Values are RGB channel triplets so Tailwind's
-   `rgb(var(--x) / <alpha>)` works. A light theme can later override these
-   under `:root.light` without touching any component. */
+/* ============================================================
+   Cinelog identity — committed dark cinema world.
+   Amber = projector · Cyan = screen glow · Rose = affection.
+   Tokens are RGB channel triplets for `rgb(var(--x) / <alpha>)`.
+   ============================================================ */
 :root,
 :root.dark {
-  --bg: 14 15 19; /* #0e0f13 */
-  --surface: 22 24 31; /* #16181f */
-  --surface-2: 30 33 43; /* #1e212b */
-  --border: 38 42 53; /* #262a35 */
-  --content: 231 233 238; /* #e7e9ee */
-  --muted: 154 160 173; /* #9aa0ad */
-  --accent: 240 169 43; /* #f0a92b warm amber */
-  --accent-fg: 20 16 6; /* near-black for text on accent */
-}
-
-:root.light {
-  --bg: 247 248 250;
-  --surface: 255 255 255;
-  --surface-2: 241 243 247;
-  --border: 224 227 233;
-  --content: 24 27 34;
-  --muted: 96 103 116;
-  --accent: 201 132 12;
-  --accent-fg: 255 255 255;
+  --bg: 21 18 28; /* #15121c indigo-plum night */
+  --bg-2: 16 13 22; /* #100d16 */
+  --surface: 30 26 40; /* #1e1a28 */
+  --surface-2: 42 36 56; /* #2a2438 */
+  --card: 47 40 66; /* #2f2842 */
+  --border: 44 38 64; /* #2c2640 */
+  --border-hi: 69 61 99; /* #453d63 */
+  --content: 236 231 244; /* #ece7f4 */
+  --muted: 169 159 196; /* #a99fc4 lilac-grey */
+  --muted-2: 114 104 137; /* #726889 */
+  --gold: 255 177 60; /* #ffb13c */
+  --cyan: 69 208 221; /* #45d0dd */
+  --rose: 255 93 122; /* #ff5d7a */
+  --ink: 36 21 40; /* #241528 dark text on accents */
 }
 
 html,
@@ -38,7 +35,18 @@ body {
   @apply bg-bg text-content font-sans antialiased;
 }
 
-/* Subtle, quick transitions site-wide (kept short and unobtrusive). */
+/* Filmic grain — subtle, fixed, above everything, ignores input. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
 a,
 button {
   transition:
@@ -46,7 +54,8 @@ button {
     background-color 120ms ease,
     border-color 120ms ease,
     opacity 120ms ease,
-    transform 120ms ease;
+    transform 120ms ease,
+    box-shadow 200ms ease;
 }
 
 ::-webkit-scrollbar {
@@ -54,9 +63,59 @@ button {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full;
-  background-color: rgb(var(--border));
+  background-color: rgb(var(--card));
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-track {
   background-color: transparent;
+}
+
+/* Star rating (overlay-fill technique). Set width on .stars-fill 0–100%. */
+.stars {
+  position: relative;
+  display: inline-block;
+  font-family: Georgia, 'Times New Roman', serif;
+  white-space: nowrap;
+  line-height: 1;
+  color: rgb(58 51 82); /* empty star */
+}
+.stars::before,
+.stars-fill::before {
+  content: '★★★★★';
+  letter-spacing: 1px;
+}
+.stars-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  /* NB: no `right`/`inset` — the inline `width` must be authoritative. With
+     `inset:0` (right:0) the box stretched full-width and the fill % was ignored,
+     so every rating rendered as 5 full stars. */
+  overflow: hidden;
+  color: rgb(var(--gold));
+}
+
+/* Auto-scrolling marquee row; pause on hover. */
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 42s linear infinite;
+}
+.marquee-mask:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .animate-kenburns,
+  .animate-glowpulse,
+  .animate-blip,
+  .animate-fadeup {
+    animation: none !important;
+  }
 }

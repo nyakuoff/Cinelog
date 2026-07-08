@@ -24,6 +24,8 @@ interface AuthContextValue {
   register: (dto: RegisterRequest) => Promise<void>;
   setup: (dto: SetupRequest) => Promise<void>;
   logout: () => Promise<void>;
+  /** Apply a freshly updated user (e.g. after a profile edit) without a full session refresh. */
+  updateUser: (user: UserPublic) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,9 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     setUser(null);
   }, []);
 
+  const updateUser = useCallback((u: UserPublic) => setUser(u), []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, initializing, login, register, setup, logout }),
-    [user, initializing, login, register, setup, logout],
+    () => ({ user, initializing, login, register, setup, logout, updateUser }),
+    [user, initializing, login, register, setup, logout, updateUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

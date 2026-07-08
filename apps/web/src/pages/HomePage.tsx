@@ -13,7 +13,9 @@ import { api } from '../lib/api';
 import { useCountUp } from '../lib/useCountUp';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
+import { sortLibrary, type SortKey } from '../lib/sortLibrary';
 import { PosterCard } from '../components/PosterCard';
+import { SortSelect } from '../components/SortSelect';
 import { Stars } from '../components/Stars';
 import { Button, Spinner } from '../components/ui';
 
@@ -49,6 +51,7 @@ export function HomePage(): JSX.Element {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [group, setGroup] = useState<Group>('FILMS');
+  const [sort, setSort] = useState<SortKey>('added');
 
   const { data, isLoading } = useQuery({ queryKey: ['library'], queryFn: () => api.getLibrary() });
   const items = data?.items ?? [];
@@ -69,7 +72,7 @@ export function HomePage(): JSX.Element {
   }, [libraryItems]);
 
   const groupItems = libraryItems.filter((i) => groupOf(i.type) === group);
-  const filtered = groupItems.filter((i) => matches(i, filter));
+  const filtered = sortLibrary(groupItems.filter((i) => matches(i, filter)), sort);
   const groupCounts: Record<Group, number> = {
     FILMS: libraryItems.filter((i) => groupOf(i.type) === 'FILMS').length,
     SHOWS: libraryItems.filter((i) => groupOf(i.type) === 'SHOWS').length,
@@ -117,19 +120,22 @@ export function HomePage(): JSX.Element {
                 ))}
               </div>
             </div>
-            <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
-              {TABS.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => setFilter(t.key)}
-                  className={cn(
-                    'rounded-lg px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-                    filter === t.key ? 'bg-surface-2 text-content' : 'text-muted hover:text-content',
-                  )}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+                {TABS.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setFilter(t.key)}
+                    className={cn(
+                      'rounded-lg px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                      filter === t.key ? 'bg-surface-2 text-content' : 'text-muted hover:text-content',
+                    )}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <SortSelect value={sort} onChange={setSort} />
             </div>
           </div>
 

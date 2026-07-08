@@ -1,30 +1,51 @@
+# Self-host by pulling prebuilt images from GHCR — no source checkout or local
+# build needed. Copy this file + a .env to your host and run:
+#   docker compose up -d
+# (Images are published by .github/workflows/docker-publish.yml on push to main.)
+#
+# Override the owner/tag if you forked or want a pinned version:
+#   CINELOG_OWNER=you CINELOG_TAG=v1.2.3 docker compose up -d
 services:
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ghcr.io/${CINELOG_OWNER:-nyakuoff}/cinelog-api:${CINELOG_TAG:-latest}
+    pull_policy: always
     environment:
       NODE_ENV: production
       API_PORT: 3000
       DATA_DIR: /data
       DATABASE_URL: file:/data/cinelog.db
-      CORS_ORIGINS: http://localhost:8080
+      # The browser talks to /api same-origin through nginx, so CORS rarely
+      # matters — but set this to your public origin if you hit the API directly.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      # Generate strong values: openssl rand -hex 32 (put them in .env).
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
       TMDB_API_KEY: ${TMDB_API_KEY:-}
       TMDB_ACCESS_TOKEN: ${TMDB_ACCESS_TOKEN:-}
     volumes:
       - cinelog-data:/data
+    # Node 20 has global fetch, so no curl/wget needed in the slim image.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
     restart: unless-stopped
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
+    image: ghcr.io/${CINELOG_OWNER:-nyakuoff}/cinelog-web:${CINELOG_TAG:-latest}
+    pull_policy: always
     ports:
-      - '8080:80'
+      - '9090:80'
     depends_on:
-      - api
+      # Wait until the API has migrated + is answering before serving the SPA.
+      api:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

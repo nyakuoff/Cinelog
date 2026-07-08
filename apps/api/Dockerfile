@@ -15,8 +15,13 @@ COPY apps/api apps/api
 RUN pnpm --filter @cinelog/contracts build \
   && pnpm --filter @cinelog/api exec prisma generate \
   && pnpm --filter @cinelog/api build
-# Prune to production dependencies for a slimmer runtime image.
-RUN pnpm --filter @cinelog/api --prod deploy /app
+# Prune to production dependencies for a slimmer runtime image, then (re)generate
+# the Prisma client INSIDE the pruned tree — pnpm's deploy relinks node_modules
+# from the store, so the client generated above may not survive. `prisma` is a
+# prod dependency, so both the CLI (for `migrate deploy` at boot) and the freshly
+# generated client are present in /app.
+RUN pnpm --filter @cinelog/api --prod deploy /app \
+  && cd /app && node_modules/.bin/prisma generate --schema prisma/schema.prisma
 
 FROM base AS runtime
 ENV NODE_ENV=production

@@ -1,0 +1,46 @@
+# Local / from-source build. Use this when developing or building images
+# yourself instead of pulling the published ones:
+#   docker compose -f docker-compose.build.yml up --build
+# For normal self-hosting (pull prebuilt images) use docker-compose.yml.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATA_DIR: /data
+      DATABASE_URL: file:/data/cinelog.db
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change-me-access}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      TMDB_ACCESS_TOKEN: ${TMDB_ACCESS_TOKEN:-}
+    volumes:
+      - cinelog-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  cinelog-data:

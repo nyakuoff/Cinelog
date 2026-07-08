@@ -4,7 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { scaleForMediaType, type MediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
+import { sortLibrary, type SortKey } from '../lib/sortLibrary';
 import { PosterCard } from '../components/PosterCard';
+import { SortSelect } from '../components/SortSelect';
 import { Button, Spinner } from '../components/ui';
 
 // Same Films/Shows split as the home library, kept separate here.
@@ -20,10 +22,11 @@ function groupOf(type: MediaType): Group {
 export function WatchlistPage(): JSX.Element {
   const navigate = useNavigate();
   const [group, setGroup] = useState<Group>('FILMS');
+  const [sort, setSort] = useState<SortKey>('added');
 
   const { data, isLoading } = useQuery({ queryKey: ['library'], queryFn: () => api.getLibrary() });
   const watchlist = (data?.items ?? []).filter((i) => i.status === 'PLAN_TO_WATCH');
-  const groupItems = watchlist.filter((i) => groupOf(i.type) === group);
+  const groupItems = sortLibrary(watchlist.filter((i) => groupOf(i.type) === group), sort);
   const groupCounts: Record<Group, number> = {
     FILMS: watchlist.filter((i) => groupOf(i.type) === 'FILMS').length,
     SHOWS: watchlist.filter((i) => groupOf(i.type) === 'SHOWS').length,
@@ -47,27 +50,30 @@ export function WatchlistPage(): JSX.Element {
           Want to watch
         </h1>
         {watchlist.length > 0 && (
-          <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
-            {GROUPS.map((g) => (
-              <button
-                key={g.key}
-                onClick={() => setGroup(g.key)}
-                className={cn(
-                  'rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-                  group === g.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-                )}
-              >
-                {g.label}
-                <span
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex gap-1 rounded-xl border border-border bg-surface p-1">
+              {GROUPS.map((g) => (
+                <button
+                  key={g.key}
+                  onClick={() => setGroup(g.key)}
                   className={cn(
-                    'ml-1.5 tabular-nums',
-                    group === g.key ? 'text-ink/70' : 'text-muted-2',
+                    'rounded-lg px-3.5 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                    group === g.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
                   )}
                 >
-                  {groupCounts[g.key]}
-                </span>
-              </button>
-            ))}
+                  {g.label}
+                  <span
+                    className={cn(
+                      'ml-1.5 tabular-nums',
+                      group === g.key ? 'text-ink/70' : 'text-muted-2',
+                    )}
+                  >
+                    {groupCounts[g.key]}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <SortSelect value={sort} onChange={setSort} />
           </div>
         )}
       </div>

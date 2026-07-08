@@ -12,12 +12,12 @@ jobs:
       DATABASE_URL: 'file:../data/cinelog.db'
     steps:
       - uses: actions/checkout@v4
+      # No version pin — pnpm/action-setup reads packageManager (pnpm@11.0.9)
+      # from package.json. pnpm 11 requires Node >= 22.13.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build

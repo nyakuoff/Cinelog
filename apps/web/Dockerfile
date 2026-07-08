@@ -1,6 +1,6 @@
 # Cinelog web — built from the monorepo root as build context.
 #   docker build -f apps/web/Dockerfile -t cinelog-web .
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 RUN corepack enable
 WORKDIR /repo
 COPY pnpm-workspace.yaml package.json tsconfig.base.json turbo.json ./

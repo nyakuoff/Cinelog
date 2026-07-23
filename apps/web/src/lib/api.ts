@@ -1,5 +1,6 @@
 import type {
   AdminCreateUserRequest,
+  AdminUpdateCastRequest,
   AdminUpdateUserRequest,
   AdminUser,
   AdminUserListResponse,
@@ -174,6 +175,8 @@ export const api = {
     request<void>('PUT', `/media/${mediaId}/artwork`, { kind, sourceUrl }),
   rematchMedia: (mediaId: string, dto: RematchRequest) =>
     request<MediaDetail>('PUT', `/media/${mediaId}/rematch`, dto),
+  updateMediaCast: (mediaId: string, dto: AdminUpdateCastRequest) =>
+    request<void>('PUT', `/media/${mediaId}/cast`, dto),
 
   // -- tracking --------------------------------------------------------------
   getLibrary: () => request<LibraryResponse>('GET', '/tracking/library'),

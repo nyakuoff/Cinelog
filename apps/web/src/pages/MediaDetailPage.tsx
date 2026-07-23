@@ -4,19 +4,23 @@ import { useParams } from 'react-router-dom';
 import type { MediaDetail, TrackingStatus } from '@cinelog/contracts';
 import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { Badge, Button, Card, Spinner } from '../components/ui';
 import { StatusPicker } from '../components/StatusPicker';
 import { RatingWidget } from '../components/RatingWidget';
 import { EpisodesSection } from '../components/EpisodesSection';
 import { ArtworkPickerModal } from '../components/ArtworkPickerModal';
 import { RematchModal } from '../components/RematchModal';
+import { EditCastModal } from '../components/EditCastModal';
 import { cn } from '../lib/cn';
 
 export function MediaDetailPage(): JSX.Element {
   const { id = '' } = useParams();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [editingArtwork, setEditingArtwork] = useState(false);
   const [fixingMismatch, setFixingMismatch] = useState(false);
+  const [editingCast, setEditingCast] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['media', id],
@@ -126,11 +130,21 @@ export function MediaDetailPage(): JSX.Element {
             </section>
           )}
 
-          {m.cast.length > 0 && (
+          {(m.cast.length > 0 || user?.role === 'ADMIN') && (
             <section>
-              <h2 className="mb-3 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
-                Cast
-              </h2>
+              <div className="mb-3 flex items-center gap-3">
+                <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
+                  Cast
+                </h2>
+                {user?.role === 'ADMIN' && (
+                  <button
+                    onClick={() => setEditingCast(true)}
+                    className="rounded-lg border border-border-hi bg-black/40 px-2.5 py-1 text-xs text-muted backdrop-blur transition-colors hover:border-cyan hover:text-cyan"
+                  >
+                    Edit cast
+                  </button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {m.cast.slice(0, 9).map((c) => (
                   <div key={c.id} className="flex items-center gap-3">
@@ -205,6 +219,9 @@ export function MediaDetailPage(): JSX.Element {
           currentTitle={m.title}
           onClose={() => setFixingMismatch(false)}
         />
+      )}
+      {editingCast && (
+        <EditCastModal mediaId={id} cast={m.cast} onClose={() => setEditingCast(false)} />
       )}
     </div>
   );

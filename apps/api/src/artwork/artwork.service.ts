@@ -52,6 +52,23 @@ export class ArtworkService implements OnModuleInit {
     return `/api/artwork?src=${encodeURIComponent(sourceUrl)}`;
   }
 
+  /** Inverse of toProxyUrl: recovers the original remote URL from a
+   *  Cinelog-proxied one. Values that aren't proxied URLs pass through
+   *  unchanged, so this is safe to apply defensively to any client-supplied
+   *  URL before it's persisted (a client may echo back an already-proxied
+   *  URL it got from a GET response, which would otherwise get proxied
+   *  twice on the next read). */
+  fromProxyUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const prefix = '/api/artwork?src=';
+    if (!url.startsWith(prefix)) return url;
+    try {
+      return decodeURIComponent(url.slice(prefix.length));
+    } catch {
+      return null;
+    }
+  }
+
   /** Resolve a proxied request to a local file path, fetching + caching on miss. */
   async getLocalFile(sourceUrl: string): Promise<{ path: string; contentType: string }> {
     let parsed: URL;

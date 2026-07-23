@@ -1,9 +1,15 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { ArtworkOptionsResponse, MediaDetail, SearchResponse } from '@cinelog/contracts';
-import { CurrentUser } from '../common/decorators';
+import { CurrentUser, Roles } from '../common/decorators';
 import { MediaService } from './media.service';
-import { MediaRefDto, RematchDto, SearchQueryDto, SetArtworkDto } from './media.dto';
+import {
+  AdminUpdateCastDto,
+  MediaRefDto,
+  RematchDto,
+  SearchQueryDto,
+  SetArtworkDto,
+} from './media.dto';
 
 @ApiTags('media')
 @ApiBearerAuth()
@@ -62,5 +68,13 @@ export class MediaController {
     @Body() dto: RematchDto,
   ): Promise<MediaDetail> {
     return this.media.rematch(userId, id, dto.provider, dto.externalId, dto.type);
+  }
+
+  /** Admin-only: replace the cast shown to every user for this title. */
+  @Put('media/:id/cast')
+  @Roles('ADMIN')
+  @HttpCode(204)
+  async updateCast(@Param('id') id: string, @Body() dto: AdminUpdateCastDto): Promise<void> {
+    await this.media.updateCast(id, dto.cast);
   }
 }

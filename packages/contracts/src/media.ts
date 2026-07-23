@@ -48,6 +48,22 @@ export const CreditPerson = z.object({
 });
 export type CreditPerson = z.infer<typeof CreditPerson>;
 
+/** PUT /media/:id/cast (admin only) — replaces the cast list shown to every
+ *  user. Stored separately from provider metadata so it survives rematches
+ *  and metadata refreshes. */
+export const AdminUpdateCastRequest = z.object({
+  cast: z.array(
+    z.object({
+      name: z.string().min(1, 'Name is required'),
+      role: z.string().nullable(),
+      character: z.string().nullable(),
+      department: z.string().nullable(),
+      profileUrl: z.string().nullable(),
+    }),
+  ),
+});
+export type AdminUpdateCastRequest = z.infer<typeof AdminUpdateCastRequest>;
+
 /** One available image option (used later by the "Change Artwork" gallery). */
 export const ArtworkOption = z.object({
   type: ArtworkType,

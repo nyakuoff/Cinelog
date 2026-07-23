@@ -83,6 +83,8 @@ model MediaItem {
   logoPath       String?
   providerRating Float? // provider's own average, normalized 0..100
   rawMetadata    String   @default("{}") // JSON: full provider detail (cast, crew, studios, trailer, artwork options)
+  castOverride   String? // JSON: CreditPerson[] set by an admin; takes precedence over rawMetadata.cast
+                         // and is never touched by cacheDetails/rematch, so it survives provider re-fetches.
   cachedAt       DateTime @default(now())
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

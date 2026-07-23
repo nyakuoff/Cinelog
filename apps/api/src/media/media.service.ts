@@ -7,6 +7,7 @@ import {
   TrackingStatus,
   type ArtworkChoice,
   type ArtworkOptionsResponse,
+  type CreditPerson,
   type MediaDetail,
   type MediaRef,
   type SearchResponse,
@@ -216,7 +217,7 @@ export class MediaService {
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
       studios: raw?.studios ?? [],
-      cast: (raw?.cast ?? []).map((c, i) => ({
+      cast: (this.parseCastOverride(item.castOverride) ?? raw?.cast ?? []).map((c, i) => ({
         id: `${item.id}-cast-${i}`,
         name: c.name,
         role: c.role,
@@ -339,5 +340,36 @@ export class MediaService {
     } catch {
       return null;
     }
+  }
+
+  private parseCastOverride(json: string | null): Omit<CreditPerson, 'id'>[] | null {
+    if (!json) return null;
+    try {
+      return JSON.parse(json) as Omit<CreditPerson, 'id'>[];
+    } catch {
+      return null;
+    }
+  }
+
+  /** Admin-only: replace the cast shown to every user for this title. Stored
+   *  in a dedicated column so it isn't clobbered by a future rematch or
+   *  metadata refresh (unlike rawMetadata, which providers fully overwrite).
+   *  profileUrl is un-proxied before storing: the client's copy came from a
+   *  GET response (already wrapped by toProxyUrl), and getDetail wraps
+   *  raw.cast[].profileUrl again on read — storing the proxied form as-is
+   *  would double-wrap it into a broken URL on the next fetch. */
+  async updateCast(mediaId: string, cast: Omit<CreditPerson, 'id'>[]): Promise<void> {
+    const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
+    if (!item) throw new NotFoundException('Media not found');
+
+    const normalized = cast.map((c) => ({
+      ...c,
+      profileUrl: this.artwork.fromProxyUrl(c.profileUrl),
+    }));
+
+    await this.prisma.mediaItem.update({
+      where: { id: mediaId },
+      data: { castOverride: JSON.stringify(normalized) },
+    });
   }
 }

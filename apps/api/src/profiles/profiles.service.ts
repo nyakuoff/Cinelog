@@ -6,6 +6,7 @@ import {
   type FavoriteSlot,
   type MediaSummary,
   type ProfileDiaryResponse,
+  type ProfileRatingsResponse,
   type ProfileWatchlistResponse,
   type PublicProfile,
   type UpdateFavoritesRequest,
@@ -121,7 +122,8 @@ export class ProfilesService {
       watchlistVisibility,
       canView,
       canViewWatchlist,
-      favorites: [],
+      favoriteFilms: [],
+      favoriteShows: [],
       stats: { moviesWatched: 0, showsWatched: 0, episodesWatched: 0, totalRatings: 0, averageRating: null },
       ratingDistribution: [],
       topGenres: [],
@@ -132,11 +134,17 @@ export class ProfilesService {
     };
     if (!canView) return base;
 
-    const [favoriteRows, history, ratings, episodeRatingCount, genreRows] = await Promise.all([
+    const [favoriteFilmRows, favoriteShowRows, history, ratings, episodeRatingCount, genreRows] =
+      await Promise.all([
       this.prisma.userMediaStatus.findMany({
         where: { userId: user.id, favoritePosition: { not: null } },
         include: { media: true },
         orderBy: { favoritePosition: 'asc' },
+      }),
+      this.prisma.userMediaStatus.findMany({
+        where: { userId: user.id, favoriteShowPosition: { not: null } },
+        include: { media: true },
+        orderBy: { favoriteShowPosition: 'asc' },
       }),
       this.prisma.watchHistory.findMany({
         where: { userId: user.id },
@@ -151,9 +159,12 @@ export class ProfilesService {
       }),
     ]);
 
-    const favorites: FavoriteSlot[] = favoriteRows
+    const favoriteFilms: FavoriteSlot[] = favoriteFilmRows
       .filter((r) => r.favoritePosition != null)
       .map((r) => ({ position: r.favoritePosition as number, media: this.toSummary(r.media) }));
+    const favoriteShows: FavoriteSlot[] = favoriteShowRows
+      .filter((r) => r.favoriteShowPosition != null)
+      .map((r) => ({ position: r.favoriteShowPosition as number, media: this.toSummary(r.media) }));
 
     const moviesWatched = history.filter((h) => h.media.type === 'MOVIE').length;
     const showsWatched = history.filter((h) => SHOW_TYPES.has(MediaType.catch('MOVIE').parse(h.media.type))).length;
@@ -184,7 +195,8 @@ export class ProfilesService {
     return {
       ...base,
       bio: user.bio,
-      favorites,
+      favoriteFilms,
+      favoriteShows,
       stats: {
         moviesWatched,
         showsWatched,
@@ -199,38 +211,107 @@ export class ProfilesService {
     };
   }
 
-  async setFavorites(userId: string, dto: UpdateFavoritesRequest): Promise<FavoriteSlot[]> {
-    const ids = [...new Set(dto.mediaIds)];
-    if (ids.length !== dto.mediaIds.length) {
+  async setFavorites(
+    userId: string,
+    dto: UpdateFavoritesRequest,
+  ): Promise<{ favoriteFilms: FavoriteSlot[]; favoriteShows: FavoriteSlot[] }> {
+    if (dto.filmIds) await this.applyFavoriteSide(userId, dto.filmIds, 'FILM');
+    if (dto.showIds) await this.applyFavoriteSide(userId, dto.showIds, 'SHOW');
+
+    const [filmRows, showRows] = await Promise.all([
+      this.prisma.userMediaStatus.findMany({
+        where: { userId, favoritePosition: { not: null } },
+        include: { media: true },
+        orderBy: { favoritePosition: 'asc' },
+      }),
+      this.prisma.userMediaStatus.findMany({
+        where: { userId, favoriteShowPosition: { not: null } },
+        include: { media: true },
+        orderBy: { favoriteShowPosition: 'asc' },
+      }),
+    ]);
+    return {
+      favoriteFilms: filmRows
+        .filter((r) => r.favoritePosition != null)
+        .map((r) => ({ position: r.favoritePosition as number, media: this.toSummary(r.media) })),
+      favoriteShows: showRows
+        .filter((r) => r.favoriteShowPosition != null)
+        .map((r) => ({ position: r.favoriteShowPosition as number, media: this.toSummary(r.media) })),
+    };
+  }
+
+  private async applyFavoriteSide(
+    userId: string,
+    mediaIds: string[],
+    side: 'FILM' | 'SHOW',
+  ): Promise<void> {
+    const ids = [...new Set(mediaIds)];
+    if (ids.length !== mediaIds.length) {
       throw new BadRequestException('Duplicate media in favorites');
     }
     if (ids.length) {
-      const found = await this.prisma.mediaItem.count({ where: { id: { in: ids } } });
-      if (found !== ids.length) throw new BadRequestException('One or more titles were not found');
+      const items = await this.prisma.mediaItem.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, type: true },
+      });
+      if (items.length !== ids.length) throw new BadRequestException('One or more titles were not found');
+      const wrongType = items.some((m) => (side === 'FILM') !== (m.type === 'MOVIE'));
+      if (wrongType) {
+        throw new BadRequestException(
+          side === 'FILM' ? 'Favorite films must be movies' : 'Favorite shows can\'t be movies',
+        );
+      }
     }
 
-    await this.prisma.$transaction([
-      this.prisma.userMediaStatus.updateMany({
-        where: { userId, favoritePosition: { not: null } },
-        data: { favoritePosition: null },
-      }),
-      ...ids.map((mediaItemId, i) =>
-        this.prisma.userMediaStatus.upsert({
-          where: { userId_mediaItemId: { userId, mediaItemId } },
-          create: { userId, mediaItemId, favoritePosition: i + 1 },
-          update: { favoritePosition: i + 1 },
+    if (side === 'FILM') {
+      await this.prisma.$transaction([
+        this.prisma.userMediaStatus.updateMany({
+          where: { userId, favoritePosition: { not: null } },
+          data: { favoritePosition: null },
         }),
-      ),
-    ]);
+        ...ids.map((mediaItemId, i) =>
+          this.prisma.userMediaStatus.upsert({
+            where: { userId_mediaItemId: { userId, mediaItemId } },
+            create: { userId, mediaItemId, favoritePosition: i + 1 },
+            update: { favoritePosition: i + 1 },
+          }),
+        ),
+      ]);
+    } else {
+      await this.prisma.$transaction([
+        this.prisma.userMediaStatus.updateMany({
+          where: { userId, favoriteShowPosition: { not: null } },
+          data: { favoriteShowPosition: null },
+        }),
+        ...ids.map((mediaItemId, i) =>
+          this.prisma.userMediaStatus.upsert({
+            where: { userId_mediaItemId: { userId, mediaItemId } },
+            create: { userId, mediaItemId, favoriteShowPosition: i + 1 },
+            update: { favoriteShowPosition: i + 1 },
+          }),
+        ),
+      ]);
+    }
+  }
 
-    const rows = await this.prisma.userMediaStatus.findMany({
-      where: { userId, favoritePosition: { not: null } },
+  async getRatings(username: string, viewerId: string | undefined): Promise<ProfileRatingsResponse> {
+    const user = await this.findUserOrThrow(username);
+    const { canView } = await this.resolveAccess(user, viewerId);
+    if (!canView) return { entries: [] };
+
+    const ratings = await this.prisma.rating.findMany({
+      where: { userId: user.id },
       include: { media: true },
-      orderBy: { favoritePosition: 'asc' },
+      orderBy: { updatedAt: 'desc' },
+      take: 200,
     });
-    return rows
-      .filter((r) => r.favoritePosition != null)
-      .map((r) => ({ position: r.favoritePosition as number, media: this.toSummary(r.media) }));
+    return {
+      entries: ratings.map((r) => ({
+        media: this.toSummary(r.media),
+        rating: r.value,
+        ratedAt: r.updatedAt.toISOString(),
+      })),
+    };
   }
 
   private async findUserOrThrow(username: string): Promise<User> {

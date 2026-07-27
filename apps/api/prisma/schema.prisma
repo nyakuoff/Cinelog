@@ -220,7 +220,8 @@ model UserMediaStatus {
   status        String? // TrackingStatus | null
   isFavorite    Boolean   @default(false)
   isWatchlisted Boolean   @default(false)
-  favoritePosition Int? // 1..4 ranked slot on the profile; null = not a featured favorite
+  favoritePosition Int? // 1..4 ranked favorite FILM slot on the profile; null = not featured
+  favoriteShowPosition Int? // 1..4 ranked favorite SHOW slot on the profile; null = not featured
   rewatchCount  Int       @default(0)
   startedAt     DateTime?
   completedAt   DateTime?
@@ -232,6 +233,7 @@ model UserMediaStatus {
 
   @@unique([userId, mediaItemId])
   @@unique([userId, favoritePosition])
+  @@unique([userId, favoriteShowPosition])
   @@index([userId])
   @@map("user_media_status")
 }

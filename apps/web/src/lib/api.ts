@@ -40,9 +40,11 @@ import type {
   LoginRequest,
   MarkWatchedRequest,
   FavoriteSlot,
+  FriendRatingsResponse,
   MediaDetail,
   MediaRef,
   ProfileDiaryResponse,
+  ProfileRatingsResponse,
   ProfileWatchlistResponse,
   PublicProfile,
   UserReviewListResponse,
@@ -210,13 +212,19 @@ export const api = {
   getPublicProfile: (username: string) =>
     request<PublicProfile>('GET', `/users/${encodeURIComponent(username)}`),
   updateFavorites: (dto: UpdateFavoritesRequest) =>
-    request<FavoriteSlot[]>('PATCH', '/users/me/favorites', dto),
+    request<{ favoriteFilms: FavoriteSlot[]; favoriteShows: FavoriteSlot[] }>(
+      'PATCH',
+      '/users/me/favorites',
+      dto,
+    ),
   getProfileDiary: (username: string) =>
     request<ProfileDiaryResponse>('GET', `/users/${encodeURIComponent(username)}/diary`),
   getProfileWatchlist: (username: string) =>
     request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
   getProfileReviews: (username: string) =>
     request<UserReviewListResponse>('GET', `/users/${encodeURIComponent(username)}/reviews`),
+  getProfileRatings: (username: string) =>
+    request<ProfileRatingsResponse>('GET', `/users/${encodeURIComponent(username)}/ratings`),
 
   // -- social graph -------------------------------------------------------------
   getMembers: (query: Partial<MemberListQuery>) =>
@@ -289,6 +297,7 @@ export const api = {
   resolveMedia: (ref: MediaRef) => request<MediaDetail>('POST', '/media/resolve', ref),
   getMedia: (id: string) => request<MediaDetail>('GET', `/media/${id}`),
   getSimilar: (id: string) => request<SearchResponse>('GET', `/media/${id}/similar`),
+  getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
   getArtworkOptions: (mediaId: string) =>
     request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),
   setArtwork: (mediaId: string, kind: ArtworkKind, sourceUrl: string | null) =>

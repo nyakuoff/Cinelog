@@ -14,9 +14,9 @@ import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
 import { FollowButton, MemberCard } from '../components/MemberCard';
 import { ListCard } from '../components/ListCard';
 import { CreateListModal } from './ListsPage';
-import { EmptyState } from '../components/lb';
+import { EmptyState, Poster } from '../components/lb';
 
-type Tab = 'overview' | 'diary' | 'reviews' | 'lists' | 'watchlist' | 'network';
+type Tab = 'overview' | 'diary' | 'reviews' | 'ratings' | 'lists' | 'watchlist' | 'network';
 
 export function PublicProfilePage(): JSX.Element {
   const params = useParams<{ username?: string }>();
@@ -94,6 +94,9 @@ export function PublicProfilePage(): JSX.Element {
         <TabButton active={tab === 'reviews'} onClick={() => setTab('reviews')}>
           Reviews
         </TabButton>
+        <TabButton active={tab === 'ratings'} onClick={() => setTab('ratings')}>
+          Ratings
+        </TabButton>
         <TabButton active={tab === 'lists'} onClick={() => setTab('lists')}>
           Lists
         </TabButton>
@@ -110,12 +113,16 @@ export function PublicProfilePage(): JSX.Element {
       {tab === 'overview' && (
         <div className="mt-8 grid gap-8 lg:grid-cols-[2fr_1fr]">
           <section>
-            <SectionTitle>Favorites</SectionTitle>
-            {profile.favorites.length === 0 ? (
-              <EmptyFavorites isOwnProfile={profile.isOwnProfile} onEdit={() => setEditingFavorites(true)} />
+            <SectionTitle>Favorite films</SectionTitle>
+            {profile.favoriteFilms.length === 0 ? (
+              <EmptyFavorites
+                isOwnProfile={profile.isOwnProfile}
+                label="films"
+                onEdit={() => setEditingFavorites(true)}
+              />
             ) : (
               <div className="grid grid-cols-4 gap-4">
-                {profile.favorites.map((f) => (
+                {profile.favoriteFilms.map((f) => (
                   <PosterCard
                     key={f.media.id}
                     title={f.media.title}
@@ -127,6 +134,30 @@ export function PublicProfilePage(): JSX.Element {
                 ))}
               </div>
             )}
+
+            <div className="mt-8">
+              <SectionTitle>Favorite shows</SectionTitle>
+              {profile.favoriteShows.length === 0 ? (
+                <EmptyFavorites
+                  isOwnProfile={profile.isOwnProfile}
+                  label="shows"
+                  onEdit={() => setEditingFavorites(true)}
+                />
+              ) : (
+                <div className="grid grid-cols-4 gap-4">
+                  {profile.favoriteShows.map((f) => (
+                    <PosterCard
+                      key={f.media.id}
+                      title={f.media.title}
+                      year={f.media.year}
+                      type={f.media.type}
+                      posterUrl={f.media.posterUrl}
+                      onClick={() => navigate(`/media/${f.media.id}`)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="mt-10">
               <SectionTitle>Rating distribution</SectionTitle>
@@ -158,6 +189,7 @@ export function PublicProfilePage(): JSX.Element {
 
       {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
       {tab === 'reviews' && <ReviewsTab username={profile.username} />}
+      {tab === 'ratings' && <RatingsTab username={profile.username} />}
       {tab === 'lists' && (
         <ListsTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
       )}
@@ -167,7 +199,8 @@ export function PublicProfilePage(): JSX.Element {
       {editingFavorites && (
         <FavoritesEditorModal
           username={profile.username}
-          initial={profile.favorites}
+          initialFilms={profile.favoriteFilms}
+          initialShows={profile.favoriteShows}
           onClose={() => setEditingFavorites(false)}
         />
       )}
@@ -490,6 +523,39 @@ function ReviewsTab({ username }: { username: string }): JSX.Element {
   );
 }
 
+function RatingsTab({ username }: { username: string }): JSX.Element {
+  const navigate = useNavigate();
+  const { data, isLoading } = useQuery({
+    queryKey: ['profile-ratings', username],
+    queryFn: () => api.getProfileRatings(username),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+  if ((data?.entries.length ?? 0) === 0) {
+    return <p className="py-10 text-center text-muted">No ratings yet.</p>;
+  }
+
+  return (
+    <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+      {data?.entries.map((e) => (
+        <Poster
+          key={e.media.id}
+          title={e.media.title}
+          posterUrl={e.media.posterUrl}
+          rating={e.rating}
+          onClick={() => navigate(`/media/${e.media.id}`)}
+        />
+      ))}
+    </div>
+  );
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <h2 className="mb-3 font-cond text-[13px] font-extrabold uppercase tracking-[0.12em] text-muted">
@@ -501,14 +567,16 @@ function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element 
 function EmptyFavorites({
   isOwnProfile,
   onEdit,
+  label,
 }: {
   isOwnProfile: boolean;
   onEdit: () => void;
+  label: string;
 }): JSX.Element {
   return (
     <Card className="p-6 text-center">
       <p className="text-sm text-muted">
-        {isOwnProfile ? 'Pick up to 4 titles to feature on your profile.' : 'No favorites yet.'}
+        {isOwnProfile ? `Pick up to 4 ${label} to feature on your profile.` : `No favorite ${label} yet.`}
       </p>
       {isOwnProfile && (
         <Button variant="secondary" className="mt-3" onClick={onEdit}>
@@ -559,22 +627,26 @@ function ProfileHeader({
           activity rather than a separately-uploaded banner image. */}
       <div className="relative">
         <div className="h-40 overflow-hidden rounded-2xl border border-border bg-surface-2 sm:h-52">
-          {profile.favorites.length > 0 ? (
-            <div className="grid h-full grid-cols-4">
-              {profile.favorites.map((f) => (
-                <div key={f.media.id} className="relative overflow-hidden">
-                  {f.media.posterUrl ? (
-                    <img src={f.media.posterUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="h-full w-full" style={{ background: posterGradient(f.media.title) }} />
-                  )}
-                </div>
-              ))}
-              {Array.from({ length: 4 - profile.favorites.length }).map((_, i) => (
-                <div key={`fill-${i}`} style={{ background: posterGradient(profile.username + i) }} />
-              ))}
-            </div>
-          ) : (
+          {(() => {
+            const banner = [...profile.favoriteFilms, ...profile.favoriteShows].slice(0, 4);
+            return banner.length > 0 ? (
+              <div className="grid h-full grid-cols-4">
+                {banner.map((f) => (
+                  <div key={f.media.id} className="relative overflow-hidden">
+                    {f.media.posterUrl ? (
+                      <img src={f.media.posterUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full" style={{ background: posterGradient(f.media.title) }} />
+                    )}
+                  </div>
+                ))}
+                {Array.from({ length: 4 - banner.length }).map((_, i) => (
+                  <div key={`fill-${i}`} style={{ background: posterGradient(profile.username + i) }} />
+                ))}
+              </div>
+            ) : null;
+          })()}
+          {[...profile.favoriteFilms, ...profile.favoriteShows].length === 0 && (
             <div className="h-full w-full" style={{ background: posterGradient(profile.username) }} />
           )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />

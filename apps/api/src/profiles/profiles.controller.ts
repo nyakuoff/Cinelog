@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   FavoriteSlot,
   ProfileDiaryResponse,
+  ProfileRatingsResponse,
   ProfileWatchlistResponse,
   PublicProfile,
   UserReviewListResponse,
@@ -53,12 +54,21 @@ export class ProfilesController {
     return this.profiles.getReviews(username, viewerId, cursor);
   }
 
+  @Public()
+  @Get('users/:username/ratings')
+  getRatings(
+    @Param('username') username: string,
+    @CurrentUser('sub') viewerId: string | undefined,
+  ): Promise<ProfileRatingsResponse> {
+    return this.profiles.getRatings(username, viewerId);
+  }
+
   @ApiBearerAuth()
   @Patch('users/me/favorites')
   setFavorites(
     @CurrentUser('sub') userId: string,
     @Body() dto: UpdateFavoritesDto,
-  ): Promise<FavoriteSlot[]> {
+  ): Promise<{ favoriteFilms: FavoriteSlot[]; favoriteShows: FavoriteSlot[] }> {
     return this.profiles.setFavorites(userId, dto);
   }
 }

@@ -45,6 +45,7 @@ export const BackupItem = z.object({
   isWatchlisted: z.boolean(),
   // Ranked profile-favorite slot (1..4). Optional/nullable so pre-social backups still parse.
   favoritePosition: z.number().int().min(1).max(4).nullable().optional().default(null),
+  favoriteShowPosition: z.number().int().min(1).max(4).nullable().optional().default(null),
   rewatchCount: z.number().int(),
   startedAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),

@@ -87,6 +87,7 @@ export class BackupService {
         isFavorite: s?.isFavorite ?? false,
         isWatchlisted: s?.isWatchlisted ?? false,
         favoritePosition: s?.favoritePosition ?? null,
+        favoriteShowPosition: s?.favoriteShowPosition ?? null,
         rewatchCount: s?.rewatchCount ?? 0,
         startedAt: s?.startedAt?.toISOString() ?? null,
         completedAt: s?.completedAt?.toISOString() ?? null,
@@ -162,8 +163,8 @@ export class BackupService {
         const media = await this.media.getOrFetch(item.provider, item.externalId, item.type);
         const mediaItemId = media.id;
 
-        // favoritePosition is a per-user unique slot (1..4); only restore it if
-        // that slot isn't already taken by a different title on this account.
+        // favoritePosition/favoriteShowPosition are per-user unique slots (1..4);
+        // only restore one if that slot isn't already taken by a different title.
         let favoritePosition: number | null = null;
         if (item.favoritePosition != null) {
           const holder = await this.prisma.userMediaStatus.findUnique({
@@ -171,12 +172,24 @@ export class BackupService {
           });
           if (!holder || holder.mediaItemId === mediaItemId) favoritePosition = item.favoritePosition;
         }
+        let favoriteShowPosition: number | null = null;
+        if (item.favoriteShowPosition != null) {
+          const holder = await this.prisma.userMediaStatus.findUnique({
+            where: {
+              userId_favoriteShowPosition: { userId, favoriteShowPosition: item.favoriteShowPosition },
+            },
+          });
+          if (!holder || holder.mediaItemId === mediaItemId) {
+            favoriteShowPosition = item.favoriteShowPosition;
+          }
+        }
 
         const statusData = {
           status: item.status,
           isFavorite: item.isFavorite,
           isWatchlisted: item.isWatchlisted,
           favoritePosition,
+          favoriteShowPosition,
           rewatchCount: item.rewatchCount,
           startedAt: item.startedAt ? new Date(item.startedAt) : null,
           completedAt: item.completedAt ? new Date(item.completedAt) : null,

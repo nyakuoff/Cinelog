@@ -57,7 +57,8 @@ export const PublicProfile = z.object({
   canView: z.boolean(),
   /** Whether the requesting viewer is allowed to see the watchlist tab. */
   canViewWatchlist: z.boolean(),
-  favorites: z.array(FavoriteSlot),
+  favoriteFilms: z.array(FavoriteSlot),
+  favoriteShows: z.array(FavoriteSlot),
   stats: ProfileStats,
   ratingDistribution: z.array(RatingDistributionBucket),
   topGenres: z.array(GenreBreakdownEntry),
@@ -88,3 +89,35 @@ export const ProfileWatchlistResponse = z.object({
   items: z.array(MediaSummary),
 });
 export type ProfileWatchlistResponse = z.infer<typeof ProfileWatchlistResponse>;
+
+/** One rated title on a member's profile — the "Ratings" tab, a poster grid
+ *  with the star rating overlaid (mirrors Letterboxd's Films-rated grid). */
+export const ProfileRatingEntry = z.object({
+  media: MediaSummary,
+  rating: z.number().min(0).max(100),
+  ratedAt: z.string().datetime(),
+});
+export type ProfileRatingEntry = z.infer<typeof ProfileRatingEntry>;
+
+export const ProfileRatingsResponse = z.object({
+  entries: z.array(ProfileRatingEntry),
+});
+export type ProfileRatingsResponse = z.infer<typeof ProfileRatingsResponse>;
+
+/** A single rating from someone the viewer follows, for the "Ratings from
+ *  people you follow" panel on a film's page. */
+export const FriendRating = z.object({
+  user: z.object({
+    username: z.string(),
+    displayName: z.string().nullable(),
+    avatarUrl: z.string().nullable(),
+  }),
+  ratingValue: z.number().min(0).max(100),
+  ratedAt: z.string().datetime(),
+});
+export type FriendRating = z.infer<typeof FriendRating>;
+
+export const FriendRatingsResponse = z.object({
+  ratings: z.array(FriendRating),
+});
+export type FriendRatingsResponse = z.infer<typeof FriendRatingsResponse>;

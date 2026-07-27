@@ -18,8 +18,11 @@ export const ChangePasswordRequest = z.object({
 });
 export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequest>;
 
-/** PATCH /users/me/favorites — set the up-to-4 ranked favorite titles shown on the profile. */
+/** PATCH /users/me/favorites — set the up-to-4 ranked favorite titles shown on
+ *  the profile. Films and shows are ranked separately; omit a side to leave it
+ *  unchanged. */
 export const UpdateFavoritesRequest = z.object({
-  mediaIds: z.array(z.string()).max(4),
+  filmIds: z.array(z.string()).max(4).optional(),
+  showIds: z.array(z.string()).max(4).optional(),
 });
 export type UpdateFavoritesRequest = z.infer<typeof UpdateFavoritesRequest>;

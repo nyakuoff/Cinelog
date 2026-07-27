@@ -26,19 +26,18 @@ export class DiscoveryService {
   ) {}
 
   async getDiscover(): Promise<DiscoverResponse> {
-    const [trendingMovies, trendingShows, popular, upcoming, highlyRated, hiddenGems] =
+    const [trendingMovies, trendingShows, popular, upcoming, highlyRated] =
       await Promise.all([
         this.providerSection('TRENDING_MOVIES', 'Trending movies', 'TRENDING', 'MOVIE'),
         this.providerSection('TRENDING_SHOWS', 'Trending shows', 'TRENDING', 'TV'),
         this.providerSection('POPULAR', 'Popular this week', 'POPULAR', 'MOVIE'),
         this.providerSection('NEW_AND_UPCOMING', 'New & upcoming', 'UPCOMING', 'MOVIE'),
         this.highlyRatedSection(),
-        this.hiddenGemsSection(),
       ]);
 
     // Empty sections (provider not configured, or not enough community data yet)
     // are dropped rather than shown as dead/empty rails.
-    const sections = [trendingMovies, trendingShows, popular, upcoming, highlyRated, hiddenGems].filter(
+    const sections = [trendingMovies, trendingShows, popular, upcoming, highlyRated].filter(
       (s): s is DiscoverSection => s.items.length > 0,
     );
     return { sections };
@@ -215,20 +214,6 @@ export class DiscoveryService {
     });
     const items = await this.mediaForGroups(grouped.map((g) => g.mediaItemId));
     return { key: 'HIGHLY_RATED', title: 'Highly rated on Cinelog', source: 'CINELOG', items };
-  }
-
-  private async hiddenGemsSection(): Promise<DiscoverSection> {
-    // Well-liked by the few people who've seen it, but not widely rated yet.
-    const grouped = await this.prisma.rating.groupBy({
-      by: ['mediaItemId'],
-      _avg: { value: true },
-      _count: { value: true },
-      having: { value: { _count: { gte: 1, lte: 3 }, _avg: { gte: 80 } } },
-      orderBy: { _avg: { value: 'desc' } },
-      take: RAIL_SIZE,
-    });
-    const items = await this.mediaForGroups(grouped.map((g) => g.mediaItemId));
-    return { key: 'HIDDEN_GEMS', title: 'Hidden gems', source: 'CINELOG', items };
   }
 
   private async mediaForGroups(ids: string[]): Promise<SearchResult[]> {

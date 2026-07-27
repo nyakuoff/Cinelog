@@ -8,7 +8,6 @@ export const DiscoverSectionKey = z.enum([
   'POPULAR',
   'NEW_AND_UPCOMING',
   'HIGHLY_RATED',
-  'HIDDEN_GEMS',
 ]);
 export type DiscoverSectionKey = z.infer<typeof DiscoverSectionKey>;
 

@@ -11,6 +11,8 @@ import type {
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { PosterCard } from '../components/PosterCard';
+import { ActivityFeed } from '../components/ActivityFeed';
+import { SectionHeader } from '../components/lb';
 import { Spinner } from '../components/ui';
 
 const GENRES = [
@@ -146,10 +148,32 @@ export function DiscoverPage(): JSX.Element {
       ) : (sections.data?.sections.length ?? 0) === 0 ? (
         <p className="py-10 text-center text-muted">Nothing to discover yet.</p>
       ) : (
-        <div className="mt-8 space-y-10">
-          {sections.data?.sections.map((s) => (
-            <Rail key={s.key} section={s} onOpen={open} />
-          ))}
+        <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-10">
+            {sections.data?.sections.map((s) => (
+              <Rail key={s.key} section={s} onOpen={open} />
+            ))}
+          </div>
+
+          {/* Friend activity rail — what a signed-in member sees first. */}
+          <aside className="space-y-8">
+            <section>
+              <SectionHeader title="From people you follow" more="/members" moreLabel="Find members" />
+              <ActivityFeed
+                scope="FOLLOWING"
+                emptyTitle="No activity yet"
+                emptyBody="Follow other members and their ratings, reviews, and watches show up here."
+              />
+            </section>
+            <section>
+              <SectionHeader title="Recent on Cinelog" />
+              <ActivityFeed
+                scope="EVERYONE"
+                emptyTitle="Nothing logged yet"
+                emptyBody="Activity from everyone on this instance appears here."
+              />
+            </section>
+          </aside>
         </div>
       )}
     </div>

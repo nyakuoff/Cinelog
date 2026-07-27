@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import type { RatingResponse, SetRatingRequest } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import { ActivityService } from '../social/activity.service';
 
 @Injectable()
 export class RatingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly activity: ActivityService,
   ) {}
 
   /** Set (or clear, when value is null) the current user's rating for a media item. */
@@ -16,12 +18,17 @@ export class RatingsService {
 
     if (req.value === null) {
       await this.prisma.rating.deleteMany({ where: { userId, mediaItemId } });
+      // Clearing a rating retracts the feed event rather than leaving a stale one.
+      await this.prisma.activityEvent.deleteMany({
+        where: { actorId: userId, type: 'RATED', mediaItemId },
+      });
     } else {
       await this.prisma.rating.upsert({
         where: { userId_mediaItemId: { userId, mediaItemId } },
         create: { userId, mediaItemId, value: req.value },
         update: { value: req.value },
       });
+      await this.activity.recordReplacing({ actorId: userId, type: 'RATED', mediaItemId });
     }
 
     const community = await this.prisma.rating.aggregate({

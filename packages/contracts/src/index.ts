@@ -13,3 +13,4 @@ export * from './rating-scale.js';
 export * from './social.js';
 export * from './discovery.js';
 export * from './reviews.js';
+export * from './follows.js';

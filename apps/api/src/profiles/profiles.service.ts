@@ -93,9 +93,19 @@ export class ProfilesService {
     const { isOwnProfile, canView, canViewWatchlist, profileVisibility, watchlistVisibility } =
       await this.resolveAccess(user, viewerId);
 
-    const [followerCount, followingCount] = await Promise.all([
+    const [followerCount, followingCount, viewerFollows, followsViewer] = await Promise.all([
       this.prisma.follow.count({ where: { followingId: user.id } }),
       this.prisma.follow.count({ where: { followerId: user.id } }),
+      viewerId
+        ? this.prisma.follow.findUnique({
+            where: { followerId_followingId: { followerId: viewerId, followingId: user.id } },
+          })
+        : Promise.resolve(null),
+      viewerId
+        ? this.prisma.follow.findUnique({
+            where: { followerId_followingId: { followerId: user.id, followingId: viewerId } },
+          })
+        : Promise.resolve(null),
     ]);
 
     const base: PublicProfile = {
@@ -117,6 +127,8 @@ export class ProfilesService {
       topGenres: [],
       followerCount,
       followingCount,
+      isFollowedByViewer: viewerId ? !!viewerFollows : null,
+      followsViewer: viewerId ? !!followsViewer : null,
     };
     if (!canView) return base;
 

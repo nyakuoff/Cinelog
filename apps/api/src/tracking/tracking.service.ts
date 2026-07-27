@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
 import { ArtworkService } from '../artwork/artwork.service';
+import { ActivityService } from '../social/activity.service';
 
 @Injectable()
 export class TrackingService {
@@ -19,6 +20,7 @@ export class TrackingService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly artwork: ArtworkService,
+    private readonly activity: ActivityService,
   ) {}
 
   async setStatus(
@@ -42,7 +44,20 @@ export class TrackingService {
   }
 
   async setFavorite(userId: string, ref: MediaRef, value: boolean): Promise<TrackingResponse> {
-    return this.setFlag(userId, ref, { isFavorite: value });
+    const result = await this.setFlag(userId, ref, { isFavorite: value });
+    if (value) {
+      await this.activity.recordReplacing({
+        actorId: userId,
+        type: 'FAVORITED',
+        mediaItemId: result.mediaId,
+      });
+    } else {
+      // Un-liking retracts the event rather than leaving a stale claim in feeds.
+      await this.prisma.activityEvent.deleteMany({
+        where: { actorId: userId, type: 'FAVORITED', mediaItemId: result.mediaId },
+      });
+    }
+    return result;
   }
 
   async setWatchlist(userId: string, ref: MediaRef, value: boolean): Promise<TrackingResponse> {
@@ -72,6 +87,11 @@ export class TrackingService {
           : { status: 'COMPLETED', completedAt: watchedAt },
       }),
     ]);
+    await this.activity.recordReplacing({
+      actorId: userId,
+      type: 'WATCHED',
+      mediaItemId,
+    });
     return { mediaId: mediaItemId, userState: await this.getUserState(userId, mediaItemId) };
   }
 

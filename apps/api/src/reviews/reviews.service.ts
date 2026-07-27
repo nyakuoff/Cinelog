@@ -22,6 +22,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
 import { ArtworkService } from '../artwork/artwork.service';
+import { ActivityService } from '../social/activity.service';
 
 type ReviewWithAuthor = ReviewRow & { user: User };
 type CommentWithAuthor = CommentRow & { user: User };
@@ -32,6 +33,7 @@ export class ReviewsService {
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
     private readonly artwork: ArtworkService,
+    private readonly activity: ActivityService,
   ) {}
 
   async create(userId: string, mediaRefId: string, dto: CreateReviewRequest): Promise<Review> {
@@ -57,6 +59,12 @@ export class ReviewsService {
       },
       include: { user: true },
     });
+    await this.activity.recordReplacing({
+      actorId: userId,
+      type: 'REVIEWED',
+      mediaItemId,
+      reviewId: row.id,
+    });
     return this.toReview(row, userId);
   }
 
@@ -81,6 +89,10 @@ export class ReviewsService {
   async remove(userId: string, reviewId: string): Promise<void> {
     const row = await this.requireOwnedReview(userId, reviewId);
     await this.prisma.review.delete({ where: { id: row.id } });
+    // ActivityEvent has no FK to Review, so the feed row must be cleared here.
+    await this.prisma.activityEvent.deleteMany({
+      where: { actorId: userId, type: 'REVIEWED', reviewId: row.id },
+    });
   }
 
   async getById(reviewId: string, viewerId: string | undefined): Promise<Review> {

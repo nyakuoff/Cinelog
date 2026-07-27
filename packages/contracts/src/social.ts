@@ -63,6 +63,10 @@ export const PublicProfile = z.object({
   topGenres: z.array(GenreBreakdownEntry),
   followerCount: z.number().int(),
   followingCount: z.number().int(),
+  /** Whether the requesting viewer follows this profile. Null when anonymous. */
+  isFollowedByViewer: z.boolean().nullable(),
+  /** Whether this profile follows the viewer back. Null when anonymous. */
+  followsViewer: z.boolean().nullable(),
 });
 export type PublicProfile = z.infer<typeof PublicProfile>;
 

@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { MediaModule } from '../media/media.module';
 import { ArtworkModule } from '../artwork/artwork.module';
+import { SocialModule } from '../social/social.module';
 import { ReviewsController } from './reviews.controller';
 import { ReviewsService } from './reviews.service';
 
 @Module({
-  imports: [MediaModule, ArtworkModule],
+  imports: [MediaModule, ArtworkModule, SocialModule],
   controllers: [ReviewsController],
   providers: [ReviewsService],
   exports: [ReviewsService],

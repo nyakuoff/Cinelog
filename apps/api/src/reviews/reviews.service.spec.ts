@@ -2,6 +2,8 @@ import { ForbiddenException } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { MediaService } from '../media/media.service';
+import type { ArtworkService } from '../artwork/artwork.service';
+import type { ActivityService } from '../social/activity.service';
 
 function makeUser(id: string) {
   return { id, username: `user-${id}`, displayName: null, avatarUrl: null };
@@ -59,7 +61,16 @@ function makePrisma(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 const fakeMedia = {} as unknown as MediaService;
-const fakeArtwork = { toProxyUrl: (u: string | null) => u } as unknown as import('../artwork/artwork.service').ArtworkService;
+const fakeArtwork = { toProxyUrl: (u: string | null) => u } as unknown as ArtworkService;
+const fakeActivity = {
+  record: jest.fn().mockResolvedValue(undefined),
+  recordReplacing: jest.fn().mockResolvedValue(undefined),
+} as unknown as ActivityService;
+
+/** Single construction point so DI changes don't ripple through every test. */
+function makeService(prisma: PrismaService): ReviewsService {
+  return new ReviewsService(prisma, fakeMedia, fakeArtwork, fakeActivity);
+}
 
 describe('ReviewsService', () => {
   it('spoiler reviews conceal the body from everyone but the author in list results', async () => {
@@ -67,7 +78,7 @@ describe('ReviewsService', () => {
     (prisma.review.findMany as jest.Mock).mockResolvedValue([
       makeReviewRow({ isSpoiler: true, body: 'The ending twist is...' }),
     ]);
-    const svc = new ReviewsService(prisma, fakeMedia, fakeArtwork);
+    const svc = makeService(prisma);
 
     const asStranger = await svc.list('media-1', 'someone-else', {
       sort: 'RECENT',
@@ -86,7 +97,7 @@ describe('ReviewsService', () => {
     (prisma.review.findUnique as jest.Mock).mockResolvedValue(
       makeReviewRow({ isSpoiler: true, body: 'Spoiler content' }),
     );
-    const svc = new ReviewsService(prisma, fakeMedia, fakeArtwork);
+    const svc = makeService(prisma);
     const result = await svc.getById('review-1', 'someone-else');
     expect(result.concealed).toBe(false);
     expect(result.body).toBe('Spoiler content');
@@ -95,7 +106,7 @@ describe('ReviewsService', () => {
   it('only the author can edit or delete their review', async () => {
     const prisma = makePrisma();
     (prisma.review.findUnique as jest.Mock).mockResolvedValue(makeReviewRow());
-    const svc = new ReviewsService(prisma, fakeMedia, fakeArtwork);
+    const svc = makeService(prisma);
 
     await expect(svc.update('someone-else', 'review-1', { body: 'edited' })).rejects.toThrow(
       ForbiddenException,
@@ -109,7 +120,7 @@ describe('ReviewsService', () => {
     (prisma.$transaction as jest.Mock).mockRejectedValueOnce(
       Object.assign(new Error('duplicate'), { code: 'P2002' }),
     );
-    const svc = new ReviewsService(prisma, fakeMedia, fakeArtwork);
+    const svc = makeService(prisma);
     await expect(svc.like('viewer-1', 'review-1')).resolves.toBeUndefined();
   });
 
@@ -121,7 +132,7 @@ describe('ReviewsService', () => {
       userId: 'commenter-1',
       body: 'nice review',
     });
-    const svc = new ReviewsService(prisma, fakeMedia, fakeArtwork);
+    const svc = makeService(prisma);
 
     await expect(svc.updateComment('someone-else', 'comment-1', { body: 'edited' })).rejects.toThrow(
       ForbiddenException,

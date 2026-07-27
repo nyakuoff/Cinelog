@@ -1,4 +1,5 @@
 import type {
+  ActivityFeedResponse,
   AdminCreateUserRequest,
   AdminUpdateCastRequest,
   AdminUpdateUserRequest,
@@ -17,6 +18,9 @@ import type {
   DiscoverFilterResponse,
   DiscoverResponse,
   EpisodeRatingResponse,
+  FollowStateResponse,
+  MemberListQuery,
+  MemberListResponse,
   EpisodesResponse,
   ImportSummary,
   LetterboxdImportRequest,
@@ -203,6 +207,31 @@ export const api = {
     request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
   getProfileReviews: (username: string) =>
     request<UserReviewListResponse>('GET', `/users/${encodeURIComponent(username)}/reviews`),
+
+  // -- social graph -------------------------------------------------------------
+  getMembers: (query: Partial<MemberListQuery>) =>
+    request<MemberListResponse>('GET', `/members${toQuery(query)}`),
+  getFollowers: (username: string, cursor?: string) =>
+    request<MemberListResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/followers${toQuery({ cursor })}`,
+    ),
+  getFollowing: (username: string, cursor?: string) =>
+    request<MemberListResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/following${toQuery({ cursor })}`,
+    ),
+  follow: (username: string) =>
+    request<FollowStateResponse>('POST', `/users/${encodeURIComponent(username)}/follow`),
+  unfollow: (username: string) =>
+    request<FollowStateResponse>('DELETE', `/users/${encodeURIComponent(username)}/follow`),
+  blockUser: (username: string) =>
+    request<void>('POST', `/users/${encodeURIComponent(username)}/block`),
+  unblockUser: (username: string) =>
+    request<void>('DELETE', `/users/${encodeURIComponent(username)}/block`),
+  getBlocked: () => request<MemberListResponse>('GET', '/blocked'),
+  getActivity: (scope: 'FOLLOWING' | 'EVERYONE', cursor?: string) =>
+    request<ActivityFeedResponse>('GET', `/activity${toQuery({ scope, cursor })}`),
   updateWatchEntry: (entryId: string, dto: UpdateWatchEntryRequest) =>
     request<void>('PATCH', `/tracking/watch/${entryId}`, dto),
   deleteWatchEntry: (entryId: string) => request<void>('DELETE', `/tracking/watch/${entryId}`),

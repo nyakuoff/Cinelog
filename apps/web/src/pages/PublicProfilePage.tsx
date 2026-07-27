@@ -11,8 +11,10 @@ import { Avatar } from '../components/Avatar';
 import { PosterCard } from '../components/PosterCard';
 import { Button, Card, Spinner } from '../components/ui';
 import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
+import { FollowButton, MemberCard } from '../components/MemberCard';
+import { EmptyState } from '../components/lb';
 
-type Tab = 'overview' | 'diary' | 'reviews' | 'watchlist';
+type Tab = 'overview' | 'diary' | 'reviews' | 'watchlist' | 'network';
 
 export function PublicProfilePage(): JSX.Element {
   const params = useParams<{ username?: string }>();
@@ -95,6 +97,9 @@ export function PublicProfilePage(): JSX.Element {
             Watchlist
           </TabButton>
         )}
+        <TabButton active={tab === 'network'} onClick={() => setTab('network')}>
+          Network
+        </TabButton>
       </div>
 
       {tab === 'overview' && (
@@ -149,6 +154,7 @@ export function PublicProfilePage(): JSX.Element {
       {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
       {tab === 'reviews' && <ReviewsTab username={profile.username} />}
       {tab === 'watchlist' && profile.canViewWatchlist && <WatchlistTab username={profile.username} />}
+      {tab === 'network' && <NetworkTab username={profile.username} />}
 
       {editingFavorites && (
         <FavoritesEditorModal
@@ -299,6 +305,50 @@ function WatchlistTab({ username }: { username: string }): JSX.Element {
           onClick={() => navigate(`/media/${item.id}`)}
         />
       ))}
+    </div>
+  );
+}
+
+function NetworkTab({ username }: { username: string }): JSX.Element {
+  const [side, setSide] = useState<'followers' | 'following'>('followers');
+  const { data, isLoading } = useQuery({
+    queryKey: ['network', username, side],
+    queryFn: () =>
+      side === 'followers' ? api.getFollowers(username) : api.getFollowing(username),
+  });
+
+  return (
+    <div className="mt-6">
+      <div className="mb-4 flex gap-1 rounded border border-border bg-surface p-0.5 sm:w-fit">
+        {(['followers', 'following'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setSide(s)}
+            className={cn(
+              'flex-1 rounded px-4 py-1.5 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors sm:flex-none',
+              side === s ? 'bg-gold text-ink' : 'text-muted hover:text-content',
+            )}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <Spinner />
+        </div>
+      ) : (data?.members.length ?? 0) === 0 ? (
+        <EmptyState
+          title={side === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
+        />
+      ) : (
+        <div className="grid gap-2.5 sm:grid-cols-2">
+          {data?.members.map((m) => (
+            <MemberCard key={m.id} member={m} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -488,7 +538,21 @@ function ProfileHeader({
               Edit profile
             </Button>
           </div>
-        ) : null}
+        ) : (
+          profile.isFollowedByViewer !== null && (
+            <div className="flex items-center gap-2">
+              {profile.followsViewer && (
+                <span className="font-cond text-[11px] font-bold uppercase tracking-wide text-cyan">
+                  Follows you
+                </span>
+              )}
+              <FollowButton
+                username={profile.username}
+                initialFollowing={profile.isFollowedByViewer}
+              />
+            </div>
+          )
+        )}
       </div>
 
       <StatsRow profile={profile} />

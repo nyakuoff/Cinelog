@@ -12,7 +12,7 @@ import { PosterCard } from '../components/PosterCard';
 import { Button, Card, Spinner } from '../components/ui';
 import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
 
-type Tab = 'overview' | 'diary' | 'watchlist';
+type Tab = 'overview' | 'diary' | 'reviews' | 'watchlist';
 
 export function PublicProfilePage(): JSX.Element {
   const params = useParams<{ username?: string }>();
@@ -87,6 +87,9 @@ export function PublicProfilePage(): JSX.Element {
         <TabButton active={tab === 'diary'} onClick={() => setTab('diary')}>
           Diary
         </TabButton>
+        <TabButton active={tab === 'reviews'} onClick={() => setTab('reviews')}>
+          Reviews
+        </TabButton>
         {profile.canViewWatchlist && (
           <TabButton active={tab === 'watchlist'} onClick={() => setTab('watchlist')}>
             Watchlist
@@ -144,6 +147,7 @@ export function PublicProfilePage(): JSX.Element {
       )}
 
       {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
+      {tab === 'reviews' && <ReviewsTab username={profile.username} />}
       {tab === 'watchlist' && profile.canViewWatchlist && <WatchlistTab username={profile.username} />}
 
       {editingFavorites && (
@@ -299,6 +303,75 @@ function WatchlistTab({ username }: { username: string }): JSX.Element {
   );
 }
 
+function ReviewsTab({ username }: { username: string }): JSX.Element {
+  const navigate = useNavigate();
+  const [revealedBodies, setRevealedBodies] = useState<Record<string, string>>({});
+  const { data, isLoading } = useQuery({
+    queryKey: ['profile-reviews', username],
+    queryFn: () => api.getProfileReviews(username),
+  });
+
+  async function reveal(reviewId: string): Promise<void> {
+    const full = await api.getReview(reviewId);
+    setRevealedBodies((prev) => ({ ...prev, [reviewId]: full.body }));
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+  if ((data?.reviews.length ?? 0) === 0) {
+    return <p className="py-10 text-center text-muted">No reviews yet.</p>;
+  }
+
+  return (
+    <div className="mt-6 divide-y divide-border">
+      {data?.reviews.map((r) => (
+        <div key={r.id} className="flex items-start gap-3 py-4">
+          <button
+            onClick={() => navigate(`/media/${r.media.id}`)}
+            className="h-20 w-14 shrink-0 overflow-hidden rounded bg-surface-2"
+          >
+            {r.media.posterUrl ? (
+              <img src={r.media.posterUrl} alt={r.media.title} className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full" style={{ background: posterGradient(r.media.title) }} />
+            )}
+          </button>
+          <div className="min-w-0 flex-1">
+            <button onClick={() => navigate(`/media/${r.media.id}`)} className="text-left">
+              <span className="text-sm font-medium text-content hover:text-gold">
+                {r.media.title} {r.media.year && <span className="text-muted-2">({r.media.year})</span>}
+              </span>
+            </button>
+            {r.ratingValue !== null && (
+              <span className="ml-2 text-xs font-semibold text-gold">
+                {fromNormalized(r.ratingValue, 'TEN')}
+              </span>
+            )}
+            <p className="text-xs text-muted-2">{new Date(r.createdAt).toLocaleDateString()}</p>
+            {r.concealed && revealedBodies[r.id] === undefined ? (
+              <button
+                onClick={() => void reveal(r.id)}
+                className="mt-1.5 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-muted hover:text-content"
+              >
+                Contains spoilers — click to reveal
+              </button>
+            ) : (
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-content/90">
+                {revealedBodies[r.id] ?? r.body}
+              </p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <h2 className="mb-3 font-cond text-[13px] font-extrabold uppercase tracking-[0.12em] text-muted">
@@ -363,15 +436,30 @@ function ProfileHeader({
   });
   return (
     <div>
+      {/* Header backdrop: a collage of the member's own favorite posters, the
+          way a Letterboxd profile header is built from the account's own
+          activity rather than a separately-uploaded banner image. */}
       <div className="relative">
-        <div
-          className="h-40 overflow-hidden rounded-2xl border border-border bg-surface-2 sm:h-52"
-          style={!profile.bannerUrl ? { background: posterGradient(profile.username) } : undefined}
-        >
-          {profile.bannerUrl && (
-            <img src={profile.bannerUrl} alt="" className="h-full w-full object-cover" />
+        <div className="h-40 overflow-hidden rounded-2xl border border-border bg-surface-2 sm:h-52">
+          {profile.favorites.length > 0 ? (
+            <div className="grid h-full grid-cols-4">
+              {profile.favorites.map((f) => (
+                <div key={f.media.id} className="relative overflow-hidden">
+                  {f.media.posterUrl ? (
+                    <img src={f.media.posterUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="h-full w-full" style={{ background: posterGradient(f.media.title) }} />
+                  )}
+                </div>
+              ))}
+              {Array.from({ length: 4 - profile.favorites.length }).map((_, i) => (
+                <div key={`fill-${i}`} style={{ background: posterGradient(profile.username + i) }} />
+              ))}
+            </div>
+          ) : (
+            <div className="h-full w-full" style={{ background: posterGradient(profile.username) }} />
           )}
-          <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
         </div>
         <div className="absolute -bottom-8 left-5">
           <div className="rounded-full ring-4 ring-bg">
@@ -389,16 +477,6 @@ function ProfileHeader({
             @{profile.username} · Joined {joined}
           </p>
           {profile.bio && <p className="mt-2 max-w-xl text-sm text-muted">{profile.bio}</p>}
-          <div className="mt-3 flex gap-4 text-sm">
-            <span>
-              <strong className="text-content">{profile.followerCount}</strong>{' '}
-              <span className="text-muted-2">followers</span>
-            </span>
-            <span>
-              <strong className="text-content">{profile.followingCount}</strong>{' '}
-              <span className="text-muted-2">following</span>
-            </span>
-          </div>
         </div>
 
         {profile.isOwnProfile ? (
@@ -425,9 +503,11 @@ function StatsRow({ profile }: { profile: PublicProfile }): JSX.Element {
     { label: 'Shows', value: stats.showsWatched },
     { label: 'Episodes', value: stats.episodesWatched },
     { label: 'Ratings', value: stats.totalRatings },
+    { label: 'Followers', value: profile.followerCount },
+    { label: 'Following', value: profile.followingCount },
   ];
   return (
-    <div className="mt-6 grid grid-cols-4 gap-3 border-t border-border pt-6">
+    <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border pt-6 sm:grid-cols-6">
       {items.map((i) => (
         <div key={i.label} className="text-center">
           <p className="font-cond text-2xl font-extrabold tabular-nums text-content">{i.value}</p>

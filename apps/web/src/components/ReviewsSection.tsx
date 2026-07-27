@@ -169,7 +169,7 @@ function ReviewCard({
   scale: RatingScale;
   onChanged: () => void;
 }): JSX.Element {
-  const [revealed, setRevealed] = useState(false);
+  const [revealedBody, setRevealedBody] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [liked, setLiked] = useState(review.likedByViewer);
   const [likeCount, setLikeCount] = useState(review.likeCount);
@@ -195,7 +195,12 @@ function ReviewCard({
     onSuccess: onChanged,
   });
 
-  const showConcealed = review.concealed && !revealed;
+  const showConcealed = review.concealed && revealedBody === null;
+
+  async function reveal(): Promise<void> {
+    const full = await api.getReview(review.id);
+    setRevealedBody(full.body);
+  }
 
   return (
     <div className="border-b border-border pb-6 last:border-0">
@@ -219,14 +224,14 @@ function ReviewCard({
 
           {showConcealed ? (
             <button
-              onClick={() => setRevealed(true)}
+              onClick={() => void reveal()}
               className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-muted hover:text-content"
             >
               Contains spoilers — click to reveal
             </button>
           ) : (
             <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-content/90">
-              {review.body}
+              {revealedBody ?? review.body}
             </p>
           )}
 

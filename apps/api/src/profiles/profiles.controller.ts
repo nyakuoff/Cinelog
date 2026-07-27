@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   FavoriteSlot,
   ProfileDiaryResponse,
   ProfileWatchlistResponse,
   PublicProfile,
+  UserReviewListResponse,
 } from '@cinelog/contracts';
 import { CurrentUser, Public } from '../common/decorators';
 import { ProfilesService } from './profiles.service';
@@ -40,6 +41,16 @@ export class ProfilesController {
     @CurrentUser('sub') viewerId: string | undefined,
   ): Promise<ProfileWatchlistResponse> {
     return this.profiles.getWatchlist(username, viewerId);
+  }
+
+  @Public()
+  @Get('users/:username/reviews')
+  getReviews(
+    @Param('username') username: string,
+    @CurrentUser('sub') viewerId: string | undefined,
+    @Query('cursor') cursor?: string,
+  ): Promise<UserReviewListResponse> {
+    return this.profiles.getReviews(username, viewerId, cursor);
   }
 
   @ApiBearerAuth()

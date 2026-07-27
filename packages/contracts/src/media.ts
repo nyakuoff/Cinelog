@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ArtworkType, MediaType, ProviderId, TrackingStatus } from './enums.js';
+import { RatingDistributionBucket } from './social.js';
 
 /** A single search hit from the global search endpoint. */
 export const SearchResult = z.object({
@@ -111,6 +112,8 @@ export const MediaDetail = z.object({
   providerRating: z.number().min(0).max(100).nullable(),
   /** Aggregate of Cinelog users' ratings for this media, 0..100, or null. */
   communityRating: z.number().min(0).max(100).nullable(),
+  ratingCount: z.number().int(),
+  ratingDistribution: z.array(RatingDistributionBucket),
   userState: UserMediaState,
 });
 export type MediaDetail = z.infer<typeof MediaDetail>;

@@ -29,6 +29,7 @@ import type {
   ProfileDiaryResponse,
   ProfileWatchlistResponse,
   PublicProfile,
+  UserReviewListResponse,
   CreateReviewCommentRequest,
   CreateReviewRequest,
   RatingResponse,
@@ -188,6 +189,8 @@ export const api = {
     request<ProfileDiaryResponse>('GET', `/users/${encodeURIComponent(username)}/diary`),
   getProfileWatchlist: (username: string) =>
     request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
+  getProfileReviews: (username: string) =>
+    request<UserReviewListResponse>('GET', `/users/${encodeURIComponent(username)}/reviews`),
   updateWatchEntry: (entryId: string, dto: UpdateWatchEntryRequest) =>
     request<void>('PATCH', `/tracking/watch/${entryId}`, dto),
   deleteWatchEntry: (entryId: string) => request<void>('DELETE', `/tracking/watch/${entryId}`),

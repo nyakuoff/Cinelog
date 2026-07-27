@@ -91,14 +91,18 @@ export function Layout(): JSX.Element {
             ＋ Log
           </button>
 
-          <div className="relative" ref={menuRef}>
+          <div className="relative flex items-center gap-1" ref={menuRef}>
+            <Link to="/profile" title={user?.username}>
+              <Avatar user={user} size={32} />
+            </Link>
             <button
               onClick={() => setMenuOpen((v) => !v)}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              title={user?.username}
+              aria-label="Account menu"
+              className="grid h-6 w-6 place-items-center rounded text-muted hover:text-content"
             >
-              <Avatar user={user} size={32} />
+              <span className="text-[10px]">▾</span>
             </button>
             {menuOpen && (
               <div

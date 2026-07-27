@@ -4,7 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { Review as ReviewRow, ReviewComment as CommentRow, User } from '@prisma/client';
+import type { MediaItem, Review as ReviewRow, ReviewComment as CommentRow, User } from '@prisma/client';
+import { MediaType } from '@cinelog/contracts';
 import type {
   CreateReviewCommentRequest,
   CreateReviewRequest,
@@ -15,9 +16,12 @@ import type {
   ReviewListResponse,
   UpdateReviewCommentRequest,
   UpdateReviewRequest,
+  UserReview,
+  UserReviewListResponse,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
+import { ArtworkService } from '../artwork/artwork.service';
 
 type ReviewWithAuthor = ReviewRow & { user: User };
 type CommentWithAuthor = CommentRow & { user: User };
@@ -27,6 +31,7 @@ export class ReviewsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly media: MediaService,
+    private readonly artwork: ArtworkService,
   ) {}
 
   async create(userId: string, mediaRefId: string, dto: CreateReviewRequest): Promise<Review> {
@@ -131,6 +136,30 @@ export class ReviewsService {
       reviews: rows.map((r) => this.toReview(r, viewerId, { liked: likedIds.has(r.id) })),
       nextCursor: rows.length >= take ? String(skip + take) : null,
     };
+  }
+
+  /** A user's authored reviews for their profile's Reviews tab. Caller (the
+   *  profiles module) is responsible for the profile-visibility check. */
+  async listByAuthor(
+    authorId: string,
+    viewerId: string | undefined,
+    cursor: string | undefined,
+    limit = 20,
+  ): Promise<UserReviewListResponse> {
+    const skip = cursor ? Number(cursor) : 0;
+    const rows = await this.prisma.review.findMany({
+      where: { userId: authorId, targetType: 'MEDIA' },
+      include: { user: true, media: true },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
+    });
+    const likedIds = viewerId ? await this.likedReviewIds(rows.map((r) => r.id), viewerId) : new Set<string>();
+    const reviews: UserReview[] = rows.map((r) => ({
+      ...this.toReview(r, viewerId, { liked: likedIds.has(r.id) }),
+      media: this.toMediaSummary(r.media),
+    }));
+    return { reviews, nextCursor: rows.length >= limit ? String(skip + limit) : null };
   }
 
   async like(userId: string, reviewId: string): Promise<void> {
@@ -279,6 +308,16 @@ export class ReviewsService {
       isOwnComment: viewerId === row.userId,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private toMediaSummary(media: MediaItem): UserReview['media'] {
+    return {
+      id: media.id,
+      type: MediaType.catch('MOVIE').parse(media.type),
+      title: media.title,
+      year: media.releaseDate ? Number(media.releaseDate.slice(0, 4)) || null : null,
+      posterUrl: this.artwork.toProxyUrl(media.posterPath),
     };
   }
 

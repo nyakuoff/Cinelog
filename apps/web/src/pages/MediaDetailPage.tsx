@@ -71,21 +71,44 @@ export function MediaDetailPage(): JSX.Element {
           </div>
         )}
         <div className="relative mx-auto max-w-6xl px-4 pt-44 sm:px-6 sm:pt-80">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-end">
-            <div className="group relative w-32 shrink-0 sm:w-48">
-              <div className="aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface-2 shadow-soft">
-                {m.posterUrl && (
-                  <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
-                )}
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+            {/* Poster column: poster, then the Letterboxd-style icon action row
+                directly beneath it (watched / like / watchlist / rate), which is
+                the primary way a viewer interacts with a title. */}
+            <div className="w-32 shrink-0 sm:w-48">
+              <div className="group relative">
+                <div className="aspect-[2/3] overflow-hidden rounded-xl border border-border bg-surface-2 shadow-soft">
+                  {m.posterUrl && (
+                    <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+                  )}
+                </div>
+                <button
+                  onClick={() => setEditingArtwork(true)}
+                  title="Edit artwork"
+                  className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-black/70 text-content opacity-80 backdrop-blur transition-opacity hover:bg-black/85 hover:opacity-100 sm:h-9 sm:w-9"
+                >
+                  ✎
+                </button>
               </div>
-              <button
-                onClick={() => setEditingArtwork(true)}
-                title="Edit artwork"
-                className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-black/70 text-content opacity-80 backdrop-blur transition-opacity hover:bg-black/85 hover:opacity-100 sm:h-9 sm:w-9"
-              >
-                ✎
-              </button>
+
+              <PosterActionRow
+                state={state}
+                onToggleWatched={() => api.markWatched({ mediaId: id }).then(invalidate)}
+                onToggleFavorite={() => favoriteMut.mutate(!state.isFavorite)}
+                onToggleWatchlist={() =>
+                  api.setWatchlist({ mediaId: id }, !state.isWatchlisted).then(invalidate)
+                }
+              />
+
+              <div className="mt-3">
+                <RatingWidget value={state.rating} scale={scale} onChange={(v) => ratingMut.mutate(v)} />
+              </div>
+
+              <div className="mt-3">
+                <StatusPicker value={state.status} onChange={(s) => statusMut.mutate(s)} className="w-full" />
+              </div>
             </div>
+
             <div className="min-w-0 flex-1 pb-1">
               <div className="flex items-start justify-between gap-3">
                 <h1 className="font-cond text-4xl font-extrabold uppercase leading-[0.95] tracking-tight sm:text-5xl">
@@ -113,6 +136,13 @@ export function MediaDetailPage(): JSX.Element {
                 {m.genres.map((g) => (
                   <Badge key={g.id}>{g.name}</Badge>
                 ))}
+              </div>
+
+              {/* Community rating: number + histogram, surfaced right under the
+                  title block rather than buried in the sidebar — this is the
+                  first thing a Letterboxd film page shows after the header. */}
+              <div className="mt-6 max-w-md">
+                <RatingHistogramCard media={m} />
               </div>
             </div>
           </div>
@@ -171,44 +201,27 @@ export function MediaDetailPage(): JSX.Element {
           <ReviewsSection mediaId={id} scale={scale} />
         </div>
 
-        {/* Interaction panel */}
+        {/* Secondary panel — supplementary info only; the primary actions
+            (watched/like/watchlist/rate/status) live in the poster column. */}
         <aside className="lg:sticky lg:top-24 lg:self-start">
-          <Card className="space-y-5 p-5">
-            <div>
-              <p className="mb-2 text-sm font-medium text-muted">Status</p>
-              <StatusPicker
-                value={state.status}
-                onChange={(s) => statusMut.mutate(s)}
-                className="w-full"
-              />
+          <Card className="space-y-4 p-5">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted">Rewatched</span>
+              <span className="font-semibold tabular-nums text-content">{state.rewatchCount}×</span>
             </div>
-
-            <ToggleButton
-              active={state.isFavorite}
-              tone="rose"
-              onClick={() => favoriteMut.mutate(!state.isFavorite)}
-            >
-              {state.isFavorite ? '♥ Liked' : '♡ Like'}
-            </ToggleButton>
-
-            <div>
-              <p className="mb-2 text-sm font-medium text-muted">Your rating</p>
-              <RatingWidget
-                value={state.rating}
-                scale={scale}
-                onChange={(v) => ratingMut.mutate(v)}
-              />
-            </div>
-
             <Button
               variant="secondary"
               className="w-full"
-              onClick={() => api.markWatched({ mediaId: id }).then(invalidate)}
+              onClick={() => api.markWatched({ mediaId: id, isRewatch: true }).then(invalidate)}
             >
-              Mark watched today
+              Log a rewatch
             </Button>
-
-            <RatingSummary media={m} />
+            {m.providerRating !== null && (
+              <div className="flex items-center justify-between border-t border-border pt-4 text-sm">
+                <span className="text-muted">Provider rating</span>
+                <span className="font-medium">{(m.providerRating / 10).toFixed(1)}/10</span>
+              </div>
+            )}
           </Card>
         </aside>
       </div>
@@ -230,48 +243,101 @@ export function MediaDetailPage(): JSX.Element {
   );
 }
 
-function ToggleButton({
+/** The Letterboxd-signature icon row directly under a poster: watched, like,
+ *  watchlist. (Rating lives just below this, as its own widget — Letterboxd
+ *  puts the star row here too, but ours needs more horizontal room.) */
+function PosterActionRow({
+  state,
+  onToggleWatched,
+  onToggleFavorite,
+  onToggleWatchlist,
+}: {
+  state: MediaDetail['userState'];
+  onToggleWatched: () => void;
+  onToggleFavorite: () => void;
+  onToggleWatchlist: () => void;
+}): JSX.Element {
+  const watched = state.status === 'COMPLETED';
+  return (
+    <div className="mt-3 flex items-center justify-between gap-1 rounded-xl border border-border bg-surface-2 px-2 py-2">
+      <ActionIcon label={watched ? 'Watched' : 'Mark watched'} active={watched} tone="cyan" onClick={onToggleWatched}>
+        {watched ? '✓' : '👁'}
+      </ActionIcon>
+      <ActionIcon label={state.isFavorite ? 'Liked' : 'Like'} active={state.isFavorite} tone="rose" onClick={onToggleFavorite}>
+        {state.isFavorite ? '♥' : '♡'}
+      </ActionIcon>
+      <ActionIcon
+        label={state.isWatchlisted ? 'On watchlist' : 'Add to watchlist'}
+        active={state.isWatchlisted}
+        tone="gold"
+        onClick={onToggleWatchlist}
+      >
+        {state.isWatchlisted ? '🔖' : '＋'}
+      </ActionIcon>
+    </div>
+  );
+}
+
+function ActionIcon({
+  label,
   active,
   tone,
   onClick,
   children,
 }: {
+  label: string;
   active: boolean;
-  tone: 'cyan' | 'rose';
+  tone: 'cyan' | 'rose' | 'gold';
   onClick: () => void;
   children: React.ReactNode;
 }): JSX.Element {
   const activeTone =
-    tone === 'cyan' ? 'border-cyan bg-cyan/15 text-cyan' : 'border-rose bg-rose/15 text-rose';
+    tone === 'cyan'
+      ? 'text-cyan'
+      : tone === 'rose'
+        ? 'text-rose'
+        : 'text-gold';
   return (
     <button
       onClick={onClick}
+      title={label}
+      aria-pressed={active}
       className={cn(
-        'flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition-colors',
-        active ? activeTone : 'border-border bg-surface-2 text-muted hover:text-content',
+        'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1 text-lg transition-colors hover:bg-surface',
+        active ? activeTone : 'text-muted',
       )}
     >
-      {children}
+      <span aria-hidden="true">{children}</span>
+      <span className="text-[9px] font-medium uppercase tracking-wide">{label.split(' ')[0]}</span>
     </button>
   );
 }
 
-function RatingSummary({ media }: { media: MediaDetail }): JSX.Element | null {
-  if (media.communityRating === null && media.providerRating === null) return null;
+/** Big average number + 10-bucket histogram — the first thing after the
+ *  title on a Letterboxd film page, not a buried sidebar line item. */
+function RatingHistogramCard({ media }: { media: MediaDetail }): JSX.Element | null {
+  if (media.ratingCount === 0) return null;
+  const max = Math.max(1, ...media.ratingDistribution.map((b) => b.count));
   return (
-    <div className="border-t border-border pt-4 text-sm">
-      {media.communityRating !== null && (
-        <div className="flex justify-between">
-          <span className="text-muted">Community</span>
-          <span className="font-medium">{fromNormalized(media.communityRating, 'TEN')}/10</span>
-        </div>
-      )}
-      {media.providerRating !== null && (
-        <div className="mt-1 flex justify-between">
-          <span className="text-muted">Provider</span>
-          <span className="font-medium">{(media.providerRating / 10).toFixed(1)}/10</span>
-        </div>
-      )}
+    <div className="flex items-end gap-4">
+      <div>
+        <p className="font-cond text-3xl font-extrabold tabular-nums text-gold">
+          {fromNormalized(media.communityRating ?? 0, 'TEN')}
+        </p>
+        <p className="text-xs text-muted-2">
+          {media.ratingCount} rating{media.ratingCount === 1 ? '' : 's'}
+        </p>
+      </div>
+      <div className="flex h-10 flex-1 items-end gap-[3px]">
+        {media.ratingDistribution.map((b) => (
+          <div
+            key={b.bucket}
+            className="flex-1 rounded-t bg-gradient-to-t from-gold/40 to-gold"
+            style={{ height: `${Math.max(6, (b.count / max) * 100)}%` }}
+            title={`${b.count} rating${b.count === 1 ? '' : 's'}`}
+          />
+        ))}
+      </div>
     </div>
   );
 }

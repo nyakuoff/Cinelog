@@ -9,9 +9,11 @@ import {
   type ProfileWatchlistResponse,
   type PublicProfile,
   type UpdateFavoritesRequest,
+  type UserReviewListResponse,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import { ArtworkService } from '../artwork/artwork.service';
+import { ReviewsService } from '../reviews/reviews.service';
 
 /** Types that count as "shows" for watch-stat purposes — everything episodic. */
 const SHOW_TYPES = new Set<MediaType>(['TV', 'ANIME', 'CARTOON', 'MINISERIES', 'SPECIAL']);
@@ -21,6 +23,7 @@ export class ProfilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly artwork: ArtworkService,
+    private readonly reviews: ReviewsService,
   ) {}
 
   private toSummary(media: MediaItem): MediaSummary {
@@ -72,6 +75,17 @@ export class ProfilesService {
       orderBy: { updatedAt: 'desc' },
     });
     return { items: rows.map((r) => this.toSummary(r.media)) };
+  }
+
+  async getReviews(
+    username: string,
+    viewerId: string | undefined,
+    cursor?: string,
+  ): Promise<UserReviewListResponse> {
+    const user = await this.findUserOrThrow(username);
+    const { canView } = await this.resolveAccess(user, viewerId);
+    if (!canView) return { reviews: [], nextCursor: null };
+    return this.reviews.listByAuthor(user.id, viewerId, cursor);
   }
 
   async getPublicProfile(username: string, viewerId: string | undefined): Promise<PublicProfile> {

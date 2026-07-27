@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TargetType } from './enums.js';
+import { MediaSummary } from './social.js';
 
 export const ReviewAuthor = z.object({
   id: z.string(),
@@ -45,6 +46,16 @@ export const ReviewListResponse = z.object({
   nextCursor: z.string().nullable(),
 });
 export type ReviewListResponse = z.infer<typeof ReviewListResponse>;
+
+/** A review as shown on a profile's Reviews tab — same shape, plus which title it's for. */
+export const UserReview = Review.extend({ media: MediaSummary });
+export type UserReview = z.infer<typeof UserReview>;
+
+export const UserReviewListResponse = z.object({
+  reviews: z.array(UserReview),
+  nextCursor: z.string().nullable(),
+});
+export type UserReviewListResponse = z.infer<typeof UserReviewListResponse>;
 
 /** POST /media/:id/reviews — the media id comes from the route, not the body. */
 export const CreateReviewRequest = z.object({

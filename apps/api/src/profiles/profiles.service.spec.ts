@@ -1,6 +1,7 @@
 import { ProfilesService } from './profiles.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ArtworkService } from '../artwork/artwork.service';
+import type { ReviewsService } from '../reviews/reviews.service';
 
 function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -37,16 +38,17 @@ function makePrisma(
 }
 
 const fakeArtwork = { toProxyUrl: (u: string | null) => u } as unknown as ArtworkService;
+const fakeReviews = {} as unknown as ReviewsService;
 
 describe('ProfilesService privacy', () => {
   it('a PUBLIC profile is visible to anonymous and any signed-in viewer', async () => {
-    const svc = new ProfilesService(makePrisma(makeUser({ profileVisibility: 'PUBLIC' }), false), fakeArtwork);
+    const svc = new ProfilesService(makePrisma(makeUser({ profileVisibility: 'PUBLIC' }), false), fakeArtwork, fakeReviews);
     expect((await svc.getPublicProfile('owner', undefined)).canView).toBe(true);
     expect((await svc.getPublicProfile('owner', 'someone-else')).canView).toBe(true);
   });
 
   it('a PRIVATE profile is hidden from everyone but the owner, and leaks no bio', async () => {
-    const svc = new ProfilesService(makePrisma(makeUser({ profileVisibility: 'PRIVATE' }), false), fakeArtwork);
+    const svc = new ProfilesService(makePrisma(makeUser({ profileVisibility: 'PRIVATE' }), false), fakeArtwork, fakeReviews);
     const anon = await svc.getPublicProfile('owner', undefined);
     expect(anon.canView).toBe(false);
     expect(anon.bio).toBeNull();
@@ -63,6 +65,7 @@ describe('ProfilesService privacy', () => {
     const notFollowing = new ProfilesService(
       makePrisma(makeUser({ profileVisibility: 'FOLLOWERS' }), false),
       fakeArtwork,
+      fakeReviews,
     );
     expect((await notFollowing.getPublicProfile('owner', 'viewer-1')).canView).toBe(false);
     expect((await notFollowing.getPublicProfile('owner', undefined)).canView).toBe(false);
@@ -70,6 +73,7 @@ describe('ProfilesService privacy', () => {
     const following = new ProfilesService(
       makePrisma(makeUser({ profileVisibility: 'FOLLOWERS' }), true),
       fakeArtwork,
+      fakeReviews,
     );
     expect((await following.getPublicProfile('owner', 'viewer-1')).canView).toBe(true);
   });
@@ -81,6 +85,7 @@ describe('ProfilesService privacy', () => {
         false,
       ),
       fakeArtwork,
+      fakeReviews,
     );
     const profile = await svc.getPublicProfile('owner', 'viewer-1');
     expect(profile.canView).toBe(true);
@@ -97,12 +102,14 @@ describe('ProfilesService privacy', () => {
     const allowed = new ProfilesService(
       makePrisma(makeUser({ watchlistVisibility: 'PUBLIC' }), false, rows),
       fakeArtwork,
+      fakeReviews,
     );
     expect((await allowed.getWatchlist('owner', 'viewer-1')).items).toHaveLength(1);
 
     const denied = new ProfilesService(
       makePrisma(makeUser({ watchlistVisibility: 'PRIVATE' }), false, rows),
       fakeArtwork,
+      fakeReviews,
     );
     expect((await denied.getWatchlist('owner', 'viewer-1')).items).toHaveLength(0);
   });

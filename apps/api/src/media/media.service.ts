@@ -175,19 +175,29 @@ export class MediaService {
     if (!item) throw new NotFoundException('Media not found');
 
     const raw = this.parseRaw(item.rawMetadata);
-    const [status, rating, community, artworkOverrides] = await Promise.all([
+    const [status, rating, allRatings, artworkOverrides] = await Promise.all([
       this.prisma.userMediaStatus.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
       this.prisma.rating.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
-      this.prisma.rating.aggregate({
-        where: { mediaItemId: mediaId },
-        _avg: { value: true },
-      }),
+      this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
       this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } }),
     ]);
+    const ratingCount = allRatings.length;
+    const communityRating = ratingCount
+      ? allRatings.reduce((sum, r) => sum + r.value, 0) / ratingCount
+      : null;
+    const buckets = new Map<number, number>();
+    for (const r of allRatings) {
+      const bucket = Math.min(10, Math.max(1, Math.ceil(r.value / 10)));
+      buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1);
+    }
+    const ratingDistribution = Array.from({ length: 10 }, (_, i) => ({
+      bucket: i + 1,
+      count: buckets.get(i + 1) ?? 0,
+    }));
     const posterOverride = artworkOverrides.find((a) => a.type === 'POSTER')?.url;
     const backdropOverride = artworkOverrides.find((a) => a.type === 'BACKDROP')?.url;
 
@@ -235,7 +245,9 @@ export class MediaService {
       })),
       trailerUrl: raw?.trailerUrl ?? null,
       providerRating: item.providerRating,
-      communityRating: community._avg.value ?? null,
+      communityRating,
+      ratingCount,
+      ratingDistribution,
       userState,
     };
   }

@@ -153,6 +153,42 @@ discovery platform. See the approved plan for full context and rationale.
   gracefully (no diary/watchlist data yet, no crash); `GET /api/users/doesnotexist/diary` and
   `/watchlist` both correctly 404.
 
+### Slice 5b — Letterboxd layout fidelity pass (2026-07-27)
+
+User feedback: the layout wasn't a close enough match to Letterboxd's actual page structure.
+Reworked three surfaces to mirror it more precisely (IA/structure only — colors, type, copy,
+and branding stay Cinelog's own, per the plan's layout-fidelity note):
+
+- **Media detail page**: the primary actions (watched/like/watchlist) moved out of a vertical
+  sidebar card into a horizontal icon row directly under the poster (Letterboxd's signature
+  placement); the rating widget and status picker now sit right below that, also under the
+  poster, not in the sidebar. The community rating — big average number + a 10-bucket
+  histogram — now appears immediately after the title block (the first thing after the header
+  on a real Letterboxd film page), not buried at the bottom of a sidebar card. New API surface
+  for this: `MediaDetail.ratingCount`/`ratingDistribution` (`apps/api/src/media/media.service.ts`
+  `getDetail()`), computed the same way as the existing profile-level histogram.
+- **Public profile page**: the header backdrop is now a 4-up collage built from the member's
+  own favorite posters (falling back to a gradient tile per empty slot) instead of a single
+  uploaded banner image — Letterboxd builds its header from the account's own activity, not a
+  separate asset. Follower/following counts moved into the stats row (Films/Shows/Episodes/
+  Ratings/Followers/Following) instead of sitting as plain text under the bio. Added a
+  **Reviews** tab (new `GET /users/:username/reviews`, `ReviewsService.listByAuthor()`,
+  gated by the same profile-visibility check as the other tabs).
+- **Nav**: clicking the avatar now navigates directly to `/profile` (Letterboxd behavior); a
+  separate small caret button opens the settings/logout dropdown, rather than the avatar click
+  being overloaded as the only way to reach both.
+- **Bug fix while wiring the profile Reviews tab**: spoiler "reveal" in both `ReviewsSection`
+  (media page) and the new profile Reviews tab was only flipping a local boolean — since the
+  list endpoint always sends `body: ''` for concealed reviews, revealing showed nothing. Fixed
+  both to fetch the full body via `GET /reviews/:id` (which always reveals) on click.
+
+**Verification run:**
+- `pnpm --filter @cinelog/contracts build`, `pnpm --filter @cinelog/api typecheck`,
+  `pnpm --filter @cinelog/api test` (17/17), `pnpm --filter @cinelog/web build` — all pass.
+- Live smoke test: posted a review via a throwaway account, confirmed `GET /api/media/:id`
+  returns `ratingCount`/`ratingDistribution`, and `GET /api/users/layouttester/reviews` returns
+  the review with its embedded media summary. Test account removed afterward.
+
 ## Not yet started
 - Slice 4: Reviews/likes/comments API + UI on `MediaDetailPage`.
 - Slice 5: Watchlist/diary surfaced on profile + diary edit/delete endpoints.

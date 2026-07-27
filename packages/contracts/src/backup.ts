@@ -24,6 +24,16 @@ export const BackupEpisodeRating = z.object({
 
 /** Everything the user tracked for one title. Media is identified by provider
  *  coordinates so it can be re-resolved on a fresh install. */
+/** A text review in a backup, one per user+title (matches the DB unique constraint). */
+export const BackupReview = z.object({
+  body: z.string(),
+  ratingValue: z.number().min(0).max(100).nullable(),
+  watchedDate: z.string().datetime().nullable(),
+  isSpoiler: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
 export const BackupItem = z.object({
   provider: ProviderId,
   externalId: z.string(),
@@ -33,10 +43,13 @@ export const BackupItem = z.object({
   status: TrackingStatus.nullable(),
   isFavorite: z.boolean(),
   isWatchlisted: z.boolean(),
+  // Ranked profile-favorite slot (1..4). Optional/nullable so pre-social backups still parse.
+  favoritePosition: z.number().int().min(1).max(4).nullable().optional().default(null),
   rewatchCount: z.number().int(),
   startedAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),
   rating: z.number().min(0).max(100).nullable(),
+  review: BackupReview.nullable().optional().default(null),
   watchHistory: z.array(BackupWatchEvent),
   artwork: z.array(BackupArtwork),
   episodeRatings: z.array(BackupEpisodeRating),
@@ -64,6 +77,7 @@ export const BackupImportResult = z.object({
   itemsProcessed: z.number().int(),
   itemsImported: z.number().int(),
   ratingsImported: z.number().int(),
+  reviewsImported: z.number().int().default(0),
   watchEventsImported: z.number().int(),
   episodeRatingsImported: z.number().int(),
   failed: z.number().int(),

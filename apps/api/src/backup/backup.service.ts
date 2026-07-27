@@ -41,7 +41,7 @@ export class BackupService {
    *  Media is keyed by provider coordinates so it re-resolves on any install. */
   async exportUserData(userId: string): Promise<BackupData> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const [statuses, ratings, history, artwork, episodeRatings] = await Promise.all([
+    const [statuses, ratings, history, artwork, episodeRatings, reviews] = await Promise.all([
       this.prisma.userMediaStatus.findMany({ where: { userId } }),
       this.prisma.rating.findMany({ where: { userId } }),
       this.prisma.watchHistory.findMany({ where: { userId } }),
@@ -50,6 +50,7 @@ export class BackupService {
         where: { userId },
         include: { episode: { include: { season: true } } },
       }),
+      this.prisma.review.findMany({ where: { userId, targetType: 'MEDIA' } }),
     ]);
 
     // Any media the user has *any* data for — not just an explicit status row.
@@ -59,6 +60,7 @@ export class BackupService {
     history.forEach((h) => ids.add(h.mediaItemId));
     artwork.forEach((a) => ids.add(a.mediaItemId));
     episodeRatings.forEach((e) => ids.add(e.episode.season.mediaItemId));
+    reviews.forEach((r) => ids.add(r.mediaItemId));
 
     const media = await this.prisma.mediaItem.findMany({ where: { id: { in: [...ids] } } });
     const mediaById = new Map(media.map((m) => [m.id, m]));
@@ -67,12 +69,14 @@ export class BackupService {
     const historyByMedia = groupBy(history, (h) => h.mediaItemId);
     const artworkByMedia = groupBy(artwork, (a) => a.mediaItemId);
     const epByMedia = groupBy(episodeRatings, (e) => e.episode.season.mediaItemId);
+    const reviewByMedia = new Map(reviews.map((r) => [r.mediaItemId, r]));
 
     const items: BackupItem[] = [];
     for (const id of ids) {
       const m = mediaById.get(id);
       if (!m) continue;
       const s = statusByMedia.get(id);
+      const rv = reviewByMedia.get(id);
       items.push({
         provider: ProviderId.catch('tmdb').parse(m.provider),
         externalId: m.externalId,
@@ -82,10 +86,21 @@ export class BackupService {
         status: s?.status ? (TrackingStatus.safeParse(s.status).data ?? null) : null,
         isFavorite: s?.isFavorite ?? false,
         isWatchlisted: s?.isWatchlisted ?? false,
+        favoritePosition: s?.favoritePosition ?? null,
         rewatchCount: s?.rewatchCount ?? 0,
         startedAt: s?.startedAt?.toISOString() ?? null,
         completedAt: s?.completedAt?.toISOString() ?? null,
         rating: ratingByMedia.get(id) ?? null,
+        review: rv
+          ? {
+              body: rv.body,
+              ratingValue: rv.ratingValue,
+              watchedDate: rv.watchedDate?.toISOString() ?? null,
+              isSpoiler: rv.isSpoiler,
+              createdAt: rv.createdAt.toISOString(),
+              updatedAt: rv.updatedAt.toISOString(),
+            }
+          : null,
         watchHistory: (historyByMedia.get(id) ?? []).map((h) => ({
           watchedAt: h.watchedAt.toISOString(),
           isRewatch: h.isRewatch,
@@ -124,6 +139,7 @@ export class BackupService {
       itemsProcessed: 0,
       itemsImported: 0,
       ratingsImported: 0,
+      reviewsImported: 0,
       watchEventsImported: 0,
       episodeRatingsImported: 0,
       failed: 0,
@@ -146,10 +162,21 @@ export class BackupService {
         const media = await this.media.getOrFetch(item.provider, item.externalId, item.type);
         const mediaItemId = media.id;
 
+        // favoritePosition is a per-user unique slot (1..4); only restore it if
+        // that slot isn't already taken by a different title on this account.
+        let favoritePosition: number | null = null;
+        if (item.favoritePosition != null) {
+          const holder = await this.prisma.userMediaStatus.findUnique({
+            where: { userId_favoritePosition: { userId, favoritePosition: item.favoritePosition } },
+          });
+          if (!holder || holder.mediaItemId === mediaItemId) favoritePosition = item.favoritePosition;
+        }
+
         const statusData = {
           status: item.status,
           isFavorite: item.isFavorite,
           isWatchlisted: item.isWatchlisted,
+          favoritePosition,
           rewatchCount: item.rewatchCount,
           startedAt: item.startedAt ? new Date(item.startedAt) : null,
           completedAt: item.completedAt ? new Date(item.completedAt) : null,
@@ -167,6 +194,21 @@ export class BackupService {
             update: { value: item.rating },
           });
           result.ratingsImported++;
+        }
+
+        if (item.review) {
+          const reviewData = {
+            body: item.review.body,
+            ratingValue: item.review.ratingValue,
+            watchedDate: item.review.watchedDate ? new Date(item.review.watchedDate) : null,
+            isSpoiler: item.review.isSpoiler,
+          };
+          await this.prisma.review.upsert({
+            where: { userId_mediaItemId_targetType: { userId, mediaItemId, targetType: 'MEDIA' } },
+            create: { userId, mediaItemId, targetType: 'MEDIA', ...reviewData },
+            update: reviewData,
+          });
+          result.reviewsImported++;
         }
 
         // Watch history: skip events already present (same timestamp + kind).

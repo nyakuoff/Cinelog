@@ -42,3 +42,39 @@ export type ArtworkType = z.infer<typeof ArtworkType>;
 /** What a rating or review is attached to. */
 export const TargetType = z.enum(['MEDIA', 'SEASON', 'EPISODE']);
 export type TargetType = z.infer<typeof TargetType>;
+
+/** Who can see a profile or a user's watchlist. */
+export const ProfileVisibility = z.enum(['PUBLIC', 'FOLLOWERS', 'PRIVATE']);
+export type ProfileVisibility = z.infer<typeof ProfileVisibility>;
+
+/** Kinds of events recorded in a user's activity stream. */
+export const ActivityType = z.enum([
+  'RATED',
+  'REVIEWED',
+  'WATCHED',
+  'FAVORITED',
+  'LIST_CREATED',
+  'LIST_UPDATED',
+  'REVIEW_LIKED',
+  'FOLLOWED',
+]);
+export type ActivityType = z.infer<typeof ActivityType>;
+
+/** Kinds of in-app notifications. */
+export const NotificationType = z.enum([
+  'NEW_FOLLOWER',
+  'REVIEW_LIKE',
+  'REVIEW_COMMENT',
+  'LIST_LIKE',
+  'LIST_COMMENT',
+  'COMMENT_REPLY',
+]);
+export type NotificationType = z.infer<typeof NotificationType>;
+
+/** What kind of content a report targets. */
+export const ReportTargetType = z.enum(['REVIEW', 'COMMENT', 'LIST', 'PROFILE']);
+export type ReportTargetType = z.infer<typeof ReportTargetType>;
+
+/** Lifecycle of a content report. */
+export const ReportStatus = z.enum(['OPEN', 'RESOLVED', 'DISMISSED']);
+export type ReportStatus = z.infer<typeof ReportStatus>;

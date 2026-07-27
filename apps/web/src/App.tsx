@@ -8,6 +8,8 @@ import { DiscoverPage } from './pages/DiscoverPage';
 import { FilmsPage } from './pages/FilmsPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { MembersPage } from './pages/MembersPage';
+import { ListsPage } from './pages/ListsPage';
+import { ListDetailPage } from './pages/ListDetailPage';
 import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MediaDetailPage } from './pages/MediaDetailPage';
@@ -30,6 +32,8 @@ export function App(): JSX.Element {
         <Route path="/" element={<DiscoverPage />} />
         <Route path="/films" element={<FilmsPage />} />
         <Route path="/members" element={<MembersPage />} />
+        <Route path="/lists" element={<ListsPage />} />
+        <Route path="/lists/:id" element={<ListDetailPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />

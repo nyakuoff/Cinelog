@@ -12,9 +12,11 @@ import { PosterCard } from '../components/PosterCard';
 import { Button, Card, Spinner } from '../components/ui';
 import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
 import { FollowButton, MemberCard } from '../components/MemberCard';
+import { ListCard } from '../components/ListCard';
+import { CreateListModal } from './ListsPage';
 import { EmptyState } from '../components/lb';
 
-type Tab = 'overview' | 'diary' | 'reviews' | 'watchlist' | 'network';
+type Tab = 'overview' | 'diary' | 'reviews' | 'lists' | 'watchlist' | 'network';
 
 export function PublicProfilePage(): JSX.Element {
   const params = useParams<{ username?: string }>();
@@ -92,6 +94,9 @@ export function PublicProfilePage(): JSX.Element {
         <TabButton active={tab === 'reviews'} onClick={() => setTab('reviews')}>
           Reviews
         </TabButton>
+        <TabButton active={tab === 'lists'} onClick={() => setTab('lists')}>
+          Lists
+        </TabButton>
         {profile.canViewWatchlist && (
           <TabButton active={tab === 'watchlist'} onClick={() => setTab('watchlist')}>
             Watchlist
@@ -153,6 +158,9 @@ export function PublicProfilePage(): JSX.Element {
 
       {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
       {tab === 'reviews' && <ReviewsTab username={profile.username} />}
+      {tab === 'lists' && (
+        <ListsTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
+      )}
       {tab === 'watchlist' && profile.canViewWatchlist && <WatchlistTab username={profile.username} />}
       {tab === 'network' && <NetworkTab username={profile.username} />}
 
@@ -305,6 +313,66 @@ function WatchlistTab({ username }: { username: string }): JSX.Element {
           onClick={() => navigate(`/media/${item.id}`)}
         />
       ))}
+    </div>
+  );
+}
+
+function ListsTab({
+  username,
+  isOwnProfile,
+}: {
+  username: string;
+  isOwnProfile: boolean;
+}): JSX.Element {
+  const [creating, setCreating] = useState(false);
+  const { data, isLoading } = useQuery({
+    queryKey: ['user-lists', username],
+    queryFn: () => api.getUserLists(username),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <Spinner />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      {(data?.lists.length ?? 0) === 0 ? (
+        <EmptyState
+          title={isOwnProfile ? "You haven't made a list yet" : 'No lists yet'}
+          body={
+            isOwnProfile
+              ? 'Group films into a top ten, a marathon, or any collection you like.'
+              : undefined
+          }
+          action={
+            isOwnProfile ? (
+              <Button variant="primary" onClick={() => setCreating(true)}>
+                + New list
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <>
+          {isOwnProfile && (
+            <div className="mb-4 flex justify-end">
+              <Button variant="secondary" onClick={() => setCreating(true)}>
+                + New list
+              </Button>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data?.lists.map((l) => (
+              <ListCard key={l.id} list={l} />
+            ))}
+          </div>
+        </>
+      )}
+      {creating && <CreateListModal onClose={() => setCreating(false)} />}
     </div>
   );
 }

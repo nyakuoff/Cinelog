@@ -17,8 +17,18 @@ import type {
   DiscoverFilterQuery,
   DiscoverFilterResponse,
   DiscoverResponse,
+  AddListItemRequest,
+  CreateListCommentRequest,
+  CreateListRequest,
   EpisodeRatingResponse,
   FollowStateResponse,
+  ListBrowseQuery,
+  ListComment,
+  ListCommentListResponse,
+  ListDetail,
+  ListListResponse,
+  ReorderListRequest,
+  UpdateListRequest,
   MemberListQuery,
   MemberListResponse,
   EpisodesResponse,
@@ -232,6 +242,33 @@ export const api = {
   getBlocked: () => request<MemberListResponse>('GET', '/blocked'),
   getActivity: (scope: 'FOLLOWING' | 'EVERYONE', cursor?: string) =>
     request<ActivityFeedResponse>('GET', `/activity${toQuery({ scope, cursor })}`),
+
+  // -- lists ---------------------------------------------------------------------
+  browseLists: (query: Partial<ListBrowseQuery>) =>
+    request<ListListResponse>('GET', `/lists${toQuery(query)}`),
+  getUserLists: (username: string) =>
+    request<ListListResponse>('GET', `/users/${encodeURIComponent(username)}/lists`),
+  getList: (id: string) => request<ListDetail>('GET', `/lists/${id}`),
+  createList: (dto: CreateListRequest) => request<ListDetail>('POST', '/lists', dto),
+  updateList: (id: string, dto: UpdateListRequest) =>
+    request<ListDetail>('PATCH', `/lists/${id}`, dto),
+  deleteList: (id: string) => request<void>('DELETE', `/lists/${id}`),
+  addListItem: (id: string, dto: AddListItemRequest) =>
+    request<ListDetail>('POST', `/lists/${id}/items`, dto),
+  updateListItem: (id: string, entryId: string, note: string | null) =>
+    request<ListDetail>('PATCH', `/lists/${id}/items/${entryId}`, { note }),
+  removeListItem: (id: string, entryId: string) =>
+    request<ListDetail>('DELETE', `/lists/${id}/items/${entryId}`),
+  reorderList: (id: string, dto: ReorderListRequest) =>
+    request<ListDetail>('PUT', `/lists/${id}/order`, dto),
+  likeList: (id: string) => request<void>('POST', `/lists/${id}/like`),
+  unlikeList: (id: string) => request<void>('DELETE', `/lists/${id}/like`),
+  getListComments: (id: string) =>
+    request<ListCommentListResponse>('GET', `/lists/${id}/comments`),
+  addListComment: (id: string, dto: CreateListCommentRequest) =>
+    request<ListComment>('POST', `/lists/${id}/comments`, dto),
+  deleteListComment: (id: string, commentId: string) =>
+    request<void>('DELETE', `/lists/${id}/comments/${commentId}`),
   updateWatchEntry: (entryId: string, dto: UpdateWatchEntryRequest) =>
     request<void>('PATCH', `/tracking/watch/${entryId}`, dto),
   deleteWatchEntry: (entryId: string) => request<void>('DELETE', `/tracking/watch/${entryId}`),

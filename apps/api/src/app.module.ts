@@ -12,6 +12,7 @@ import { MediaModule } from './media/media.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SocialModule } from './social/social.module';
+import { ListsModule } from './lists/lists.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { EpisodesModule } from './episodes/episodes.module';
@@ -44,6 +45,7 @@ import { RolesGuard } from './common/roles.guard';
     DiscoveryModule,
     ReviewsModule,
     SocialModule,
+    ListsModule,
     TrackingModule,
     RatingsModule,
     EpisodesModule,

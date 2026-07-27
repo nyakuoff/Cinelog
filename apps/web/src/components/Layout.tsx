@@ -8,6 +8,7 @@ import { Avatar } from './Avatar';
 const NAV = [
   { to: '/', label: 'Home', end: true },
   { to: '/films', label: 'Films', end: false },
+  { to: '/lists', label: 'Lists', end: false },
   { to: '/members', label: 'Members', end: false },
   { to: '/library', label: 'Library', end: false },
   { to: '/watchlist', label: 'Watchlist', end: false },

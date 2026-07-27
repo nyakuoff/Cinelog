@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
+import { LogModal } from './LogModal';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -28,6 +29,7 @@ export function Layout(): JSX.Element {
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [logging, setLogging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Click-to-open menu (not hover — hover gaps make the menu unreachable).
@@ -98,7 +100,7 @@ export function Layout(): JSX.Element {
           </form>
 
           <button
-            onClick={() => navigate('/search')}
+            onClick={() => setLogging(true)}
             className="hidden shrink-0 rounded bg-accent px-3 py-1.5 font-cond text-[12.5px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110 sm:inline-flex"
           >
             + Log
@@ -182,6 +184,8 @@ export function Layout(): JSX.Element {
       <main>
         <Outlet />
       </main>
+
+      {logging && <LogModal onClose={() => setLogging(false)} />}
     </div>
   );
 }

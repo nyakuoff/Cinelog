@@ -14,6 +14,7 @@ import { ArtworkPickerModal } from '../components/ArtworkPickerModal';
 import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
+import { LogModal } from '../components/LogModal';
 import { Poster, SectionHeader, TabBar } from '../components/lb';
 
 type InfoTab = 'cast' | 'crew' | 'details' | 'genres';
@@ -26,6 +27,7 @@ export function MediaDetailPage(): JSX.Element {
   const [editingArtwork, setEditingArtwork] = useState(false);
   const [fixingMismatch, setFixingMismatch] = useState(false);
   const [editingCast, setEditingCast] = useState(false);
+  const [logging, setLogging] = useState(false);
   const [infoTab, setInfoTab] = useState<InfoTab>('cast');
 
   const { data, isLoading } = useQuery({
@@ -128,6 +130,7 @@ export function MediaDetailPage(): JSX.Element {
                   onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
                   onRate={(v) => ratingMut.mutate(v)}
                   onStatus={(s) => statusMut.mutate(s)}
+                  onLog={() => setLogging(true)}
                 />
               </div>
             </div>
@@ -237,6 +240,7 @@ export function MediaDetailPage(): JSX.Element {
       {editingCast && (
         <EditCastModal mediaId={id} cast={m.cast} onClose={() => setEditingCast(false)} />
       )}
+      {logging && <LogModal media={m} onClose={() => setLogging(false)} />}
     </div>
   );
 }
@@ -250,6 +254,7 @@ function ActionPanel({
   onWatchlist,
   onRate,
   onStatus,
+  onLog,
 }: {
   state: MediaDetail['userState'];
   scale: ReturnType<typeof scaleForMediaType>;
@@ -258,6 +263,7 @@ function ActionPanel({
   onWatchlist: () => void;
   onRate: (value: number | null) => void;
   onStatus: (status: TrackingStatus | null) => void;
+  onLog: () => void;
 }): JSX.Element {
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
   return (
@@ -284,6 +290,13 @@ function ActionPanel({
       <div className="mt-3 border-t border-border pt-3">
         <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
       </div>
+
+      <button
+        onClick={onLog}
+        className="mt-2 w-full rounded bg-accent px-3 py-2 font-cond text-[12px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110"
+      >
+        Review or log
+      </button>
     </div>
   );
 }

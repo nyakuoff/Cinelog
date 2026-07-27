@@ -85,7 +85,11 @@ export interface MetadataProvider {
   /** Episodic providers implement these; movie-only ones may omit them. */
   getSeasons?(externalId: string): Promise<ProviderSeason[]>;
   getEpisodes?(externalId: string, seasonNumber: number): Promise<ProviderEpisode[]>;
+  /** Discovery rails (trending/popular/upcoming) for providers that expose them. */
+  getDiscoverList?(kind: DiscoverListKind, type: MediaType): Promise<ProviderSearchResult[]>;
 }
+
+export type DiscoverListKind = 'TRENDING' | 'POPULAR' | 'UPCOMING';
 
 /** DI token for the array of registered providers. */
 export const METADATA_PROVIDERS = Symbol('METADATA_PROVIDERS');

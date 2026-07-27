@@ -47,7 +47,7 @@ function groupOf(type: MediaType): Group {
   return type === 'MOVIE' || type === 'SPECIAL' ? 'FILMS' : 'SHOWS';
 }
 
-export function HomePage(): JSX.Element {
+export function LibraryPage(): JSX.Element {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [group, setGroup] = useState<Group>('FILMS');

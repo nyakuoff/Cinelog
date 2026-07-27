@@ -11,6 +11,9 @@ import type {
   BackupImportResult,
   ChangePasswordRequest,
   ConnectLetterboxdRequest,
+  DiscoverFilterQuery,
+  DiscoverFilterResponse,
+  DiscoverResponse,
   EpisodeRatingResponse,
   EpisodesResponse,
   ImportSummary,
@@ -169,6 +172,17 @@ export const api = {
     request<PublicProfile>('GET', `/users/${encodeURIComponent(username)}`),
   updateFavorites: (dto: UpdateFavoritesRequest) =>
     request<FavoriteSlot[]>('PATCH', '/users/me/favorites', dto),
+
+  // -- discovery ---------------------------------------------------------------
+  getDiscover: () => request<DiscoverResponse>('GET', '/discovery'),
+  getDiscoverFilter: (query: Partial<DiscoverFilterQuery>) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== '') params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return request<DiscoverFilterResponse>('GET', `/discovery/filter${qs ? `?${qs}` : ''}`);
+  },
 
   // -- media -----------------------------------------------------------------
   search: (q: string, type?: string) =>

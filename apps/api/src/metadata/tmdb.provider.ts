@@ -68,6 +68,23 @@ export class TmdbProvider implements MetadataProvider {
     return this.mapDetails(kind, data);
   }
 
+  async getDiscoverList(
+    kind: 'TRENDING' | 'POPULAR' | 'UPCOMING',
+    type: MediaType,
+  ): Promise<ProviderSearchResult[]> {
+    const tmdbKind: TmdbKind = type === 'TV' ? 'tv' : 'movie';
+    const path =
+      kind === 'TRENDING'
+        ? `/trending/${tmdbKind}/week`
+        : kind === 'POPULAR'
+          ? `/${tmdbKind}/popular`
+          : tmdbKind === 'movie'
+            ? '/movie/upcoming'
+            : '/tv/on_the_air';
+    const data = await this.request<TmdbSearchResponse>(path, {});
+    return (data.results ?? []).map((item) => this.mapSearchItem({ ...item, media_type: tmdbKind }));
+  }
+
   async getSeasons(externalId: string): Promise<ProviderSeason[]> {
     const { kind, id } = decodeExternalId(externalId);
     if (kind !== 'tv') return [];

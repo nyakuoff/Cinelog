@@ -65,10 +65,37 @@ discovery platform. See the approved plan for full context and rationale.
 - Booted the real API against the migrated dev DB and hit `GET /api/users/nyaku` — returned a
   full profile payload; `GET /api/users/doesnotexist` returned 404 as expected.
 
-## Not yet started
+### Slice 3 — Discover page replaces home (2026-07-27)
 
-- Slice 3: Discover page (community + provider-sourced sections, filters, personalization) —
-  will also relabel the "Home" nav tab to "Discover" once its content actually changes.
+- API: new `apps/api/src/discovery/` module. `GET /discovery` (public) returns provider-sourced
+  rails (Trending movies/shows, Popular, New & upcoming — via a new optional
+  `MetadataProvider.getDiscoverList()` hook, implemented for TMDB using
+  `/trending/*/week`, `/*/popular`, `/movie/upcoming`, `/tv/on_the_air`) plus Cinelog-community
+  rails (Highly rated, Hidden gems — Prisma `groupBy` on `Rating` with `having` thresholds:
+  highly rated needs ≥2 ratings; hidden gems needs 1–3 ratings averaging ≥80). Every section is
+  tagged `source: 'PROVIDER' | 'CINELOG'` so the UI can visually distinguish them, and empty
+  sections (TMDB not configured, or not enough community data yet) are dropped server-side
+  rather than rendered as dead rails. `GET /discovery/filter` does local type/genre/decade/
+  min-rating filtering with community-rating/rating-count/release-date/popularity sort and
+  offset-cursor pagination.
+- `ProviderRegistry.getDiscoverList()` swallows a failing/unconfigured provider and returns
+  `[]` rather than throwing, so one bad provider never breaks the whole Discover page.
+- Frontend: `/` now renders `DiscoverPage.tsx` (filter bar + horizontal poster rails, reusing
+  `PosterCard`). The former home page (personal library grid with Films/Shows tabs) survives
+  unchanged at the new `/library` route (`apps/web/src/pages/LibraryPage.tsx`, renamed from
+  `HomePage.tsx`) — existing functionality preserved, not deleted. Nav gained a "Library" tab;
+  "Home" relabeled to "Discover".
+
+**Verification run:**
+- `pnpm --filter @cinelog/contracts build`, `pnpm --filter @cinelog/api typecheck`,
+  `pnpm --filter @cinelog/api test` (11/11), `pnpm --filter @cinelog/web build` — all pass.
+- Booted the real API with TMDB configured: `GET /api/discovery` returned live trending/
+  popular/upcoming rails (18 items each) sourced from TMDB; `HIGHLY_RATED`/`HIDDEN_GEMS` were
+  correctly absent (not enough local ratings yet — confirms empty-section dropping works).
+  `GET /api/discovery/filter?sort=CINELOG_RATING` returned a locally-filtered result; an
+  invalid `sort` value correctly 400s via the Zod query DTO.
+
+## Not yet started
 - Slice 4: Reviews/likes/comments API + UI on `MediaDetailPage`.
 - Slice 5: Watchlist/diary surfaced on profile + diary edit/delete endpoints.
 - Slice 6: Follow graph, blocking, activity feed.

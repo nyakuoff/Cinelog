@@ -4,7 +4,8 @@ import { useAuth } from './lib/auth';
 import { api } from './lib/api';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/ui';
-import { HomePage } from './pages/HomePage';
+import { DiscoverPage } from './pages/DiscoverPage';
+import { LibraryPage } from './pages/LibraryPage';
 import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MediaDetailPage } from './pages/MediaDetailPage';
@@ -24,7 +25,8 @@ export function App(): JSX.Element {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<HomePage />} />
+        <Route path="/" element={<DiscoverPage />} />
+        <Route path="/library" element={<LibraryPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/media/:id" element={<MediaDetailPage />} />

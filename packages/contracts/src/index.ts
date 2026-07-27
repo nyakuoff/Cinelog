@@ -11,3 +11,4 @@ export * from './admin.js';
 export * from './backup.js';
 export * from './rating-scale.js';
 export * from './social.js';
+export * from './discovery.js';

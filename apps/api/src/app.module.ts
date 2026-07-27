@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { MediaModule } from './media/media.module';
+import { DiscoveryModule } from './discovery/discovery.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { RatingsModule } from './ratings/ratings.module';
 import { EpisodesModule } from './episodes/episodes.module';
@@ -38,6 +39,7 @@ import { RolesGuard } from './common/roles.guard';
     UsersModule,
     ProfilesModule,
     MediaModule,
+    DiscoveryModule,
     TrackingModule,
     RatingsModule,
     EpisodesModule,

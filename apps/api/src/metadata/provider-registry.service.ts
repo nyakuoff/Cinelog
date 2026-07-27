@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { MediaType, ProviderId } from '@cinelog/contracts';
 import {
   METADATA_PROVIDERS,
+  type DiscoverListKind,
   type MetadataProvider,
   type ProviderMediaDetails,
   type ProviderSearchResult,
@@ -66,5 +67,19 @@ export class ProviderRegistry {
     type: MediaType,
   ): Promise<ProviderMediaDetails> {
     return this.getById(provider).getDetails(externalId, type);
+  }
+
+  /** Trending/popular/upcoming rails for Discover. Returns [] rather than
+   *  throwing when unsupported or unavailable (e.g. TMDB not configured) — the
+   *  caller drops empty sections rather than breaking the whole page. */
+  async getDiscoverList(kind: DiscoverListKind, type: MediaType): Promise<ProviderSearchResult[]> {
+    const provider = this.getForType(type);
+    if (!provider.getDiscoverList) return [];
+    try {
+      return await provider.getDiscoverList(kind, type);
+    } catch (err) {
+      this.logger.warn(`Provider '${provider.id}' discover(${kind}, ${type}) failed: ${err}`);
+      return [];
+    }
   }
 }

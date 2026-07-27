@@ -6,7 +6,8 @@ import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 
 const NAV = [
-  { to: '/', label: 'Home', end: true },
+  { to: '/', label: 'Discover', end: true },
+  { to: '/library', label: 'Library', end: false },
   { to: '/profile', label: 'Profile', end: false },
   { to: '/watchlist', label: 'Watchlist', end: false },
 ];
@@ -109,6 +110,14 @@ export function Layout(): JSX.Element {
                   <span className="min-w-0 truncate text-sm text-content">{user?.username}</span>
                 </div>
                 <div className="my-1 h-px bg-border" />
+                <Link
+                  to="/library"
+                  onClick={() => setMenuOpen(false)}
+                  role="menuitem"
+                  className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content md:hidden"
+                >
+                  Library
+                </Link>
                 <Link
                   to="/watchlist"
                   onClick={() => setMenuOpen(false)}

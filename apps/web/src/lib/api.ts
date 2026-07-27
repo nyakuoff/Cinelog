@@ -27,9 +27,16 @@ import type {
   MediaDetail,
   MediaRef,
   PublicProfile,
+  CreateReviewCommentRequest,
+  CreateReviewRequest,
   RatingResponse,
   RegisterRequest,
   RematchRequest,
+  Review,
+  ReviewComment,
+  ReviewCommentListResponse,
+  ReviewListResponse,
+  ReviewSort,
   SearchResponse,
   SetupRequest,
   SetupStatus,
@@ -37,6 +44,8 @@ import type {
   TrackingStatus,
   UpdateFavoritesRequest,
   UpdateProfileRequest,
+  UpdateReviewCommentRequest,
+  UpdateReviewRequest,
   UserPublic,
 } from '@cinelog/contracts';
 
@@ -211,6 +220,32 @@ export const api = {
     request<TrackingResponse>('PUT', '/tracking/watchlist', { ...ref, value }),
   markWatched: (req: MarkWatchedRequest) =>
     request<TrackingResponse>('POST', '/tracking/watch', req),
+
+  // -- reviews -----------------------------------------------------------------
+  createReview: (mediaId: string, dto: CreateReviewRequest) =>
+    request<Review>('POST', `/media/${mediaId}/reviews`, dto),
+  getReviews: (mediaId: string, sort: ReviewSort = 'POPULAR', cursor?: string) =>
+    request<ReviewListResponse>(
+      'GET',
+      `/media/${mediaId}/reviews?sort=${sort}${cursor ? `&cursor=${cursor}` : ''}`,
+    ),
+  getReview: (reviewId: string) => request<Review>('GET', `/reviews/${reviewId}`),
+  updateReview: (reviewId: string, dto: UpdateReviewRequest) =>
+    request<Review>('PATCH', `/reviews/${reviewId}`, dto),
+  deleteReview: (reviewId: string) => request<void>('DELETE', `/reviews/${reviewId}`),
+  likeReview: (reviewId: string) => request<void>('POST', `/reviews/${reviewId}/like`),
+  unlikeReview: (reviewId: string) => request<void>('DELETE', `/reviews/${reviewId}/like`),
+  getReviewComments: (reviewId: string, cursor?: string) =>
+    request<ReviewCommentListResponse>(
+      'GET',
+      `/reviews/${reviewId}/comments${cursor ? `?cursor=${cursor}` : ''}`,
+    ),
+  addReviewComment: (reviewId: string, dto: CreateReviewCommentRequest) =>
+    request<ReviewComment>('POST', `/reviews/${reviewId}/comments`, dto),
+  updateReviewComment: (reviewId: string, commentId: string, dto: UpdateReviewCommentRequest) =>
+    request<ReviewComment>('PATCH', `/reviews/${reviewId}/comments/${commentId}`, dto),
+  deleteReviewComment: (reviewId: string, commentId: string) =>
+    request<void>('DELETE', `/reviews/${reviewId}/comments/${commentId}`),
 
   // -- ratings ---------------------------------------------------------------
   setRating: (ref: MediaRef, value: number | null) =>

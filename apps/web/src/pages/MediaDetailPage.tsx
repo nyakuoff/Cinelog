@@ -12,6 +12,7 @@ import { EpisodesSection } from '../components/EpisodesSection';
 import { ArtworkPickerModal } from '../components/ArtworkPickerModal';
 import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
+import { ReviewsSection } from '../components/ReviewsSection';
 import { cn } from '../lib/cn';
 
 export function MediaDetailPage(): JSX.Element {
@@ -166,6 +167,8 @@ export function MediaDetailPage(): JSX.Element {
           )}
 
           {isEpisodic && <EpisodesSection mediaId={id} scale={scale} />}
+
+          <ReviewsSection mediaId={id} scale={scale} />
         </div>
 
         {/* Interaction panel */}

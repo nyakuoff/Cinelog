@@ -95,6 +95,42 @@ discovery platform. See the approved plan for full context and rationale.
   `GET /api/discovery/filter?sort=CINELOG_RATING` returned a locally-filtered result; an
   invalid `sort` value correctly 400s via the Zod query DTO.
 
+### Slice 4 — Reviews, likes, comments (2026-07-27)
+
+- API: new `apps/api/src/reviews/` module: `POST/GET /media/:id/reviews`, `GET/PATCH/DELETE
+  /reviews/:id`, `POST/DELETE /reviews/:id/like`, `GET/POST /reviews/:id/comments`,
+  `PATCH/DELETE /reviews/:reviewId/comments/:commentId`. One review per user per title
+  (`[userId, mediaItemId, targetType]` unique, reusing the `Review` model from slice 1).
+  `likeCount`/`commentCount` are denormalized on `Review` and updated transactionally
+  alongside the like/comment row.
+- Spoiler handling: list responses conceal the body (`concealed: true`, `body: ''`) for anyone
+  but the author; `GET /reviews/:id` (an explicit open) always reveals it. Body is always
+  rendered as plain text client-side (`whitespace-pre-wrap`, no `dangerouslySetInnerHTML`) —
+  never raw HTML.
+- Duplicate likes: `ReviewLike` has a DB-level unique constraint on `[userId, reviewId]`; the
+  service catches the resulting `P2002` and treats a repeat like as a no-op rather than an
+  error (verified live — see below).
+- Sorting: `POPULAR`/`RECENT`/`HIGHEST`/`LOWEST`/`FOLLOWING` (the latter needs `Follow` data
+  from slice 6 to return anything — correctly returns empty until then, not fake data).
+  Pagination is offset-based (`cursor` is a stringified offset), matching the pattern already
+  used by `discovery.filter`.
+- Frontend: `ReviewsSection.tsx` embedded on `MediaDetailPage` — composer (one review per user,
+  switches to "edit" after posting), sort select, per-review like (optimistic update with
+  rollback on failure) and expandable comments.
+- Tests: `apps/api/src/reviews/reviews.service.spec.ts` — spoiler concealment for
+  stranger/author, `getById` always reveals, edit/delete restricted to the author, duplicate
+  like is a no-op, comment edit/delete restricted to the comment author.
+
+**Verification run:**
+- `pnpm --filter @cinelog/contracts build`, `pnpm --filter @cinelog/api typecheck`,
+  `pnpm --filter @cinelog/api test` (16/16), `pnpm --filter @cinelog/web build` — all pass.
+- Live smoke test against the real API + dev DB with two throwaway accounts: posted a
+  spoiler review as user A (rating 90) → listed as user B and confirmed `concealed: true` /
+  empty body → liked (204) and commented as user B → confirmed `likeCount`/`commentCount`
+  denormalized to 1/1 in the DB → user B's delete attempt on A's review correctly 403'd → a
+  second review by A on the same title correctly 409'd → author's own list view correctly
+  shows `concealed: false` with the full body. Test accounts removed afterward.
+
 ## Not yet started
 - Slice 4: Reviews/likes/comments API + UI on `MediaDetailPage`.
 - Slice 5: Watchlist/diary surfaced on profile + diary edit/delete endpoints.

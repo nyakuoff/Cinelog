@@ -114,6 +114,11 @@ export const MediaDetail = z.object({
   communityRating: z.number().min(0).max(100).nullable(),
   ratingCount: z.number().int(),
   ratingDistribution: z.array(RatingDistributionBucket),
+  /** How many members here have logged a watch of this title. */
+  watchedCount: z.number().int(),
+  /** How many members here have liked it. */
+  likedCount: z.number().int(),
+  reviewCount: z.number().int(),
   userState: UserMediaState,
 });
 export type MediaDetail = z.infer<typeof MediaDetail>;

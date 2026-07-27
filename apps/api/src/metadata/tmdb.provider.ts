@@ -170,6 +170,14 @@ export class TmdbProvider implements MetadataProvider {
     }
   }
 
+  /** TMDB's "recommendations" relation — a better-curated neighbour set than
+   *  its older /similar endpoint, which keys mostly off shared genre/keywords. */
+  async getSimilar(externalId: string, _type: MediaType): Promise<ProviderSearchResult[]> {
+    const { kind, id } = decodeExternalId(externalId);
+    const data = await this.request<TmdbSearchResponse>(`/${kind}/${id}/recommendations`, {});
+    return (data.results ?? []).map((item) => this.mapSearchItem({ ...item, media_type: kind }));
+  }
+
   async getSeasons(externalId: string): Promise<ProviderSeason[]> {
     const { kind, id } = decodeExternalId(externalId);
     if (kind !== 'tv') return [];

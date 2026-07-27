@@ -85,6 +85,23 @@ export class ProviderRegistry {
     }
   }
 
+  /** Similar titles for a film/show page. Absent or failing providers yield an
+   *  empty list so the section is simply omitted rather than breaking the page. */
+  async getSimilar(
+    provider: ProviderId,
+    externalId: string,
+    type: MediaType,
+  ): Promise<ProviderSearchResult[]> {
+    const impl = this.providers.find((p) => p.id === provider);
+    if (!impl?.getSimilar) return [];
+    try {
+      return await impl.getSimilar(externalId, type);
+    } catch (err) {
+      this.logger.warn(`Provider '${provider}' getSimilar failed: ${err}`);
+      return [];
+    }
+  }
+
   /** Faceted catalog browse for the Films page. Like getDiscoverList, an
    *  unsupported or unavailable provider yields an empty page rather than a
    *  failed request, so the surrounding page still renders. */

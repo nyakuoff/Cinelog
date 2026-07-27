@@ -222,6 +222,7 @@ export const api = {
     ),
   resolveMedia: (ref: MediaRef) => request<MediaDetail>('POST', '/media/resolve', ref),
   getMedia: (id: string) => request<MediaDetail>('GET', `/media/${id}`),
+  getSimilar: (id: string) => request<SearchResponse>('GET', `/media/${id}/similar`),
   getArtworkOptions: (mediaId: string) =>
     request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),
   setArtwork: (mediaId: string, kind: ArtworkKind, sourceUrl: string | null) =>

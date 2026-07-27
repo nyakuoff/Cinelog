@@ -175,7 +175,15 @@ export class MediaService {
     if (!item) throw new NotFoundException('Media not found');
 
     const raw = this.parseRaw(item.rawMetadata);
-    const [status, rating, allRatings, artworkOverrides] = await Promise.all([
+    const [
+      status,
+      rating,
+      allRatings,
+      artworkOverrides,
+      watchedCount,
+      likedCount,
+      reviewCount,
+    ] = await Promise.all([
       this.prisma.userMediaStatus.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
@@ -184,6 +192,12 @@ export class MediaService {
       }),
       this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
       this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } }),
+      // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
+      this.prisma.watchHistory
+        .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
+        .then((rows) => rows.length),
+      this.prisma.userMediaStatus.count({ where: { mediaItemId: mediaId, isFavorite: true } }),
+      this.prisma.review.count({ where: { mediaItemId: mediaId } }),
     ]);
     const ratingCount = allRatings.length;
     const communityRating = ratingCount
@@ -248,7 +262,46 @@ export class MediaService {
       communityRating,
       ratingCount,
       ratingDistribution,
+      watchedCount,
+      likedCount,
+      reviewCount,
       userState,
+    };
+  }
+
+  /** Similar titles for the film page. Provider results are matched against the
+   *  local cache so already-known titles link straight through without a resolve. */
+  async getSimilar(mediaId: string): Promise<SearchResponse> {
+    const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
+    if (!item) throw new NotFoundException('Media not found');
+
+    const found = await this.registry.getSimilar(
+      ProviderId.catch('tmdb').parse(item.provider),
+      item.externalId,
+      MediaType.catch('MOVIE').parse(item.type),
+    );
+    const keys = found.map((r) => ({ provider: r.provider, externalId: r.externalId }));
+    const existing = keys.length
+      ? await this.prisma.mediaItem.findMany({
+          where: { OR: keys },
+          select: { id: true, provider: true, externalId: true },
+        })
+      : [];
+    const idByKey = new Map(existing.map((e) => [`${e.provider}:${e.externalId}`, e.id]));
+
+    return {
+      query: item.title,
+      results: found.slice(0, 12).map((r) => ({
+        id: idByKey.get(`${r.provider}:${r.externalId}`) ?? null,
+        provider: r.provider,
+        externalId: r.externalId,
+        type: r.type,
+        title: r.title,
+        originalTitle: r.originalTitle,
+        year: r.year,
+        overview: r.overview,
+        posterUrl: this.artwork.toProxyUrl(r.posterUrl),
+      })),
     };
   }
 

@@ -89,6 +89,8 @@ export interface MetadataProvider {
   getDiscoverList?(kind: DiscoverListKind, type: MediaType): Promise<ProviderSearchResult[]>;
   /** Faceted catalog browse (the Films page) for providers that expose it. */
   browse?(params: ProviderBrowseParams): Promise<ProviderBrowseResult>;
+  /** "Similar films" for a title, where the provider offers such a relation. */
+  getSimilar?(externalId: string, type: MediaType): Promise<ProviderSearchResult[]>;
 }
 
 export type DiscoverListKind = 'TRENDING' | 'POPULAR' | 'UPCOMING';

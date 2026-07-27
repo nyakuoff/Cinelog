@@ -41,6 +41,11 @@ export class MediaController {
     return this.media.getDetail(userId, id);
   }
 
+  @Get('media/:id/similar')
+  similar(@Param('id') id: string): Promise<SearchResponse> {
+    return this.media.getSimilar(id);
+  }
+
   @Get('media/:id/artwork')
   artworkOptions(
     @CurrentUser('sub') userId: string,

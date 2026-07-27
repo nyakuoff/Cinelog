@@ -189,14 +189,99 @@ and branding stay Cinelog's own, per the plan's layout-fidelity note):
   returns `ratingCount`/`ratingDistribution`, and `GET /api/users/layouttester/reviews` returns
   the review with its embedded media summary. Test account removed afterward.
 
+### Slice 6 — Letterboxd structural parity (2026-07-27)
+
+Direction from the user: match Letterboxd's layout, UI, and feature set closely, keeping
+only Cinelog's colours and identity. Layout/IA and feature parity are copied; branding,
+logo, and copy stay Cinelog's own (their source isn't available to copy verbatim anyway).
+
+**Shared layout grammar** — `apps/web/src/components/lb.tsx`: dense caption-less poster
+grids, ruled uppercase section headers with trailing links, underline tab bars, inline
+★★★★½ star text, empty states. Every browse surface is built from these.
+
+**Nav** restructured to Home / Films / Lists / Members / Library / Watchlist with a
+`+ Log` button and the username beside the avatar (avatar → profile, caret → menu).
+
+**Films browse page** (`/films`) — the signature Letterboxd surface, previously missing.
+Backed by a new `GET /discovery/browse` over TMDB `/discover`, so the grid is populated on
+a fresh install instead of showing only locally cached titles. Filters: type, genre,
+decade, min rating, sort, plus a "Cinelog only" toggle. A genre unsupported for the
+selected type returns empty rather than silently dropping the filter. New provider seam:
+`MetadataProvider.browse()` + `getSimilar()`.
+
+**Film page** rebuilt on the three-column structure: poster + action panel (watched /
+like / watchlist, rating, status, "Review or log") in the left column; title, director,
+synopsis and Cast/Crew/Details/Genres tabs in the middle; ratings histogram and community
+stats in the right rail; reviews and similar films below. Added
+`MediaDetail.ratingCount / ratingDistribution / watchedCount / likedCount / reviewCount`
+(watched counts *distinct* members so rewatches don't inflate it) and
+`GET /media/:id/similar`.
+
+**Social graph** — `apps/api/src/social/`: follows, blocking, members directory, activity
+feed. Activity is recorded inline from the rate/review/watch/like/list write paths and
+retracted when the action is undone. The feed groups same-actor same-type events inside an
+hour into one row. Private profiles are excluded from the directory and instance-wide feed.
+
+**Lists** — `apps/api/src/lists/`: ordered entries, per-entry notes, public/private,
+likes, comments. Reorder rewrites the whole order in one transaction and rejects any set
+that doesn't cover every entry exactly once. Duplicate titles rejected by the unique
+constraint with a clear message.
+
+**Log modal** — the `+ Log` flow: pick a title, set watched date/rewatch, rate, like, and
+review in one pass. Prefills existing rating/like, and detects an existing own review so a
+repeat log edits rather than hitting the one-review-per-title constraint.
+
+**Bugs found and fixed during this slice:**
+- Spoiler "reveal" only flipped local state, but the list endpoint sends an empty body for
+  concealed reviews — revealing showed nothing. Both reveal paths now refetch via
+  `GET /reviews/:id`.
+- Blocking severed the follow but left the `FOLLOWED` activity event, so a dissolved
+  relationship kept advertising itself (and the blocked person's name) in other members'
+  feeds. Block now retracts those events in both directions, transactionally.
+- Making a list private left its activity events pointing at content the viewer could no
+  longer open. Now retracted on going private, and on delete.
+
+**Verification run:**
+- `pnpm --filter @cinelog/contracts build`, `pnpm --filter @cinelog/api typecheck`,
+  `pnpm --filter @cinelog/api test` (35/35 across 6 suites), `pnpm --filter @cinelog/web build`
+  — all pass.
+- Live API smoke tests with throwaway accounts, all cleaned up afterwards via Prisma:
+  - Browse: default popular films, Horror/1980s/highest-rated (returned canonical 80s
+    horror), TV browse, unsupported-genre-for-type → empty, invalid sort → 400.
+  - Similar titles for a show returned relevant neighbours.
+  - Follows: follow, repeat-follow no-op, self-follow → 400, feed shows followee activity,
+    non-follower's feed empty.
+  - Blocking: feed and members list excluded in both directions, follow-while-blocked →
+    400, uninvolved third party unaffected, `FOLLOWED` events retracted (2 → 0).
+  - Private profile hidden from members directory for others and anonymous, still visible
+    to its owner.
+  - Lists: create, add, duplicate → clear 400, cross-user edit/delete → 403, like
+    idempotent, comment, reverse reorder, partial reorder → 400, going private removes it
+    from browse / other users' profile view / anonymous access (404) while the owner keeps
+    200, and retracts its activity events.
+  - Log flow: watch + rate + like + review produced correct counts, a backdated diary
+    entry, and own-review detection.
+- **Cascade check**: verified that deleting a user through Prisma correctly cascades to
+  reviews and comments. (An earlier cleanup left orphans because the `sqlite3` CLI has
+  `PRAGMA foreign_keys` **off** by default — an artifact of the test cleanup, not the
+  schema. Test cleanup now goes through Prisma.)
+
 ## Not yet started
-- Slice 4: Reviews/likes/comments API + UI on `MediaDetailPage`.
-- Slice 5: Watchlist/diary surfaced on profile + diary edit/delete endpoints.
-- Slice 6: Follow graph, blocking, activity feed.
-- Slice 7: Lists.
-- Slice 8: User/list search, notifications.
-- Moderation UI (report queue, admin actions) — schema (`ContentReport`, `ModerationAction`)
-  is in place from slice 1; no endpoints/UI yet.
+
+- **Notifications** — `Notification` table exists from slice 1; no endpoints or UI yet.
+  Should be generated from the same write paths that already record activity (follow,
+  review like, review comment, list like, list comment), deduped before insert, and never
+  fired for self-interaction.
+- **Moderation** — `ContentReport` / `ModerationAction` tables exist from slice 1; no
+  endpoints or UI yet. Needs a report action on reviews/comments/lists/profiles, an admin
+  queue, and hide/remove actions with an audit trail.
+- **Unified search** — search currently covers titles only. Extending it to members and
+  lists needs the same privacy filters already used elsewhere (no private profiles or
+  lists in results). Recent searches stored client-side.
+- **"Lists containing this title"** on the film page — the query is straightforward
+  (`ListItem` by `mediaItemId`, filtered to public lists); just not wired up yet.
+- **Episode-level tracking** — currently only episode *ratings* exist; there's no separate
+  "watched" flag per episode, which is why profile stats count rated episodes as a proxy.
 
 ## Known limitations / decisions
 
@@ -214,3 +299,15 @@ and branding stay Cinelog's own, per the plan's layout-fidelity note):
   everything episodic — TV/ANIME/CARTOON/MINISERIES/SPECIAL; DOCUMENTARY counts as a movie).
 - Admins have no special ability to view PRIVATE profiles in this slice — out of scope for now,
   revisit if moderation needs it.
+- Backup/restore still covers only per-media favourites and the review body/rating. Lists,
+  follows, and review likes/comments are **not** round-tripped — they're cross-user
+  relations whose counterparties may not exist on the target install. Worth solving before
+  anyone relies on backup as a full migration path.
+- Pagination is offset-based (`cursor` is a stringified offset) rather than keyset. Fine at
+  self-hosted scale; would drift under heavy concurrent writes.
+- `Discover`'s "hidden gems" and "highly rated" rails need at least a few ratings on the
+  instance before they appear at all — by design, but it means a fresh install shows only
+  provider-sourced rails.
+- The Films page browses TMDB directly, so its result set isn't restricted to types Cinelog
+  models separately (anime/cartoon/etc. surface as movie or TV, matching TMDB's taxonomy).
+- Lint is still unconfigured in both apps (`pnpm lint` is a no-op) — pre-existing.

@@ -93,6 +93,65 @@ docker compose -f docker-compose.build.yml up --build -d
 
 Your library lives in the `cinelog-data` Docker volume — back it up to keep your data.
 
+## Features
+
+**Discovery**
+- **Discover** (home) — trending/popular/upcoming rails from the metadata provider,
+  alongside community rails (highly rated here, hidden gems). Sections are labelled by
+  source, and empty ones are dropped rather than shown as blank rows.
+- **Films** — faceted catalog browse over the provider's whole catalog (type, genre,
+  decade, minimum rating, sort), plus a "Cinelog only" toggle that restricts results to
+  titles members here have actually rated.
+- **Search** — titles via the metadata provider.
+
+**Logging & reviews**
+- **+ Log** — one dialog to record a watch: date, rewatch, rating, like, and review.
+- Ratings, watch history (diary), watchlist, per-title status, and rewatch counts.
+- Full text reviews with likes and comments. Spoiler reviews stay concealed until the
+  reader opens them; bodies are stored and rendered as plain text, never HTML.
+- Per-title rating distribution and community stats.
+
+**Social**
+- Public profiles at `/u/:username` with favourites, stats, rating distribution, top
+  genres, and tabs for Diary, Reviews, Lists, Watchlist, and Network.
+- Follow/unfollow, a **Members** directory, and an activity feed (people you follow, or
+  instance-wide). Repeated actions inside an hour group into one row.
+- **Blocking** — symmetric: blocked pairs disappear from each other's feeds and member
+  lists, follows are severed both ways, and the follow events are retracted.
+- **Lists** — ordered collections of movies and shows with drag-to-reorder, per-entry
+  notes, public/private visibility, likes, and comments.
+
+**Privacy**
+- Profile and watchlist visibility are configured separately (`Anyone` / `Followers only`
+  / `Only me`) and enforced in the API, not just hidden in the UI. Private profiles are
+  excluded from the members directory and the instance-wide feed; private lists return
+  404 rather than 403 so their existence isn't confirmed.
+
+**Other**
+- Letterboxd CSV import and live diary sync, full JSON backup/export, per-user artwork
+  overrides, admin cast editing, PWA support.
+
+## Data & backups
+
+Everything lives in the `cinelog-data` volume (SQLite DB, artwork cache, uploads).
+
+**Back it up before upgrading**, since upgrades may run migrations:
+
+```bash
+docker compose stop api
+docker run --rm -v cinelog-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/cinelog-backup-$(date +%F).tar.gz -C /data .
+docker compose start api
+```
+
+Individual accounts can also export their own data as JSON from the import/export page.
+
+Migrations run automatically (`prisma migrate deploy`) when the api container boots, and
+are additive — existing accounts, ratings, and history are preserved across upgrades.
+
 ## Status
 
-Phase 1 (walking skeleton): auth → TMDB search → media page → watchlist → mark watched → rate. See the roadmap in the project plan for later phases.
+Actively developed. The social layer (profiles, follows, reviews, lists, activity feed)
+and the discovery/browse surfaces are in place. Notifications and moderation tooling are
+the next planned work — see `PROGRESS.md` for the current state, decisions, and known
+limitations.

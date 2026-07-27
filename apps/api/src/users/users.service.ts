@@ -8,6 +8,7 @@ import {
 import * as argon2 from 'argon2';
 import type { User } from '@prisma/client';
 import {
+  ProfileVisibility,
   RatingScale,
   UserRole,
   type AdminCreateUserRequest,
@@ -34,6 +35,9 @@ export class UsersService {
       avatarUrl: user.avatarUrl,
       bannerUrl: user.bannerUrl,
       bio: user.bio,
+      displayName: user.displayName,
+      profileVisibility: ProfileVisibility.catch('PUBLIC').parse(user.profileVisibility),
+      watchlistVisibility: ProfileVisibility.catch('PUBLIC').parse(user.watchlistVisibility),
       ratingScale: RatingScale.catch('TEN').parse(user.ratingScale),
       createdAt: user.createdAt.toISOString(),
     };
@@ -69,6 +73,11 @@ export class UsersService {
         ...(dto.username !== undefined ? { username: dto.username } : {}),
         ...(dto.email !== undefined ? { email: dto.email } : {}),
         ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
+        ...(dto.displayName !== undefined ? { displayName: dto.displayName } : {}),
+        ...(dto.profileVisibility !== undefined ? { profileVisibility: dto.profileVisibility } : {}),
+        ...(dto.watchlistVisibility !== undefined
+          ? { watchlistVisibility: dto.watchlistVisibility }
+          : {}),
       },
     });
     return this.toPublic(user);

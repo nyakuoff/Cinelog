@@ -20,8 +20,10 @@ import type {
   LibraryResponse,
   LoginRequest,
   MarkWatchedRequest,
+  FavoriteSlot,
   MediaDetail,
   MediaRef,
+  PublicProfile,
   RatingResponse,
   RegisterRequest,
   RematchRequest,
@@ -30,6 +32,7 @@ import type {
   SetupStatus,
   TrackingResponse,
   TrackingStatus,
+  UpdateFavoritesRequest,
   UpdateProfileRequest,
   UserPublic,
 } from '@cinelog/contracts';
@@ -160,6 +163,12 @@ export const api = {
   removeAvatar: () => request<UserPublic>('DELETE', '/users/me/avatar'),
   uploadBanner: (file: File) => uploadImage('/users/me/banner', file),
   removeBanner: () => request<UserPublic>('DELETE', '/users/me/banner'),
+
+  // -- public profiles --------------------------------------------------------
+  getPublicProfile: (username: string) =>
+    request<PublicProfile>('GET', `/users/${encodeURIComponent(username)}`),
+  updateFavorites: (dto: UpdateFavoritesRequest) =>
+    request<FavoriteSlot[]>('PATCH', '/users/me/favorites', dto),
 
   // -- media -----------------------------------------------------------------
   search: (q: string, type?: string) =>

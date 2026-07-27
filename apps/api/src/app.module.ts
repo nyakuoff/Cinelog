@@ -7,6 +7,7 @@ import { loadConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { ProfilesModule } from './profiles/profiles.module';
 import { MediaModule } from './media/media.module';
 import { TrackingModule } from './tracking/tracking.module';
 import { RatingsModule } from './ratings/ratings.module';
@@ -35,6 +36,7 @@ import { RolesGuard } from './common/roles.guard';
     PrismaModule,
     AuthModule,
     UsersModule,
+    ProfilesModule,
     MediaModule,
     TrackingModule,
     RatingsModule,

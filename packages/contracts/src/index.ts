@@ -10,3 +10,4 @@ export * from './artwork.js';
 export * from './admin.js';
 export * from './backup.js';
 export * from './rating-scale.js';
+export * from './social.js';

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RatingScale, UserRole } from './enums.js';
+import { ProfileVisibility, RatingScale, UserRole } from './enums.js';
 
 export const usernameSchema = z
   .string()
@@ -21,6 +21,9 @@ export const UserPublic = z.object({
   avatarUrl: z.string().nullable(),
   bannerUrl: z.string().nullable(),
   bio: z.string().nullable(),
+  displayName: z.string().nullable(),
+  profileVisibility: ProfileVisibility,
+  watchlistVisibility: ProfileVisibility,
   ratingScale: RatingScale,
   createdAt: z.string().datetime(),
 });

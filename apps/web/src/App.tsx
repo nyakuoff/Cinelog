@@ -9,7 +9,8 @@ import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MediaDetailPage } from './pages/MediaDetailPage';
 import { ImportPage } from './pages/ImportPage';
-import { ProfilePage } from './pages/ProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
+import { PublicProfilePage } from './pages/PublicProfilePage';
 import { AdminPage } from './pages/AdminPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
@@ -28,7 +29,9 @@ export function App(): JSX.Element {
         <Route path="/search" element={<SearchPage />} />
         <Route path="/media/:id" element={<MediaDetailPage />} />
         <Route path="/import" element={<ImportPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<PublicProfilePage />} />
+        <Route path="/u/:username" element={<PublicProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

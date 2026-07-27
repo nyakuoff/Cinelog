@@ -7,6 +7,7 @@ import { Avatar } from './Avatar';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
+  { to: '/profile', label: 'Profile', end: false },
   { to: '/watchlist', label: 'Watchlist', end: false },
 ];
 
@@ -120,9 +121,17 @@ export function Layout(): JSX.Element {
                   to="/profile"
                   onClick={() => setMenuOpen(false)}
                   role="menuitem"
-                  className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                  className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content md:hidden"
                 >
                   Profile
+                </Link>
+                <Link
+                  to="/settings"
+                  onClick={() => setMenuOpen(false)}
+                  role="menuitem"
+                  className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                >
+                  Settings
                 </Link>
                 <Link
                   to="/import"

@@ -8,7 +8,7 @@ import { Avatar } from '../components/Avatar';
 import { Field } from '../components/Field';
 import { Button, Card, Input, Spinner } from '../components/ui';
 
-export function ProfilePage(): JSX.Element {
+export function SettingsPage(): JSX.Element {
   const { user } = useAuth();
   if (!user) return <></>;
 
@@ -17,12 +17,13 @@ export function ProfilePage(): JSX.Element {
       <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
         Your account
       </p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Profile</h1>
+      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Settings</h1>
 
       <BannerAndAvatar user={user} />
 
       <div className="mt-8 space-y-6">
         <ProfileForm user={user} />
+        <PrivacyForm user={user} />
         <PasswordForm />
       </div>
     </div>
@@ -132,6 +133,7 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
 function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
   const { updateUser } = useAuth();
   const [username, setUsername] = useState(user.username);
+  const [displayName, setDisplayName] = useState(user.displayName ?? '');
   const [email, setEmail] = useState(user.email ?? '');
   const [bio, setBio] = useState(user.bio ?? '');
   const [saved, setSaved] = useState(false);
@@ -140,6 +142,7 @@ function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
     mutationFn: () =>
       api.updateProfile({
         username: username !== user.username ? username : undefined,
+        displayName: displayName !== (user.displayName ?? '') ? displayName || null : undefined,
         email: email !== (user.email ?? '') ? email || null : undefined,
         bio: bio !== (user.bio ?? '') ? bio || null : undefined,
       }),
@@ -163,6 +166,13 @@ function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
       <form onSubmit={onSubmit} className="space-y-4">
         <Field label="Username">
           <Input value={username} onChange={(e) => setUsername(e.target.value)} />
+        </Field>
+        <Field label="Display name" hint="shown instead of your username on your profile">
+          <Input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value.slice(0, 60))}
+            placeholder={user.username}
+          />
         </Field>
         <Field label="Email" hint="optional">
           <Input
@@ -195,6 +205,77 @@ function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
           {saved && <span className="text-sm text-cyan">Saved</span>}
         </div>
       </form>
+    </Card>
+  );
+}
+
+const VISIBILITY_OPTIONS: { value: 'PUBLIC' | 'FOLLOWERS' | 'PRIVATE'; label: string }[] = [
+  { value: 'PUBLIC', label: 'Anyone' },
+  { value: 'FOLLOWERS', label: 'Followers only' },
+  { value: 'PRIVATE', label: 'Only me' },
+];
+
+function PrivacyForm({ user }: { user: UserPublic }): JSX.Element {
+  const { updateUser } = useAuth();
+  const [profileVisibility, setProfileVisibility] = useState(user.profileVisibility);
+  const [watchlistVisibility, setWatchlistVisibility] = useState(user.watchlistVisibility);
+  const [saved, setSaved] = useState(false);
+
+  const mut = useMutation({
+    mutationFn: () => api.updateProfile({ profileVisibility, watchlistVisibility }),
+    onSuccess: (u) => {
+      updateUser(u);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+  });
+
+  return (
+    <Card className="p-6">
+      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
+        Privacy
+      </h2>
+      <div className="space-y-4">
+        <Field label="Who can see your profile">
+          <select
+            value={profileVisibility}
+            onChange={(e) => setProfileVisibility(e.target.value as typeof profileVisibility)}
+            className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3.5 text-sm text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+          >
+            {VISIBILITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Who can see your watchlist" hint="never wider than your profile visibility">
+          <select
+            value={watchlistVisibility}
+            onChange={(e) => setWatchlistVisibility(e.target.value as typeof watchlistVisibility)}
+            className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3.5 text-sm text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+          >
+            {VISIBILITY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        {mut.isError && (
+          <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+            {mut.error instanceof ApiError ? mut.error.message : 'Could not save changes'}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Button variant="primary" disabled={mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
+          {saved && <span className="text-sm text-cyan">Saved</span>}
+        </div>
+      </div>
     </Card>
   );
 }

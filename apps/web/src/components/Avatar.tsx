@@ -1,12 +1,13 @@
-import type { UserPublic } from '@cinelog/contracts';
 import { cn } from '../lib/cn';
+
+type AvatarUser = { username: string; avatarUrl: string | null };
 
 export function Avatar({
   user,
   size = 32,
   className,
 }: {
-  user: UserPublic | null | undefined;
+  user: AvatarUser | null | undefined;
   size?: number;
   className?: string;
 }): JSX.Element {

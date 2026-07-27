@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import { Layout } from './components/Layout';
 import { Spinner } from './components/ui';
 import { DiscoverPage } from './pages/DiscoverPage';
+import { FilmsPage } from './pages/FilmsPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
@@ -26,6 +27,7 @@ export function App(): JSX.Element {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<DiscoverPage />} />
+        <Route path="/films" element={<FilmsPage />} />
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />

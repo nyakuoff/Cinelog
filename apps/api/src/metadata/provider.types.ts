@@ -87,9 +87,28 @@ export interface MetadataProvider {
   getEpisodes?(externalId: string, seasonNumber: number): Promise<ProviderEpisode[]>;
   /** Discovery rails (trending/popular/upcoming) for providers that expose them. */
   getDiscoverList?(kind: DiscoverListKind, type: MediaType): Promise<ProviderSearchResult[]>;
+  /** Faceted catalog browse (the Films page) for providers that expose it. */
+  browse?(params: ProviderBrowseParams): Promise<ProviderBrowseResult>;
 }
 
 export type DiscoverListKind = 'TRENDING' | 'POPULAR' | 'UPCOMING';
+
+export interface ProviderBrowseParams {
+  type: 'MOVIE' | 'TV';
+  genre?: string;
+  /** Start year of a decade filter, e.g. 1990 covers 1990–1999. */
+  decade?: number;
+  year?: number;
+  /** Minimum average rating, normalized 0..100. */
+  minRating?: number;
+  sort: 'POPULARITY' | 'RATING' | 'RELEASE_DATE' | 'TITLE' | 'CINELOG_RATING';
+  page: number;
+}
+
+export interface ProviderBrowseResult {
+  results: ProviderSearchResult[];
+  hasMore: boolean;
+}
 
 /** DI token for the array of registered providers. */
 export const METADATA_PROVIDERS = Symbol('METADATA_PROVIDERS');

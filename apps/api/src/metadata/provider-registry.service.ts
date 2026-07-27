@@ -4,6 +4,8 @@ import {
   METADATA_PROVIDERS,
   type DiscoverListKind,
   type MetadataProvider,
+  type ProviderBrowseParams,
+  type ProviderBrowseResult,
   type ProviderMediaDetails,
   type ProviderSearchResult,
 } from './provider.types';
@@ -80,6 +82,20 @@ export class ProviderRegistry {
     } catch (err) {
       this.logger.warn(`Provider '${provider.id}' discover(${kind}, ${type}) failed: ${err}`);
       return [];
+    }
+  }
+
+  /** Faceted catalog browse for the Films page. Like getDiscoverList, an
+   *  unsupported or unavailable provider yields an empty page rather than a
+   *  failed request, so the surrounding page still renders. */
+  async browse(params: ProviderBrowseParams): Promise<ProviderBrowseResult> {
+    const provider = this.getForType(params.type);
+    if (!provider.browse) return { results: [], hasMore: false };
+    try {
+      return await provider.browse(params);
+    } catch (err) {
+      this.logger.warn(`Provider '${provider.id}' browse failed: ${err}`);
+      return { results: [], hasMore: false };
     }
   }
 }

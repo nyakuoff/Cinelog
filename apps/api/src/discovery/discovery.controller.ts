@@ -1,9 +1,9 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import type { DiscoverFilterResponse, DiscoverResponse } from '@cinelog/contracts';
+import type { BrowseResponse, DiscoverFilterResponse, DiscoverResponse } from '@cinelog/contracts';
 import { Public } from '../common/decorators';
 import { DiscoveryService } from './discovery.service';
-import { DiscoverFilterDto } from './discovery.dto';
+import { BrowseDto, DiscoverFilterDto } from './discovery.dto';
 
 @ApiTags('discovery')
 @Public()
@@ -19,5 +19,10 @@ export class DiscoveryController {
   @Get('filter')
   filter(@Query() query: DiscoverFilterDto): Promise<DiscoverFilterResponse> {
     return this.discovery.filter(query);
+  }
+
+  @Get('browse')
+  browse(@Query() query: BrowseDto): Promise<BrowseResponse> {
+    return this.discovery.browse(query);
   }
 }

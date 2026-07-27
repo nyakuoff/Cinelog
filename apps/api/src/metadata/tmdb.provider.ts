@@ -5,12 +5,38 @@ import type { AppConfig } from '../config/configuration';
 import type {
   MetadataProvider,
   ProviderArtwork,
+  ProviderBrowseParams,
+  ProviderBrowseResult,
   ProviderCredit,
   ProviderEpisode,
   ProviderMediaDetails,
   ProviderSearchResult,
   ProviderSeason,
 } from './provider.types';
+
+/** TMDB genre ids are stable published constants, so they're mapped inline
+ *  rather than fetched on every browse request. Movie and TV use different
+ *  ids for the same human-facing genre name; both are listed where they differ. */
+const TMDB_GENRE_IDS: Record<string, { movie?: number; tv?: number }> = {
+  Action: { movie: 28, tv: 10759 },
+  Adventure: { movie: 12, tv: 10759 },
+  Animation: { movie: 16, tv: 16 },
+  Comedy: { movie: 35, tv: 35 },
+  Crime: { movie: 80, tv: 80 },
+  Documentary: { movie: 99, tv: 99 },
+  Drama: { movie: 18, tv: 18 },
+  Family: { movie: 10751, tv: 10751 },
+  Fantasy: { movie: 14, tv: 10765 },
+  History: { movie: 36 },
+  Horror: { movie: 27 },
+  Music: { movie: 10402 },
+  Mystery: { movie: 9648, tv: 9648 },
+  Romance: { movie: 10749 },
+  'Science Fiction': { movie: 878, tv: 10765 },
+  Thriller: { movie: 53 },
+  War: { movie: 10752, tv: 10768 },
+  Western: { movie: 37, tv: 37 },
+};
 
 const API_BASE = 'https://api.themoviedb.org/3';
 const IMG_BASE = 'https://image.tmdb.org/t/p';
@@ -83,6 +109,65 @@ export class TmdbProvider implements MetadataProvider {
             : '/tv/on_the_air';
     const data = await this.request<TmdbSearchResponse>(path, {});
     return (data.results ?? []).map((item) => this.mapSearchItem({ ...item, media_type: tmdbKind }));
+  }
+
+  /** Faceted catalog browse via TMDB's /discover endpoints — the Films page.
+   *  Browsing the provider catalog (rather than only locally cached titles)
+   *  is what keeps the grid populated on a fresh instance. */
+  async browse(params: ProviderBrowseParams): Promise<ProviderBrowseResult> {
+    const kind: TmdbKind = params.type === 'TV' ? 'tv' : 'movie';
+    const dateField = kind === 'tv' ? 'first_air_date' : 'primary_release_date';
+    const query: Record<string, string> = {
+      page: String(params.page),
+      include_adult: 'false',
+      // Exclude the long tail of unrated/near-unknown entries, which otherwise
+      // dominate every sort other than popularity.
+      'vote_count.gte': params.sort === 'RATING' ? '200' : '20',
+      sort_by: this.tmdbSortBy(params.sort, kind),
+    };
+
+    if (params.genre) {
+      const id = TMDB_GENRE_IDS[params.genre]?.[kind];
+      // An unsupported genre for this type would otherwise silently return the
+      // unfiltered catalog, which reads as a broken filter.
+      if (id === undefined) return { results: [], hasMore: false };
+      query.with_genres = String(id);
+    }
+    if (params.year !== undefined) {
+      query[`${dateField}.gte`] = `${params.year}-01-01`;
+      query[`${dateField}.lte`] = `${params.year}-12-31`;
+    } else if (params.decade !== undefined) {
+      query[`${dateField}.gte`] = `${params.decade}-01-01`;
+      query[`${dateField}.lte`] = `${params.decade + 9}-12-31`;
+    }
+    if (params.minRating !== undefined) {
+      query['vote_average.gte'] = String(params.minRating / 10);
+    }
+
+    const data = await this.request<TmdbDiscoverResponse>(`/discover/${kind}`, query);
+    const results = (data.results ?? []).map((item) =>
+      this.mapSearchItem({ ...item, media_type: kind }),
+    );
+    const totalPages = data.total_pages ?? 1;
+    return { results, hasMore: params.page < Math.min(totalPages, 500) };
+  }
+
+  private tmdbSortBy(sort: ProviderBrowseParams['sort'], kind: TmdbKind): string {
+    const dateField = kind === 'tv' ? 'first_air_date' : 'primary_release_date';
+    switch (sort) {
+      case 'RATING':
+        return 'vote_average.desc';
+      case 'RELEASE_DATE':
+        return `${dateField}.desc`;
+      case 'TITLE':
+        return kind === 'tv' ? 'name.asc' : 'title.asc';
+      // CINELOG_RATING is re-sorted against local ratings by the caller; the
+      // provider still needs a deterministic base ordering to page through.
+      case 'CINELOG_RATING':
+      case 'POPULARITY':
+      default:
+        return 'popularity.desc';
+    }
   }
 
   async getSeasons(externalId: string): Promise<ProviderSeason[]> {
@@ -236,6 +321,10 @@ interface TmdbSearchItem {
 }
 interface TmdbSearchResponse {
   results?: TmdbSearchItem[];
+}
+interface TmdbDiscoverResponse {
+  results?: TmdbSearchItem[];
+  total_pages?: number;
 }
 interface TmdbImage {
   file_path: string;

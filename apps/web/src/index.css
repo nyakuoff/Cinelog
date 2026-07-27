@@ -96,6 +96,15 @@ button {
   color: rgb(var(--gold));
 }
 
+/* Tab bars and rails scroll horizontally without showing a bar. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Auto-scrolling marquee row; pause on hover. */
 .marquee-mask {
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);

@@ -9,6 +9,8 @@ import type {
   AuthResponse,
   BackupData,
   BackupImportResult,
+  BrowseQuery,
+  BrowseResponse,
   ChangePasswordRequest,
   ConnectLetterboxdRequest,
   DiscoverFilterQuery,
@@ -146,6 +148,16 @@ async function uploadImage(path: string, file: File): Promise<UserPublic> {
   return (await res.json()) as UserPublic;
 }
 
+/** Serialize a partial query object, dropping empty/undefined values. */
+function toQuery(query: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 async function tryRefresh(): Promise<boolean> {
   try {
     const res = await fetch(`${BASE}/auth/refresh`, {
@@ -197,14 +209,10 @@ export const api = {
 
   // -- discovery ---------------------------------------------------------------
   getDiscover: () => request<DiscoverResponse>('GET', '/discovery'),
-  getDiscoverFilter: (query: Partial<DiscoverFilterQuery>) => {
-    const params = new URLSearchParams();
-    for (const [k, v] of Object.entries(query)) {
-      if (v !== undefined && v !== '') params.set(k, String(v));
-    }
-    const qs = params.toString();
-    return request<DiscoverFilterResponse>('GET', `/discovery/filter${qs ? `?${qs}` : ''}`);
-  },
+  getDiscoverFilter: (query: Partial<DiscoverFilterQuery>) =>
+    request<DiscoverFilterResponse>('GET', `/discovery/filter${toQuery(query)}`),
+  browse: (query: Partial<BrowseQuery>) =>
+    request<BrowseResponse>('GET', `/discovery/browse${toQuery(query)}`),
 
   // -- media -----------------------------------------------------------------
   search: (q: string, type?: string) =>

@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import type { MediaItem } from '@prisma/client';
 import {
   MediaType,
+  type BrowseQuery,
+  type BrowseResponse,
   type DiscoverFilterQuery,
   type DiscoverFilterResponse,
   type DiscoverResponse,
@@ -40,6 +42,88 @@ export class DiscoveryService {
       (s): s is DiscoverSection => s.items.length > 0,
     );
     return { sections };
+  }
+
+  /** The Films browse page. Defaults to the provider catalog so the grid is
+   *  populated on a fresh instance; `source=CINELOG` restricts to titles this
+   *  instance's members have actually rated. Either way, community rating and
+   *  rating count are attached from local data. */
+  async browse(query: BrowseQuery): Promise<BrowseResponse> {
+    if (query.source === 'CINELOG') {
+      // TITLE has no local equivalent, so it falls back to popularity ordering.
+      const localSort =
+        query.sort === 'RELEASE_DATE'
+          ? 'RELEASE_DATE'
+          : query.sort === 'RATING' || query.sort === 'CINELOG_RATING'
+            ? 'CINELOG_RATING'
+            : 'POPULARITY';
+      const page = await this.filter({
+        type: query.type,
+        genre: query.genre,
+        decade: query.decade,
+        minRating: query.minRating,
+        sort: localSort,
+        cursor: query.page > 1 ? String((query.page - 1) * 48) : undefined,
+        limit: 48,
+      });
+      return {
+        items: page.items,
+        page: query.page,
+        hasMore: page.nextCursor !== null,
+        source: 'CINELOG',
+      };
+    }
+
+    const { results, hasMore } = await this.registry.browse({
+      type: query.type,
+      genre: query.genre,
+      decade: query.decade,
+      year: query.year,
+      minRating: query.minRating,
+      sort: query.sort,
+      page: query.page,
+    });
+
+    const keys = results.map((r) => ({ provider: r.provider, externalId: r.externalId }));
+    const cached = keys.length
+      ? await this.prisma.mediaItem.findMany({
+          where: { OR: keys },
+          select: { id: true, provider: true, externalId: true },
+        })
+      : [];
+    const byKey = new Map(cached.map((c) => [`${c.provider}:${c.externalId}`, c.id]));
+
+    // Community stats only exist for titles already cached locally; everything
+    // else reports zero ratings rather than a fabricated score.
+    const cachedIds = [...byKey.values()];
+    const grouped = cachedIds.length
+      ? await this.prisma.rating.groupBy({
+          by: ['mediaItemId'],
+          where: { mediaItemId: { in: cachedIds } },
+          _avg: { value: true },
+          _count: { value: true },
+        })
+      : [];
+    const statsById = new Map(
+      grouped.map((g) => [g.mediaItemId, { avg: g._avg.value, count: g._count.value }]),
+    );
+
+    const items = results.map((r) => {
+      const id = byKey.get(`${r.provider}:${r.externalId}`) ?? null;
+      const stats = id ? statsById.get(id) : undefined;
+      return {
+        ...this.providerToSearchResult(r),
+        id,
+        communityRating: stats?.avg ?? null,
+        ratingCount: stats?.count ?? 0,
+      };
+    });
+
+    if (query.sort === 'CINELOG_RATING') {
+      items.sort((a, b) => (b.communityRating ?? -1) - (a.communityRating ?? -1));
+    }
+
+    return { items, page: query.page, hasMore, source: 'PROVIDER' };
   }
 
   async filter(query: DiscoverFilterQuery): Promise<DiscoverFilterResponse> {

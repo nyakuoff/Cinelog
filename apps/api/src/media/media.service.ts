@@ -8,6 +8,7 @@ import {
   type ArtworkChoice,
   type ArtworkOptionsResponse,
   type CreditPerson,
+  type FriendRatingsResponse,
   type MediaDetail,
   type MediaRef,
   type SearchResponse,
@@ -301,6 +302,29 @@ export class MediaService {
         year: r.year,
         overview: r.overview,
         posterUrl: this.artwork.toProxyUrl(r.posterUrl),
+      })),
+    };
+  }
+
+  /** Ratings from people the viewer follows, for the "Ratings from people you
+   *  follow" panel on the film page — mirrors Letterboxd's friends panel. */
+  async getFriendRatings(viewerId: string, mediaId: string): Promise<FriendRatingsResponse> {
+    const followingIds = (
+      await this.prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } })
+    ).map((f) => f.followingId);
+    if (followingIds.length === 0) return { ratings: [] };
+
+    const ratings = await this.prisma.rating.findMany({
+      where: { mediaItemId: mediaId, userId: { in: followingIds } },
+      include: { user: { select: { username: true, displayName: true, avatarUrl: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      ratings: ratings.map((r) => ({
+        user: r.user,
+        ratingValue: r.value,
+        ratedAt: r.updatedAt.toISOString(),
       })),
     };
   }

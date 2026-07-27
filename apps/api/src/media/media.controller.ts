@@ -1,6 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import type { ArtworkOptionsResponse, MediaDetail, SearchResponse } from '@cinelog/contracts';
+import type {
+  ArtworkOptionsResponse,
+  FriendRatingsResponse,
+  MediaDetail,
+  SearchResponse,
+} from '@cinelog/contracts';
 import { CurrentUser, Roles } from '../common/decorators';
 import { MediaService } from './media.service';
 import {
@@ -44,6 +49,14 @@ export class MediaController {
   @Get('media/:id/similar')
   similar(@Param('id') id: string): Promise<SearchResponse> {
     return this.media.getSimilar(id);
+  }
+
+  @Get('media/:id/friend-ratings')
+  friendRatings(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ): Promise<FriendRatingsResponse> {
+    return this.media.getFriendRatings(userId, id);
   }
 
   @Get('media/:id/artwork')

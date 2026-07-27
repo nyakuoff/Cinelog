@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
 import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
@@ -15,7 +15,8 @@ import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { LogModal } from '../components/LogModal';
-import { Poster, SectionHeader, TabBar } from '../components/lb';
+import { Poster, SectionHeader, StarText, TabBar } from '../components/lb';
+import { Avatar } from '../components/Avatar';
 
 type InfoTab = 'cast' | 'crew' | 'details' | 'genres';
 
@@ -219,6 +220,7 @@ export function MediaDetailPage(): JSX.Element {
             {/* Right rail: community ratings + stats */}
             <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
               <RatingsPanel media={m} />
+              <FriendRatingsPanel mediaId={id} />
               <StatsPanel media={m} />
             </aside>
           </div>
@@ -365,6 +367,38 @@ function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Ratings from people the viewer follows — Letterboxd's "Friends" panel. */
+function FriendRatingsPanel({ mediaId }: { mediaId: string }): JSX.Element | null {
+  const { data } = useQuery({
+    queryKey: ['friend-ratings', mediaId],
+    queryFn: () => api.getFriendRatings(mediaId),
+  });
+
+  if (!data || data.ratings.length === 0) return null;
+
+  return (
+    <div>
+      <SectionHeader title="Ratings from people you follow" />
+      <ul className="space-y-2.5">
+        {data.ratings.map((r) => (
+          <li key={r.user.username} className="flex items-center gap-2.5">
+            <Link to={`/u/${r.user.username}`} className="shrink-0">
+              <Avatar user={{ username: r.user.username, avatarUrl: r.user.avatarUrl }} size={28} />
+            </Link>
+            <Link
+              to={`/u/${r.user.username}`}
+              className="min-w-0 flex-1 truncate text-sm text-content hover:text-gold"
+            >
+              {r.user.displayName || r.user.username}
+            </Link>
+            <StarText value={r.ratingValue} size={12} />
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

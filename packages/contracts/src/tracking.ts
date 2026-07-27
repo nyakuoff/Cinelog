@@ -37,6 +37,13 @@ export const MarkWatchedRequest = MediaRef.and(
 );
 export type MarkWatchedRequest = z.infer<typeof MarkWatchedRequest>;
 
+/** PATCH /tracking/watch/:id — correct a diary entry's date or rewatch flag. */
+export const UpdateWatchEntryRequest = z.object({
+  watchedAt: z.string().datetime().optional(),
+  isRewatch: z.boolean().optional(),
+});
+export type UpdateWatchEntryRequest = z.infer<typeof UpdateWatchEntryRequest>;
+
 /** Returned by every tracking mutation so the client can update in place. */
 export const TrackingResponse = z.object({
   mediaId: z.string(),

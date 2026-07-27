@@ -17,14 +17,18 @@ function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function makePrisma(user: ReturnType<typeof makeUser>, followExists: boolean) {
+function makePrisma(
+  user: ReturnType<typeof makeUser>,
+  followExists: boolean,
+  watchlistRows: unknown[] = [],
+) {
   return {
     user: { findUnique: jest.fn().mockResolvedValue(user) },
     follow: {
       count: jest.fn().mockResolvedValue(0),
       findUnique: jest.fn().mockResolvedValue(followExists ? { id: 'f1' } : null),
     },
-    userMediaStatus: { findMany: jest.fn().mockResolvedValue([]) },
+    userMediaStatus: { findMany: jest.fn().mockResolvedValue(watchlistRows) },
     watchHistory: { findMany: jest.fn().mockResolvedValue([]) },
     rating: { findMany: jest.fn().mockResolvedValue([]) },
     episodeRating: { count: jest.fn().mockResolvedValue(0) },
@@ -81,5 +85,25 @@ describe('ProfilesService privacy', () => {
     const profile = await svc.getPublicProfile('owner', 'viewer-1');
     expect(profile.canView).toBe(true);
     expect(profile.canViewWatchlist).toBe(false);
+  });
+
+  it('getWatchlist returns items when allowed and an empty list when not, never an error', async () => {
+    const rows = [
+      {
+        favoritePosition: null,
+        media: { id: 'm1', type: 'MOVIE', title: 'Dune', releaseDate: '2021-01-01', posterPath: null },
+      },
+    ];
+    const allowed = new ProfilesService(
+      makePrisma(makeUser({ watchlistVisibility: 'PUBLIC' }), false, rows),
+      fakeArtwork,
+    );
+    expect((await allowed.getWatchlist('owner', 'viewer-1')).items).toHaveLength(1);
+
+    const denied = new ProfilesService(
+      makePrisma(makeUser({ watchlistVisibility: 'PRIVATE' }), false, rows),
+      fakeArtwork,
+    );
+    expect((await denied.getWatchlist('owner', 'viewer-1')).items).toHaveLength(0);
   });
 });

@@ -131,6 +131,28 @@ discovery platform. See the approved plan for full context and rationale.
   second review by A on the same title correctly 409'd → author's own list view correctly
   shows `concealed: false` with the full body. Test accounts removed afterward.
 
+### Slice 5 — Watchlist/diary profile surfacing (2026-07-27)
+
+- API: `GET /users/:username/diary` and `GET /users/:username/watchlist` on the profiles
+  module, reusing the same `resolveAccess()` privacy logic from slice 2 (diary gated by
+  `canView`, watchlist independently by `canViewWatchlist` — refactored the duplicated
+  visibility logic out of `getPublicProfile` into a shared private helper). Both return an
+  empty list rather than an error when access is denied, so the frontend never has to special-
+  case a 403 mid-render.
+  `PATCH/DELETE /tracking/watch/:id` added for diary entry correction/removal (previously only
+  create existed) — owner-only, a mismatched or missing entry both 404 (not 403) to avoid
+  confirming an entry's existence to a non-owner.
+- Frontend: `PublicProfilePage` gained an Overview/Diary/Watchlist tab bar (Watchlist tab only
+  rendered when `canViewWatchlist`); the diary tab shows a "Remove" action on the owner's own
+  profile.
+
+**Verification run:**
+- `pnpm --filter @cinelog/contracts build`, `pnpm --filter @cinelog/api typecheck`,
+  `pnpm --filter @cinelog/api test` (17/17), `pnpm --filter @cinelog/web build` — all pass.
+- Live smoke test: `GET /api/users/nyaku/diary` and `/watchlist` both return empty lists
+  gracefully (no diary/watchlist data yet, no crash); `GET /api/users/doesnotexist/diary` and
+  `/watchlist` both correctly 404.
+
 ## Not yet started
 - Slice 4: Reviews/likes/comments API + UI on `MediaDetailPage`.
 - Slice 5: Watchlist/diary surfaced on profile + diary edit/delete endpoints.

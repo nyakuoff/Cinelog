@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { MediaItem } from '@prisma/client';
+import type { MediaItem, User } from '@prisma/client';
 import {
   MediaType,
   ProfileVisibility,
   type FavoriteSlot,
   type MediaSummary,
+  type ProfileDiaryResponse,
+  type ProfileWatchlistResponse,
   type PublicProfile,
   type UpdateFavoritesRequest,
 } from '@cinelog/contracts';
@@ -31,17 +33,51 @@ export class ProfilesService {
     };
   }
 
+  async getDiary(username: string, viewerId: string | undefined): Promise<ProfileDiaryResponse> {
+    const user = await this.findUserOrThrow(username);
+    const { canView } = await this.resolveAccess(user, viewerId);
+    if (!canView) return { entries: [] };
+
+    const history = await this.prisma.watchHistory.findMany({
+      where: { userId: user.id },
+      include: { media: true },
+      orderBy: { watchedAt: 'desc' },
+      take: 100,
+    });
+    const mediaIds = history.map((h) => h.mediaItemId);
+    const ratings = mediaIds.length
+      ? await this.prisma.rating.findMany({ where: { userId: user.id, mediaItemId: { in: mediaIds } } })
+      : [];
+    const ratingByMedia = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
+
+    return {
+      entries: history.map((h) => ({
+        id: h.id,
+        media: this.toSummary(h.media),
+        watchedAt: h.watchedAt.toISOString(),
+        isRewatch: h.isRewatch,
+        rating: ratingByMedia.get(h.mediaItemId) ?? null,
+      })),
+    };
+  }
+
+  async getWatchlist(username: string, viewerId: string | undefined): Promise<ProfileWatchlistResponse> {
+    const user = await this.findUserOrThrow(username);
+    const { canViewWatchlist } = await this.resolveAccess(user, viewerId);
+    if (!canViewWatchlist) return { items: [] };
+
+    const rows = await this.prisma.userMediaStatus.findMany({
+      where: { userId: user.id, isWatchlisted: true },
+      include: { media: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return { items: rows.map((r) => this.toSummary(r.media)) };
+  }
+
   async getPublicProfile(username: string, viewerId: string | undefined): Promise<PublicProfile> {
-    const user = await this.prisma.user.findUnique({ where: { username } });
-    if (!user) throw new NotFoundException('User not found');
-
-    const isOwnProfile = viewerId === user.id;
-    const profileVisibility = ProfileVisibility.catch('PUBLIC').parse(user.profileVisibility);
-    const watchlistVisibility = ProfileVisibility.catch('PUBLIC').parse(user.watchlistVisibility);
-
-    const canView = isOwnProfile || (await this.isVisibleTo(profileVisibility, user.id, viewerId));
-    const canViewWatchlist =
-      isOwnProfile || (canView && (await this.isVisibleTo(watchlistVisibility, user.id, viewerId)));
+    const user = await this.findUserOrThrow(username);
+    const { isOwnProfile, canView, canViewWatchlist, profileVisibility, watchlistVisibility } =
+      await this.resolveAccess(user, viewerId);
 
     const [followerCount, followingCount] = await Promise.all([
       this.prisma.follow.count({ where: { followingId: user.id } }),
@@ -169,6 +205,31 @@ export class ProfilesService {
     return rows
       .filter((r) => r.favoritePosition != null)
       .map((r) => ({ position: r.favoritePosition as number, media: this.toSummary(r.media) }));
+  }
+
+  private async findUserOrThrow(username: string): Promise<User> {
+    const user = await this.prisma.user.findUnique({ where: { username } });
+    if (!user) throw new NotFoundException('User not found');
+    return user;
+  }
+
+  private async resolveAccess(
+    user: User,
+    viewerId: string | undefined,
+  ): Promise<{
+    isOwnProfile: boolean;
+    canView: boolean;
+    canViewWatchlist: boolean;
+    profileVisibility: ProfileVisibility;
+    watchlistVisibility: ProfileVisibility;
+  }> {
+    const isOwnProfile = viewerId === user.id;
+    const profileVisibility = ProfileVisibility.catch('PUBLIC').parse(user.profileVisibility);
+    const watchlistVisibility = ProfileVisibility.catch('PUBLIC').parse(user.watchlistVisibility);
+    const canView = isOwnProfile || (await this.isVisibleTo(profileVisibility, user.id, viewerId));
+    const canViewWatchlist =
+      isOwnProfile || (canView && (await this.isVisibleTo(watchlistVisibility, user.id, viewerId)));
+    return { isOwnProfile, canView, canViewWatchlist, profileVisibility, watchlistVisibility };
   }
 
   /** Whether `viewerId` (possibly anonymous) may see something gated by `visibility`

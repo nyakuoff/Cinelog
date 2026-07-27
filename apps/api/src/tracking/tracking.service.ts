@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   MediaType,
   TrackingStatus,
@@ -6,6 +6,7 @@ import {
   type MarkWatchedRequest,
   type MediaRef,
   type TrackingResponse,
+  type UpdateWatchEntryRequest,
   type UserMediaState,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,6 +73,30 @@ export class TrackingService {
       }),
     ]);
     return { mediaId: mediaItemId, userState: await this.getUserState(userId, mediaItemId) };
+  }
+
+  /** Correct a diary entry's date or rewatch flag. Owner-only; a mismatched
+   *  owner is reported as 404 (not 403) to avoid confirming the entry exists. */
+  async updateWatchEntry(
+    userId: string,
+    entryId: string,
+    dto: UpdateWatchEntryRequest,
+  ): Promise<void> {
+    const entry = await this.prisma.watchHistory.findUnique({ where: { id: entryId } });
+    if (!entry || entry.userId !== userId) throw new NotFoundException('Diary entry not found');
+    await this.prisma.watchHistory.update({
+      where: { id: entryId },
+      data: {
+        ...(dto.watchedAt !== undefined ? { watchedAt: new Date(dto.watchedAt) } : {}),
+        ...(dto.isRewatch !== undefined ? { isRewatch: dto.isRewatch } : {}),
+      },
+    });
+  }
+
+  async deleteWatchEntry(userId: string, entryId: string): Promise<void> {
+    const entry = await this.prisma.watchHistory.findUnique({ where: { id: entryId } });
+    if (!entry || entry.userId !== userId) throw new NotFoundException('Diary entry not found');
+    await this.prisma.watchHistory.delete({ where: { id: entryId } });
   }
 
   async getLibrary(userId: string): Promise<LibraryResponse> {

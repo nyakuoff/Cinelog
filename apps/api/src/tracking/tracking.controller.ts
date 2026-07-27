@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Post, Put } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { LibraryResponse, TrackingResponse } from '@cinelog/contracts';
 import { CurrentUser } from '../common/decorators';
 import { TrackingService } from './tracking.service';
-import { MarkWatchedDto, SetFlagDto, SetStatusDto } from './tracking.dto';
+import { MarkWatchedDto, SetFlagDto, SetStatusDto, UpdateWatchEntryDto } from './tracking.dto';
 
 @ApiTags('tracking')
 @ApiBearerAuth()
@@ -46,5 +46,21 @@ export class TrackingController {
     @Body() dto: MarkWatchedDto,
   ): Promise<TrackingResponse> {
     return this.tracking.markWatched(userId, dto);
+  }
+
+  @Patch('watch/:id')
+  @HttpCode(204)
+  async updateWatchEntry(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateWatchEntryDto,
+  ): Promise<void> {
+    await this.tracking.updateWatchEntry(userId, id, dto);
+  }
+
+  @Delete('watch/:id')
+  @HttpCode(204)
+  async deleteWatchEntry(@CurrentUser('sub') userId: string, @Param('id') id: string): Promise<void> {
+    await this.tracking.deleteWatchEntry(userId, id);
   }
 }

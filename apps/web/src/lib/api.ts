@@ -26,6 +26,8 @@ import type {
   FavoriteSlot,
   MediaDetail,
   MediaRef,
+  ProfileDiaryResponse,
+  ProfileWatchlistResponse,
   PublicProfile,
   CreateReviewCommentRequest,
   CreateReviewRequest,
@@ -46,6 +48,7 @@ import type {
   UpdateProfileRequest,
   UpdateReviewCommentRequest,
   UpdateReviewRequest,
+  UpdateWatchEntryRequest,
   UserPublic,
 } from '@cinelog/contracts';
 
@@ -181,6 +184,13 @@ export const api = {
     request<PublicProfile>('GET', `/users/${encodeURIComponent(username)}`),
   updateFavorites: (dto: UpdateFavoritesRequest) =>
     request<FavoriteSlot[]>('PATCH', '/users/me/favorites', dto),
+  getProfileDiary: (username: string) =>
+    request<ProfileDiaryResponse>('GET', `/users/${encodeURIComponent(username)}/diary`),
+  getProfileWatchlist: (username: string) =>
+    request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
+  updateWatchEntry: (entryId: string, dto: UpdateWatchEntryRequest) =>
+    request<void>('PATCH', `/tracking/watch/${entryId}`, dto),
+  deleteWatchEntry: (entryId: string) => request<void>('DELETE', `/tracking/watch/${entryId}`),
 
   // -- discovery ---------------------------------------------------------------
   getDiscover: () => request<DiscoverResponse>('GET', '/discovery'),

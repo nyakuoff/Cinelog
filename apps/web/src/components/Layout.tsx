@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
 import { Logo } from './Logo';
@@ -8,7 +8,7 @@ import { LogModal } from './LogModal';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
-  { to: '/films', label: 'Films', end: false },
+  { to: '/films', label: 'Media', end: false },
   { to: '/lists', label: 'Lists', end: false },
   { to: '/members', label: 'Members', end: false },
   { to: '/library', label: 'Library', end: false },
@@ -27,19 +27,30 @@ const MENU_LINKS = [
 export function Layout(): JSX.Element {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [q, setQ] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [logging, setLogging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
   // Click-to-open menu (not hover — hover gaps make the menu unreachable).
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen && !navOpen) return;
     function onPointerDown(e: MouseEvent): void {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+      if (navOpen && navRef.current && !navRef.current.contains(e.target as Node)) {
+        setNavOpen(false);
+      }
     }
     function onKey(e: KeyboardEvent): void {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        setNavOpen(false);
+      }
     }
     document.addEventListener('mousedown', onPointerDown);
     document.addEventListener('keydown', onKey);
@@ -47,7 +58,12 @@ export function Layout(): JSX.Element {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [menuOpen]);
+  }, [menuOpen, navOpen]);
+
+  // Close the mobile drawer on navigation.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
 
   function onSearch(e: FormEvent): void {
     e.preventDefault();
@@ -55,18 +71,30 @@ export function Layout(): JSX.Element {
     if (trimmed) {
       navigate(`/search?q=${encodeURIComponent(trimmed)}`);
       setQ('');
+      setNavOpen(false);
     }
   }
 
   return (
     <div className="min-h-full">
       <header className="sticky top-0 z-40 border-b border-border-hi/40 bg-bg-2/85 backdrop-blur-md">
-        <div className="mx-auto flex h-[58px] max-w-6xl items-center gap-5 px-4 sm:px-6">
-          <Link to="/" aria-label="Cinelog home" className="shrink-0">
-            <Logo size={26} glow />
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-5 px-4 sm:h-20 sm:px-6">
+          <button
+            onClick={() => setNavOpen((v) => !v)}
+            aria-expanded={navOpen}
+            aria-label="Toggle navigation"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded text-content md:hidden"
+          >
+            <span aria-hidden="true" className="text-xl leading-none">
+              {navOpen ? '✕' : '☰'}
+            </span>
+          </button>
+
+          <Link to="/" aria-label="Cinelog home" className="flex shrink-0 items-center">
+            <Logo size={36} textClassName="text-xl sm:text-2xl" glow />
           </Link>
 
-          <nav className="hidden gap-4 md:flex">
+          <nav className="hidden gap-5 md:flex">
             {NAV.map((item) => (
               <NavLink
                 key={item.label}
@@ -74,7 +102,7 @@ export function Layout(): JSX.Element {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'font-cond text-[12.5px] font-bold uppercase tracking-[0.1em]',
+                    'font-cond text-[13.5px] font-bold uppercase tracking-[0.1em]',
                     isActive ? 'text-content' : 'text-muted hover:text-content',
                   )
                 }
@@ -84,8 +112,8 @@ export function Layout(): JSX.Element {
             ))}
           </nav>
 
-          <form onSubmit={onSearch} className="ml-auto flex items-center">
-            <div className="flex items-center gap-2 rounded border border-border bg-surface px-2.5 py-1.5 text-muted transition-colors focus-within:border-cyan">
+          <form onSubmit={onSearch} className="ml-auto hidden items-center sm:flex">
+            <div className="flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-muted transition-colors focus-within:border-cyan">
               <span aria-hidden="true" className="opacity-70">
                 ⌕
               </span>
@@ -94,22 +122,32 @@ export function Layout(): JSX.Element {
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search…"
                 aria-label="Search"
-                className="w-24 bg-transparent text-[13px] text-content outline-none placeholder:text-muted-2 sm:w-40"
+                className="w-28 bg-transparent text-sm text-content outline-none placeholder:text-muted-2 md:w-44"
               />
             </div>
           </form>
 
+          <Link
+            to="/search"
+            aria-label="Search"
+            className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded text-content sm:hidden"
+          >
+            <span aria-hidden="true" className="text-lg opacity-80">
+              ⌕
+            </span>
+          </Link>
+
           <button
             onClick={() => setLogging(true)}
-            className="hidden shrink-0 rounded bg-accent px-3 py-1.5 font-cond text-[12.5px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110 sm:inline-flex"
+            className="hidden shrink-0 rounded bg-accent px-3.5 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110 sm:inline-flex"
           >
             + Log
           </button>
 
           <div className="relative flex shrink-0 items-center gap-1.5" ref={menuRef}>
             <Link to="/profile" title={user?.username} className="flex items-center gap-2">
-              <Avatar user={user} size={28} />
-              <span className="hidden max-w-[9rem] truncate font-cond text-[12.5px] font-bold uppercase tracking-[0.08em] text-muted hover:text-content lg:inline">
+              <Avatar user={user} size={32} />
+              <span className="hidden max-w-[9rem] truncate font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-muted hover:text-content lg:inline">
                 {user?.username}
               </span>
             </Link>
@@ -118,9 +156,9 @@ export function Layout(): JSX.Element {
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               aria-label="Account menu"
-              className="grid h-6 w-6 place-items-center rounded text-muted hover:text-content"
+              className="grid h-7 w-7 place-items-center rounded text-muted hover:text-content"
             >
-              <span aria-hidden="true" className="text-[10px]">
+              <span aria-hidden="true" className="text-xs">
                 ▾
               </span>
             </button>
@@ -135,14 +173,6 @@ export function Layout(): JSX.Element {
                   <span className="min-w-0 truncate text-sm text-content">{user?.username}</span>
                 </div>
                 <div className="my-1 h-px bg-border" />
-                <Link
-                  to="/films"
-                  onClick={() => setMenuOpen(false)}
-                  role="menuitem"
-                  className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content md:hidden"
-                >
-                  Films
-                </Link>
                 {MENU_LINKS.map((l) => (
                   <Link
                     key={l.to}
@@ -179,11 +209,63 @@ export function Layout(): JSX.Element {
             )}
           </div>
         </div>
+
+        {/* Mobile nav drawer — the primary tabs live behind the account menu on
+            phones, but Letterboxd's mobile pattern surfaces them from a
+            hamburger instead, so nothing (Lists, Members, …) is ever hidden. */}
+        {navOpen && (
+          <div
+            ref={navRef}
+            className="border-t border-border-hi/40 bg-bg-2 px-4 py-3 md:hidden"
+          >
+            <form onSubmit={onSearch} className="mb-3 flex items-center sm:hidden">
+              <div className="flex w-full items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-muted focus-within:border-cyan">
+                <span aria-hidden="true" className="opacity-70">
+                  ⌕
+                </span>
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search…"
+                  aria-label="Search"
+                  className="w-full bg-transparent text-sm text-content outline-none placeholder:text-muted-2"
+                />
+              </div>
+            </form>
+            <nav className="flex flex-col">
+              {NAV.map((item) => (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  end={item.end}
+                  onClick={() => setNavOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      'rounded-lg px-2 py-2.5 font-cond text-sm font-bold uppercase tracking-[0.08em]',
+                      isActive ? 'text-content' : 'text-muted hover:text-content',
+                    )
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+          </div>
+        )}
       </header>
 
       <main>
         <Outlet />
       </main>
+
+      {/* Compact log entry on phones, where the desktop "+ Log" button is hidden. */}
+      <button
+        onClick={() => setLogging(true)}
+        aria-label="Log a film"
+        className="fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-accent text-2xl font-extrabold text-ink shadow-soft hover:brightness-110 sm:hidden"
+      >
+        +
+      </button>
 
       {logging && <LogModal onClose={() => setLogging(false)} />}
     </div>

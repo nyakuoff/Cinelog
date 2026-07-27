@@ -8,7 +8,13 @@ import { Avatar } from './Avatar';
  * cards, so a list reads as "a stack of films" at a glance.
  */
 export function ListCard({ list }: { list: ListSummary }): JSX.Element {
+  // The API sends up to 4 cover posters; beyond that a "+N" tile on the end
+  // stands in for the rest, so a 1-item list doesn't look sparse and a
+  // 40-item list doesn't overflow its tile.
   const posters = list.coverPosters.slice(0, 4);
+  const overflow = list.itemCount - posters.length;
+  const single = posters.length === 1;
+
   return (
     <Link
       to={`/lists/${list.id}`}
@@ -24,7 +30,7 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
             {posters.map((p, i) => (
               <div
                 key={i}
-                style={{ marginLeft: i === 0 ? 0 : -18, zIndex: i }}
+                style={{ marginLeft: i === 0 || single ? 0 : -18, zIndex: i }}
                 className="h-[86px] w-[58px] shrink-0 overflow-hidden rounded-[2px] ring-1 ring-black/40 transition-transform group-hover:translate-y-[-2px]"
               >
                 {p ? (
@@ -37,6 +43,14 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
                 )}
               </div>
             ))}
+            {overflow > 0 && (
+              <div
+                style={{ marginLeft: -18, zIndex: posters.length }}
+                className="grid h-[86px] w-[58px] shrink-0 place-items-center overflow-hidden rounded-[2px] bg-black/70 ring-1 ring-black/40"
+              >
+                <span className="font-cond text-[13px] font-extrabold text-white">+{overflow}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -51,7 +65,9 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
         />
         <span className="truncate">{list.owner.displayName || list.owner.username}</span>
         <span>·</span>
-        <span className="tabular-nums">{list.itemCount} films</span>
+        <span className="tabular-nums">
+          {list.itemCount} {list.itemCount === 1 ? 'film' : 'films'}
+        </span>
         {list.likeCount > 0 && (
           <>
             <span>·</span>

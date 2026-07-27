@@ -80,7 +80,9 @@ export function ListDetailPage(): JSX.Element {
               {list.owner.displayName || list.owner.username}
             </Link>
             <span>·</span>
-            <span className="tabular-nums">{list.itemCount} films</span>
+            <span className="tabular-nums">
+              {list.itemCount} {list.itemCount === 1 ? 'film' : 'films'}
+            </span>
             {!list.isPublic && (
               <>
                 <span>·</span>

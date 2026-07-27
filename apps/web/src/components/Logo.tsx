@@ -40,15 +40,19 @@ export function Logo({
   size = 28,
   glow = false,
   className,
+  textClassName,
 }: {
   size?: number;
   glow?: boolean;
   className?: string;
+  /** Font-size utility for the wordmark — defaults to inheriting the ambient
+   *  text size, but the topbar wants it noticeably larger. */
+  textClassName?: string;
 }): JSX.Element {
   return (
     <span className={cn('flex items-center gap-2 font-semibold tracking-tight', className)}>
       <LogoMark size={size} glow={glow} />
-      <span>
+      <span className={textClassName}>
         Cine<span className="text-gold">log</span>
       </span>
     </span>

@@ -6,6 +6,10 @@ export const LetterboxdItem = z.object({
   year: z.number().int().nullable(),
   /** Letterboxd star rating 0.5–5, or null if the row has none. */
   rating: z.number().min(0.5).max(5).nullable(),
+  /** The CSV's "Watched Date" (diary.csv/watched.csv) or "Date" column
+   *  (ratings.csv, as an approximation), as a plain YYYY-MM-DD string.
+   *  Ignored in watchlist mode. Optional/nullable so older callers still parse. */
+  watchedDate: z.string().nullable().optional().default(null),
 });
 export type LetterboxdItem = z.infer<typeof LetterboxdItem>;
 

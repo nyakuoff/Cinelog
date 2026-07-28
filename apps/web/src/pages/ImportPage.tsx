@@ -308,6 +308,10 @@ function CsvImportCard(): JSX.Element {
       const nameIdx = header.indexOf('name');
       const yearIdx = header.indexOf('year');
       const ratingIdx = header.indexOf('rating');
+      // diary.csv/watched.csv have "Watched Date"; ratings.csv only has "Date"
+      // (the date rated, used as an approximation so ratings-only imports
+      // still populate the diary instead of leaving it empty).
+      const dateIdx = header.indexOf('watched date') >= 0 ? header.indexOf('watched date') : header.indexOf('date');
       if (nameIdx < 0) {
         setError('This doesn’t look like a Letterboxd export — no "Name" column found.');
         setItems([]);
@@ -320,6 +324,7 @@ function CsvImportCard(): JSX.Element {
           name: r[nameIdx]!.trim(),
           year: yearIdx >= 0 && r[yearIdx] ? Number.parseInt(r[yearIdx]!, 10) || null : null,
           rating: ratingIdx >= 0 && r[ratingIdx] ? Number.parseFloat(r[ratingIdx]!) || null : null,
+          watchedDate: dateIdx >= 0 && r[dateIdx]?.trim() ? r[dateIdx]!.trim() : null,
         }));
       setFileName(file.name);
       setItems(parsed.slice(0, MAX));

@@ -97,6 +97,21 @@ export class ImportService {
           update: { value },
         });
       }
+      // Without this, "watched" only ever set status+rating — never a diary
+      // row — so an imported Letterboxd history never showed up in Diary.
+      if (item.watchedDate) {
+        const watchedAt = new Date(item.watchedDate);
+        if (!Number.isNaN(watchedAt.getTime())) {
+          const exists = await this.prisma.watchHistory.findFirst({
+            where: { userId, mediaItemId: media.id, watchedAt },
+          });
+          if (!exists) {
+            await this.prisma.watchHistory.create({
+              data: { userId, mediaItemId: media.id, watchedAt, isRewatch: false },
+            });
+          }
+        }
+      }
     }
     return { ok: true, name: item.name };
   }

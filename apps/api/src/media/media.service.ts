@@ -1,16 +1,15 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { MediaItem, Prisma } from '@prisma/client';
 import {
-  ArtworkKind,
   MediaType,
   ProviderId,
   TrackingStatus,
   type ArtworkChoice,
-  type ArtworkOptionsResponse,
   type CreditPerson,
   type FriendRatingsResponse,
   type MediaDetail,
   type MediaRef,
+  type PosterOptionsResponse,
   type SearchResponse,
   type SearchResult,
   type UserMediaState,
@@ -147,7 +146,6 @@ export class MediaService {
 
     await this.prisma.$transaction([
       this.prisma.season.deleteMany({ where: { mediaItemId: mediaId } }),
-      this.prisma.userArtwork.deleteMany({ where: { mediaItemId: mediaId } }),
       this.prisma.mediaItem.update({
         where: { id: mediaId },
         data: {
@@ -180,7 +178,6 @@ export class MediaService {
       status,
       rating,
       allRatings,
-      artworkOverrides,
       watchedCount,
       likedCount,
       reviewCount,
@@ -192,7 +189,6 @@ export class MediaService {
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
       this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
-      this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } }),
       // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
       this.prisma.watchHistory
         .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
@@ -213,9 +209,6 @@ export class MediaService {
       bucket: i + 1,
       count: buckets.get(i + 1) ?? 0,
     }));
-    const posterOverride = artworkOverrides.find((a) => a.type === 'POSTER')?.url;
-    const backdropOverride = artworkOverrides.find((a) => a.type === 'BACKDROP')?.url;
-
     const userState: UserMediaState = {
       status: status?.status ? (TrackingStatus.safeParse(status.status).data ?? null) : null,
       isFavorite: status?.isFavorite ?? false,
@@ -237,8 +230,8 @@ export class MediaService {
       runtime: item.runtime,
       overview: item.overview,
       tagline: item.tagline,
-      posterUrl: this.artwork.toProxyUrl(posterOverride ?? item.posterPath),
-      backdropUrl: this.artwork.toProxyUrl(backdropOverride ?? item.backdropPath),
+      posterUrl: this.artwork.toProxyUrl(item.posterPath),
+      backdropUrl: this.artwork.toProxyUrl(item.backdropPath),
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
       studios: raw?.studios ?? [],
@@ -329,65 +322,38 @@ export class MediaService {
     };
   }
 
-  /** Every poster/backdrop the provider offers, plus which one is currently
-   *  effective for this user (their override, or the shared default). */
-  async getArtworkOptions(userId: string, mediaId: string): Promise<ArtworkOptionsResponse> {
+  /** Every poster the provider offers for this title. Posters are a shared
+   *  property of the title, not a personal preference — there's no per-user
+   *  override here, just the options and the current global choice. */
+  async getPosterOptions(mediaId: string): Promise<PosterOptionsResponse> {
     const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
     if (!item) throw new NotFoundException('Media not found');
 
     const raw = this.parseRaw(item.rawMetadata);
-    const overrides = await this.prisma.userArtwork.findMany({ where: { userId, mediaItemId: mediaId } });
-    const posterOverride = overrides.find((a) => a.type === 'POSTER')?.url ?? null;
-    const backdropOverride = overrides.find((a) => a.type === 'BACKDROP')?.url ?? null;
+    const posters = this.artworkChoices(raw, item.posterPath);
 
-    const posters = this.artworkChoices(raw, 'POSTER', item.posterPath);
-    const backdrops = this.artworkChoices(raw, 'BACKDROP', item.backdropPath);
-
-    return {
-      mediaId,
-      posters,
-      backdrops,
-      selectedPoster: posterOverride ?? item.posterPath,
-      selectedBackdrop: backdropOverride ?? item.backdropPath,
-      hasPosterOverride: posterOverride !== null,
-      hasBackdropOverride: backdropOverride !== null,
-    };
+    return { mediaId, posters, currentPosterUrl: item.posterPath };
   }
 
-  /** Set (or clear, when sourceUrl is null) the user's artwork override. The
-   *  chosen URL must be one of the options actually offered for this media. */
-  async setArtwork(
-    userId: string,
-    mediaId: string,
-    kind: ArtworkKind,
-    sourceUrl: string | null,
-  ): Promise<void> {
-    if (sourceUrl === null) {
-      await this.prisma.userArtwork.deleteMany({
-        where: { userId, mediaItemId: mediaId, type: kind },
-      });
-      return;
-    }
+  /** Sets the poster for this title for every member — a shared data
+   *  correction (like Letterboxd), not a personal preference. The chosen URL
+   *  must be one of the options actually offered for this media. */
+  async setPoster(mediaId: string, sourceUrl: string): Promise<void> {
+    const options = await this.getPosterOptions(mediaId);
+    const valid = options.posters.some((c) => c.sourceUrl === sourceUrl);
+    if (!valid) throw new BadRequestException('That poster is not available for this title');
 
-    const options = await this.getArtworkOptions(userId, mediaId);
-    const valid = (kind === 'POSTER' ? options.posters : options.backdrops).some(
-      (c) => c.sourceUrl === sourceUrl,
-    );
-    if (!valid) throw new BadRequestException('That artwork is not available for this title');
-
-    await this.prisma.userArtwork.upsert({
-      where: { userId_mediaItemId_type: { userId, mediaItemId: mediaId, type: kind } },
-      create: { userId, mediaItemId: mediaId, type: kind, url: sourceUrl },
-      update: { url: sourceUrl },
+    await this.prisma.mediaItem.update({
+      where: { id: mediaId },
+      data: { posterPath: sourceUrl },
     });
   }
 
   private artworkChoices(
     raw: ProviderMediaDetails | null,
-    kind: ArtworkKind,
     defaultUrl: string | null,
   ): ArtworkChoice[] {
-    const fromProvider = (raw?.artwork ?? []).filter((a) => a.type === kind);
+    const fromProvider = (raw?.artwork ?? []).filter((a) => a.type === 'POSTER');
     const seen = new Set<string>();
     const choices: ArtworkChoice[] = [];
 

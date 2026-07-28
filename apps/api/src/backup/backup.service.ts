@@ -41,11 +41,10 @@ export class BackupService {
    *  Media is keyed by provider coordinates so it re-resolves on any install. */
   async exportUserData(userId: string): Promise<BackupData> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    const [statuses, ratings, history, artwork, episodeRatings, reviews] = await Promise.all([
+    const [statuses, ratings, history, episodeRatings, reviews] = await Promise.all([
       this.prisma.userMediaStatus.findMany({ where: { userId } }),
       this.prisma.rating.findMany({ where: { userId } }),
       this.prisma.watchHistory.findMany({ where: { userId } }),
-      this.prisma.userArtwork.findMany({ where: { userId } }),
       this.prisma.episodeRating.findMany({
         where: { userId },
         include: { episode: { include: { season: true } } },
@@ -58,7 +57,6 @@ export class BackupService {
     statuses.forEach((s) => ids.add(s.mediaItemId));
     ratings.forEach((r) => ids.add(r.mediaItemId));
     history.forEach((h) => ids.add(h.mediaItemId));
-    artwork.forEach((a) => ids.add(a.mediaItemId));
     episodeRatings.forEach((e) => ids.add(e.episode.season.mediaItemId));
     reviews.forEach((r) => ids.add(r.mediaItemId));
 
@@ -67,7 +65,6 @@ export class BackupService {
     const statusByMedia = new Map(statuses.map((s) => [s.mediaItemId, s]));
     const ratingByMedia = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
     const historyByMedia = groupBy(history, (h) => h.mediaItemId);
-    const artworkByMedia = groupBy(artwork, (a) => a.mediaItemId);
     const epByMedia = groupBy(episodeRatings, (e) => e.episode.season.mediaItemId);
     const reviewByMedia = new Map(reviews.map((r) => [r.mediaItemId, r]));
 
@@ -105,10 +102,6 @@ export class BackupService {
         watchHistory: (historyByMedia.get(id) ?? []).map((h) => ({
           watchedAt: h.watchedAt.toISOString(),
           isRewatch: h.isRewatch,
-        })),
-        artwork: (artworkByMedia.get(id) ?? []).map((a) => ({
-          type: a.type === 'BACKDROP' ? 'BACKDROP' : 'POSTER',
-          url: a.url,
         })),
         episodeRatings: (epByMedia.get(id) ?? []).map((e) => ({
           seasonNumber: e.episode.season.seasonNumber,
@@ -240,14 +233,6 @@ export class BackupService {
             });
             result.watchEventsImported++;
           }
-        }
-
-        for (const a of item.artwork) {
-          await this.prisma.userArtwork.upsert({
-            where: { userId_mediaItemId_type: { userId, mediaItemId, type: a.type } },
-            create: { userId, mediaItemId, type: a.type, url: a.url },
-            update: { url: a.url },
-          });
         }
 
         if (item.episodeRatings.length) {

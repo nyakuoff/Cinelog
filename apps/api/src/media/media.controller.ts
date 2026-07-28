@@ -1,9 +1,9 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
-  ArtworkOptionsResponse,
   FriendRatingsResponse,
   MediaDetail,
+  PosterOptionsResponse,
   SearchResponse,
 } from '@cinelog/contracts';
 import { CurrentUser, Roles } from '../common/decorators';
@@ -13,7 +13,7 @@ import {
   MediaRefDto,
   RematchDto,
   SearchQueryDto,
-  SetArtworkDto,
+  SetPosterDto,
 } from './media.dto';
 
 @ApiTags('media')
@@ -59,22 +59,18 @@ export class MediaController {
     return this.media.getFriendRatings(userId, id);
   }
 
-  @Get('media/:id/artwork')
-  artworkOptions(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-  ): Promise<ArtworkOptionsResponse> {
-    return this.media.getArtworkOptions(userId, id);
+  @Get('media/:id/poster')
+  posterOptions(@Param('id') id: string): Promise<PosterOptionsResponse> {
+    return this.media.getPosterOptions(id);
   }
 
-  @Put('media/:id/artwork')
+  /** Changes the poster for this title for everyone, not just the caller —
+   *  any signed-in member can do this, matching Letterboxd's community
+   *  poster corrections. */
+  @Put('media/:id/poster')
   @HttpCode(204)
-  async setArtwork(
-    @CurrentUser('sub') userId: string,
-    @Param('id') id: string,
-    @Body() dto: SetArtworkDto,
-  ): Promise<void> {
-    await this.media.setArtwork(userId, id, dto.kind, dto.sourceUrl);
+  async setPoster(@Param('id') id: string, @Body() dto: SetPosterDto): Promise<void> {
+    await this.media.setPoster(id, dto.sourceUrl);
   }
 
   /** Fix a mismatched title: re-point this cached entry at the correct

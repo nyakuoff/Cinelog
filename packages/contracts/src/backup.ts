@@ -1,17 +1,10 @@
 import { z } from 'zod';
-import { ArtworkKind } from './artwork.js';
 import { MediaType, ProviderId, RatingScale, TrackingStatus } from './enums.js';
 
 /** A single watch/rewatch event in a backup. */
 export const BackupWatchEvent = z.object({
   watchedAt: z.string().datetime(),
   isRewatch: z.boolean(),
-});
-
-/** A per-user artwork override in a backup. */
-export const BackupArtwork = z.object({
-  type: ArtworkKind,
-  url: z.string(),
 });
 
 /** A per-episode rating in a backup, keyed by season/episode number so it can
@@ -52,7 +45,6 @@ export const BackupItem = z.object({
   rating: z.number().min(0).max(100).nullable(),
   review: BackupReview.nullable().optional().default(null),
   watchHistory: z.array(BackupWatchEvent),
-  artwork: z.array(BackupArtwork),
   episodeRatings: z.array(BackupEpisodeRating),
 });
 export type BackupItem = z.infer<typeof BackupItem>;

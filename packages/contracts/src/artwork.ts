@@ -1,10 +1,6 @@
 import { z } from 'zod';
 
-/** Artwork kinds a user can override (logos/banners aren't pickable yet). */
-export const ArtworkKind = z.enum(['POSTER', 'BACKDROP']);
-export type ArtworkKind = z.infer<typeof ArtworkKind>;
-
-/** One selectable image in the "Edit Artwork" gallery. */
+/** One selectable poster image in the "Change poster" gallery. */
 export const ArtworkChoice = z.object({
   /** Raw provider URL — the value sent back when applying a choice. */
   sourceUrl: z.string(),
@@ -16,21 +12,17 @@ export const ArtworkChoice = z.object({
 });
 export type ArtworkChoice = z.infer<typeof ArtworkChoice>;
 
-export const ArtworkOptionsResponse = z.object({
+/** GET /media/:id/poster — every poster the provider offers for this title. */
+export const PosterOptionsResponse = z.object({
   mediaId: z.string(),
   posters: z.array(ArtworkChoice),
-  backdrops: z.array(ArtworkChoice),
-  /** Currently effective source URL for each kind (override, or the default). */
-  selectedPoster: z.string().nullable(),
-  selectedBackdrop: z.string().nullable(),
-  hasPosterOverride: z.boolean(),
-  hasBackdropOverride: z.boolean(),
+  currentPosterUrl: z.string().nullable(),
 });
-export type ArtworkOptionsResponse = z.infer<typeof ArtworkOptionsResponse>;
+export type PosterOptionsResponse = z.infer<typeof PosterOptionsResponse>;
 
-/** sourceUrl: null resets to the provider default. */
-export const SetArtworkRequest = z.object({
-  kind: ArtworkKind,
-  sourceUrl: z.string().nullable(),
+/** PUT /media/:id/poster — sets the poster for this title for every member,
+ *  like a Letterboxd data correction rather than a personal preference. */
+export const SetPosterRequest = z.object({
+  sourceUrl: z.string(),
 });
-export type SetArtworkRequest = z.infer<typeof SetArtworkRequest>;
+export type SetPosterRequest = z.infer<typeof SetPosterRequest>;

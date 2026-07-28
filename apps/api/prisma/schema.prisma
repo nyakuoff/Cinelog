@@ -48,7 +48,6 @@ model User {
   watchHistory   WatchHistory[]
   ratings        Rating[]
   episodeRatings EpisodeRating[]
-  artwork        UserArtwork[]
   reviews        Review[]
   reviewLikes    ReviewLike[]
   reviewComments ReviewComment[]
@@ -112,7 +111,6 @@ model MediaItem {
   history  WatchHistory[]
   ratings  Rating[]
   seasons  Season[]
-  artwork  UserArtwork[]
   reviews  Review[]
   listItems ListItem[]
   activityEvents ActivityEvent[]
@@ -126,22 +124,6 @@ model MediaItem {
 // Per-user artwork override: lets a user pick a different poster/backdrop than
 // the media's default, from the set of images the provider offers. Never
 // affects other users. Absence of a row means "use the provider default".
-model UserArtwork {
-  id          String   @id @default(cuid())
-  userId      String
-  mediaItemId String
-  type        String // ArtworkKind: POSTER | BACKDROP
-  url         String // raw provider source URL (proxied for display at read time)
-  createdAt   DateTime @default(now())
-
-  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, mediaItemId, type])
-  @@index([mediaItemId])
-  @@map("user_artwork")
-}
-
 // ---------------------------------------------------------------------------
 // Seasons & episodes (first-class; cached from the provider)
 // ---------------------------------------------------------------------------

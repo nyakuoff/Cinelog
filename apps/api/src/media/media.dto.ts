@@ -5,7 +5,7 @@ import {
   MediaRef,
   MediaType,
   RematchRequest,
-  SetArtworkRequest,
+  SetPosterRequest,
 } from '@cinelog/contracts';
 
 export const SearchQuery = z.object({
@@ -15,6 +15,6 @@ export const SearchQuery = z.object({
 
 export class SearchQueryDto extends createZodDto(SearchQuery) {}
 export class MediaRefDto extends createZodDto(MediaRef) {}
-export class SetArtworkDto extends createZodDto(SetArtworkRequest) {}
+export class SetPosterDto extends createZodDto(SetPosterRequest) {}
 export class RematchDto extends createZodDto(RematchRequest) {}
 export class AdminUpdateCastDto extends createZodDto(AdminUpdateCastRequest) {}

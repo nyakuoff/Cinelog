@@ -114,7 +114,7 @@ export function MediaDetailPage(): JSX.Element {
                 </div>
                 <button
                   onClick={() => setEditingArtwork(true)}
-                  title="Edit artwork"
+                  title="Change poster"
                   className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-black/70 text-content opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 focus:opacity-100"
                 >
                   ✎

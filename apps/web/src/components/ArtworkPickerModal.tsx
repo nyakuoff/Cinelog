@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ArtworkKind } from '@cinelog/contracts';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Button, Spinner } from './ui';
@@ -10,13 +9,10 @@ interface Props {
   onClose: () => void;
 }
 
-const TABS: { key: ArtworkKind; label: string }[] = [
-  { key: 'POSTER', label: 'Poster' },
-  { key: 'BACKDROP', label: 'Backdrop' },
-];
-
+/** Poster picker — changes the poster for this title for every member, like a
+ *  Letterboxd data correction rather than a personal preference. There's no
+ *  backdrop picker: backdrops aren't editable, only posters. */
 export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
-  const [kind, setKind] = useState<ArtworkKind>('POSTER');
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -28,28 +24,22 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
   }, [onClose]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['artwork-options', mediaId],
-    queryFn: () => api.getArtworkOptions(mediaId),
+    queryKey: ['poster-options', mediaId],
+    queryFn: () => api.getPosterOptions(mediaId),
   });
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['artwork-options', mediaId] });
-    void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
-    void queryClient.invalidateQueries({ queryKey: ['library'] });
-  };
   const applyMut = useMutation({
-    mutationFn: (sourceUrl: string) => api.setArtwork(mediaId, kind, sourceUrl),
-    onSuccess: invalidate,
-  });
-  const resetMut = useMutation({
-    mutationFn: () => api.setArtwork(mediaId, kind, null),
-    onSuccess: invalidate,
+    mutationFn: (sourceUrl: string) => api.setPoster(mediaId, sourceUrl),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['poster-options', mediaId] });
+      void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
+      void queryClient.invalidateQueries({ queryKey: ['library'] });
+      void queryClient.invalidateQueries({ queryKey: ['discover'] });
+    },
   });
 
-  const choices = data ? (kind === 'POSTER' ? data.posters : data.backdrops) : [];
-  const selected = data ? (kind === 'POSTER' ? data.selectedPoster : data.selectedBackdrop) : null;
-  const hasOverride = data ? (kind === 'POSTER' ? data.hasPosterOverride : data.hasBackdropOverride) : false;
-  const busy = applyMut.isPending || resetMut.isPending;
+  const choices = data?.posters ?? [];
+  const selected = data?.currentPosterUrl ?? null;
 
   return (
     <div
@@ -59,28 +49,14 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Edit artwork"
+        aria-label="Change poster"
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface shadow-soft"
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
           <h2 className="w-full font-cond text-lg font-extrabold uppercase tracking-tight sm:w-auto sm:mr-auto">
-            Edit artwork
+            Change poster
           </h2>
-          <div className="flex gap-1 rounded-xl border border-border bg-surface-2 p-1">
-            {TABS.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setKind(t.key)}
-                className={cn(
-                  'rounded-lg px-3 py-1 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors',
-                  kind === t.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -97,25 +73,19 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
             </div>
           ) : choices.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted">
-              No alternate {kind === 'POSTER' ? 'posters' : 'backdrops'} are available for this title.
+              No alternate posters are available for this title.
             </p>
           ) : (
-            <div
-              className={cn(
-                'grid gap-3',
-                kind === 'POSTER' ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3',
-              )}
-            >
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
               {choices.map((c) => {
                 const isSelected = c.sourceUrl === selected;
                 return (
                   <button
                     key={c.sourceUrl}
-                    disabled={busy}
+                    disabled={applyMut.isPending}
                     onClick={() => applyMut.mutate(c.sourceUrl)}
                     className={cn(
-                      'group relative overflow-hidden rounded-lg border-2 bg-surface-2 transition-colors disabled:opacity-60',
-                      kind === 'POSTER' ? 'aspect-[2/3]' : 'aspect-video',
+                      'group relative aspect-[2/3] overflow-hidden rounded-lg border-2 bg-surface-2 transition-colors disabled:opacity-60',
                       isSelected ? 'border-gold' : 'border-transparent hover:border-border-hi',
                     )}
                   >
@@ -143,17 +113,10 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
-          <p className="text-xs text-muted-2">Only visible to you — no one else's library changes.</p>
-          <div className="flex gap-2">
-            {hasOverride && (
-              <Button size="sm" variant="secondary" disabled={busy} onClick={() => resetMut.mutate()}>
-                Reset to default
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" onClick={onClose}>
-              Done
-            </Button>
-          </div>
+          <p className="text-xs text-muted-2">Changes the poster for everyone, not just you.</p>
+          <Button size="sm" variant="ghost" onClick={onClose}>
+            Done
+          </Button>
         </div>
       </div>
     </div>

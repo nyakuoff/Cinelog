@@ -77,7 +77,7 @@ export function Layout(): JSX.Element {
 
   return (
     <div className="min-h-full">
-      <header className="sticky top-0 z-40 border-b border-border-hi/40 bg-bg-2/85 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-5 px-4 sm:h-20 sm:px-6">
           <button
             onClick={() => setNavOpen((v) => !v)}
@@ -102,8 +102,10 @@ export function Layout(): JSX.Element {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'font-cond text-[13.5px] font-bold uppercase tracking-[0.1em]',
-                    isActive ? 'text-content' : 'text-muted hover:text-content',
+                    'border-b-2 pb-0.5 font-cond text-[13px] font-bold uppercase tracking-[0.14em]',
+                    isActive
+                      ? 'border-gold text-content'
+                      : 'border-transparent text-muted hover:text-content',
                   )
                 }
               >
@@ -113,7 +115,7 @@ export function Layout(): JSX.Element {
           </nav>
 
           <form onSubmit={onSearch} className="ml-auto hidden items-center sm:flex">
-            <div className="flex items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-muted transition-colors focus-within:border-cyan">
+            <div className="flex items-center gap-2 rounded-sm border border-border bg-bg px-3 py-2 text-muted transition-colors focus-within:border-gold">
               <span aria-hidden="true" className="opacity-70">
                 ⌕
               </span>
@@ -139,7 +141,7 @@ export function Layout(): JSX.Element {
 
           <button
             onClick={() => setLogging(true)}
-            className="hidden shrink-0 rounded bg-accent px-3.5 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110 sm:inline-flex"
+            className="hidden shrink-0 rounded-sm bg-accent px-3.5 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90 sm:inline-flex"
           >
             + Log
           </button>
@@ -166,7 +168,7 @@ export function Layout(): JSX.Element {
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-border bg-surface p-1.5 shadow-soft"
+                className="absolute right-0 top-full z-50 mt-2 w-52 rounded-sm border border-border-hi bg-surface p-1.5 shadow-soft"
               >
                 <div className="flex items-center gap-2.5 px-2 py-2">
                   <Avatar user={user} size={28} />
@@ -179,7 +181,7 @@ export function Layout(): JSX.Element {
                     to={l.to}
                     onClick={() => setMenuOpen(false)}
                     role="menuitem"
-                    className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
                   >
                     {l.label}
                   </Link>
@@ -189,7 +191,7 @@ export function Layout(): JSX.Element {
                     to="/admin"
                     onClick={() => setMenuOpen(false)}
                     role="menuitem"
-                    className="block rounded-lg px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
                   >
                     Admin panel
                   </Link>
@@ -201,7 +203,7 @@ export function Layout(): JSX.Element {
                     setMenuOpen(false);
                     void logout();
                   }}
-                  className="w-full rounded-lg px-2.5 py-1.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-content"
+                  className="w-full rounded-sm px-2.5 py-1.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-content"
                 >
                   Sign out
                 </button>
@@ -219,7 +221,7 @@ export function Layout(): JSX.Element {
             className="border-t border-border-hi/40 bg-bg-2 px-4 py-3 md:hidden"
           >
             <form onSubmit={onSearch} className="mb-3 flex items-center sm:hidden">
-              <div className="flex w-full items-center gap-2 rounded border border-border bg-surface px-3 py-2 text-muted focus-within:border-cyan">
+              <div className="flex w-full items-center gap-2 rounded-sm border border-border bg-bg px-3 py-2 text-muted focus-within:border-gold">
                 <span aria-hidden="true" className="opacity-70">
                   ⌕
                 </span>
@@ -241,8 +243,10 @@ export function Layout(): JSX.Element {
                   onClick={() => setNavOpen(false)}
                   className={({ isActive }) =>
                     cn(
-                      'rounded-lg px-2 py-2.5 font-cond text-sm font-bold uppercase tracking-[0.08em]',
-                      isActive ? 'text-content' : 'text-muted hover:text-content',
+                      'border-l-2 px-3 py-2.5 font-cond text-sm font-bold uppercase tracking-[0.12em]',
+                      isActive
+                        ? 'border-gold text-content'
+                        : 'border-transparent text-muted hover:text-content',
                     )
                   }
                 >
@@ -262,7 +266,7 @@ export function Layout(): JSX.Element {
       <button
         onClick={() => setLogging(true)}
         aria-label="Log a film"
-        className="fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-accent text-2xl font-extrabold text-ink shadow-soft hover:brightness-110 sm:hidden"
+        className="fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-sm bg-accent font-cond text-2xl font-extrabold text-ink shadow-lift hover:bg-gold/90 sm:hidden"
       >
         +
       </button>

@@ -307,7 +307,7 @@ function Stat({
     'border-r border-border px-4 py-5 text-center last:border-r-0 sm:[&:nth-child(2)]:border-r';
   const inner = (
     <>
-      <div className="font-cond text-3xl font-extrabold tabular-nums text-content sm:text-4xl">
+      <div className="font-data text-3xl font-bold text-content sm:text-4xl">
         {text ?? counted.toLocaleString()}
       </div>
       <div className="mt-0.5 font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted">

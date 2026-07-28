@@ -1,16 +1,17 @@
 import { cn } from '../lib/cn';
 
 /**
- * Cinelog mark — three flat dots in the brand palette (gold / cyan / rose),
- * deliberately understated in the spirit of Letterboxd's dots. No gradients,
- * no glow animation: it should sit quietly next to the wordmark.
+ * Cinelog mark — three punched holes in a strip of film leader, inked in the
+ * three archive colours. Read as sprocket perforations rather than as dots:
+ * the strip and its rounded-square holes are what make it belong to this
+ * world instead of to any app with three circles.
  */
 export function LogoMark({
   size = 28,
-  glow = false,
   className,
 }: {
   size?: number;
+  /** Retained for call-site compatibility; this world has no glow. */
   glow?: boolean;
   className?: string;
 }): JSX.Element {
@@ -19,40 +20,49 @@ export function LogoMark({
       className={cn('inline-grid place-items-center', className)}
       style={{ width: size, height: size }}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 28 28"
-        aria-hidden="true"
-        className={glow ? 'drop-shadow-[0_0_6px_rgba(0,0,0,0.25)]' : undefined}
-      >
-        {/* Slightly overlapping, in palette order. Flat fills, no stroke. */}
-        <circle cx="9" cy="14" r="5.4" fill="rgb(var(--gold))" />
-        <circle cx="14" cy="14" r="5.4" fill="rgb(var(--cyan))" />
-        <circle cx="19" cy="14" r="5.4" fill="rgb(var(--rose))" />
+      <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true">
+        {/* Leader strip */}
+        <rect x="1.5" y="6" width="25" height="16" rx="1.5" fill="rgb(var(--surface-2))" />
+        <rect
+          x="1.5"
+          y="6"
+          width="25"
+          height="16"
+          rx="1.5"
+          fill="none"
+          stroke="rgb(var(--border-hi))"
+          strokeWidth="1"
+        />
+        {/* Punched perforations, in palette order */}
+        <rect x="4.6" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--gold))" />
+        <rect x="11.2" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--cyan))" />
+        <rect x="17.8" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--rose))" />
       </svg>
     </span>
   );
 }
 
-/** Full lockup: dot mark + wordmark (the "log" tinted gold). */
+/** Full lockup: perforated leader + wordmark, the "log" struck in acetate amber. */
 export function Logo({
   size = 28,
-  glow = false,
   className,
   textClassName,
 }: {
   size?: number;
   glow?: boolean;
   className?: string;
-  /** Font-size utility for the wordmark — defaults to inheriting the ambient
-   *  text size, but the topbar wants it noticeably larger. */
+  /** Font-size utility for the wordmark; the topbar wants it noticeably larger. */
   textClassName?: string;
 }): JSX.Element {
   return (
-    <span className={cn('flex items-center gap-2 font-semibold tracking-tight', className)}>
-      <LogoMark size={size} glow={glow} />
-      <span className={textClassName}>
+    <span className={cn('flex items-center gap-2.5', className)}>
+      <LogoMark size={size} />
+      <span
+        className={cn(
+          'font-cond font-extrabold uppercase leading-none tracking-[0.02em]',
+          textClassName,
+        )}
+      >
         Cine<span className="text-gold">log</span>
       </span>
     </span>

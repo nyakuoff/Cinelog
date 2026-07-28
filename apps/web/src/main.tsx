@@ -5,6 +5,15 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './lib/auth';
 import { queryClient } from './lib/queryClient';
+
+// Self-hosted type. Bundled and served by the app itself — a self-hosted
+// instance may have no outbound internet, where a CDN font would just fail
+// to load and silently drop the interface back to system fallbacks.
+// Archivo carries both axes (weight + width); the width axis is what makes
+// `.font-cond` a genuine condensed cut rather than merely bold.
+import '@fontsource-variable/archivo/wdth.css';
+import '@fontsource/courier-prime/400.css';
+import '@fontsource/courier-prime/700.css';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(

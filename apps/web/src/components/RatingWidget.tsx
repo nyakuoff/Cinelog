@@ -20,7 +20,7 @@ export function RatingWidget({ value, scale, onChange, readOnly }: WidgetProps):
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <StarInput value={value} scale={scale} onChange={onChange} readOnly={readOnly} size={cfg.max === 10 ? 19 : 26} />
       {value !== null && (
-        <span className="font-cond text-lg font-extrabold tabular-nums text-gold">
+        <span className="font-data text-lg font-bold text-gold">
           {fromNormalized(value, scale)}
           <span className="text-xs text-muted-2">/{cfg.max}</span>
         </span>

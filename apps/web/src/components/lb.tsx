@@ -1,49 +1,63 @@
 /**
- * Letterboxd-pattern layout primitives.
+ * Shared layout grammar — the archive's notation system.
  *
- * These encode the structural conventions the whole app follows: caption-less
- * dense poster grids, ruled uppercase section headers with a trailing "more"
- * link, underline tab bars, and inline ★★★★½ star text. Colors/type come from
- * the Cinelog tokens in index.css — only the layout grammar is shared.
+ * Section heads read as shelf labels, dividers are sprocket-perforated film
+ * edge, data is typewritten, and a title's provider coordinates are printed
+ * beneath it the way a can carries its accession number. Colour and type come
+ * from the tokens in index.css; only the grammar lives here.
  */
 import { Link } from 'react-router-dom';
 import type { MediaType } from '@cinelog/contracts';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
 
-/** Ruled uppercase section header with an optional right-aligned link. */
+/**
+ * Shelf label: a condensed caps heading over a perforated rule, with an
+ * optional count set as a machine record and a link out to the right.
+ */
 export function SectionHeader({
   title,
+  count,
   more,
   moreLabel = 'More',
   right,
 }: {
   title: string;
+  /** Rendered as a typewritten tally beside the heading. */
+  count?: number;
   more?: string;
   moreLabel?: string;
   right?: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-border pb-1.5">
-      <h2 className="font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-muted">
-        {title}
-      </h2>
-      {right ??
-        (more ? (
-          <Link
-            to={more}
-            className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 hover:text-content"
-          >
-            {moreLabel}
-          </Link>
-        ) : null)}
+    <div className="mb-3">
+      <div className="flex items-baseline justify-between gap-3 pb-1.5">
+        <h2 className="flex items-baseline gap-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.16em] text-content">
+          {title}
+          {count != null && (
+            <span className="font-data text-[11px] font-normal tracking-normal text-muted-2">
+              {count}
+            </span>
+          )}
+        </h2>
+        {right ??
+          (more ? (
+            <Link
+              to={more}
+              className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 hover:text-gold"
+            >
+              {moreLabel}
+            </Link>
+          ) : null)}
+      </div>
+      <div className="rule-perf" />
     </div>
   );
 }
 
 /**
- * A bare poster tile — no caption. The title lives in the tooltip and alt text,
- * matching how a dense film grid reads: artwork first, text on demand.
+ * A bare poster tile. The title lives in the tooltip and alt text — artwork
+ * first, text on demand, which is how a dense shelf actually reads.
  */
 export function Poster({
   title,
@@ -66,21 +80,16 @@ export function Poster({
   const tile = (
     <span
       className={cn(
-        'group relative block aspect-[2/3] w-full overflow-hidden rounded-[3px] bg-card',
-        'ring-1 ring-border-hi/50 transition-[box-shadow,transform] duration-150',
-        'hover:z-10 hover:ring-2 hover:ring-cyan focus-visible:ring-2 focus-visible:ring-cyan',
+        'group relative block aspect-[2/3] w-full overflow-hidden rounded-sm bg-card',
+        'ring-1 ring-border-hi/60 transition-[box-shadow,border-color] duration-150',
+        'hover:z-10 hover:ring-2 hover:ring-gold group-focus-visible:ring-2 group-focus-visible:ring-gold',
       )}
     >
       {posterUrl ? (
-        <img
-          src={posterUrl}
-          alt={title}
-          loading="lazy"
-          className="h-full w-full object-cover"
-        />
+        <img src={posterUrl} alt={title} loading="lazy" className="h-full w-full object-cover" />
       ) : (
         <span className="absolute inset-0 block" style={{ background: posterGradient(title) }}>
-          <span className="absolute inset-x-1.5 bottom-2 block font-cond text-[13px] font-bold uppercase leading-tight text-white/95">
+          <span className="absolute inset-x-1.5 bottom-2 block font-cond text-[13px] font-extrabold uppercase leading-tight text-white/95">
             {title}
           </span>
         </span>
@@ -127,7 +136,7 @@ export function PosterGrid({ children }: { children: React.ReactNode }): JSX.Ele
 /** A horizontally scrolling poster rail, for "recent"/"popular" strips. */
 export function PosterRail({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <div className="-mx-1 overflow-x-auto pb-1">
+    <div className="rail-mask -mx-1 overflow-x-auto pb-1 scrollbar-none">
       <div className="flex gap-2.5 px-1">{children}</div>
     </div>
   );
@@ -156,13 +165,43 @@ export function StarText({
   );
 }
 
+/**
+ * A title's provider coordinates, typewritten — the accession line. This is
+ * the detail that makes a screen read as a catalogue record rather than a
+ * storefront, and it is genuinely useful: it is the id you would search for.
+ */
+export function Accession({
+  provider,
+  externalId,
+  year,
+  runtime,
+  className,
+}: {
+  provider?: string | null;
+  externalId?: string | null;
+  year?: number | null;
+  runtime?: number | null;
+  className?: string;
+}): JSX.Element | null {
+  const parts: string[] = [];
+  if (provider && externalId) parts.push(`${provider}·${externalId.replace(/^\w+:/, '')}`);
+  if (year) parts.push(String(year));
+  if (runtime) parts.push(`${runtime}m`);
+  if (parts.length === 0) return null;
+  return (
+    <p className={cn('font-data text-[11px] leading-none text-muted-2', className)}>
+      {parts.join('  ·  ')}
+    </p>
+  );
+}
+
 export interface TabItem {
   key: string;
   label: string;
   count?: number;
 }
 
-/** Underlined uppercase tab bar. */
+/** Index-tab bar: condensed caps, counts typewritten, active tab ruled in ink. */
 export function TabBar({
   tabs,
   active,
@@ -184,7 +223,7 @@ export function TabBar({
           aria-selected={active === t.key}
           onClick={() => onChange(t.key)}
           className={cn(
-            'shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-cond text-[12px] font-bold uppercase tracking-[0.12em] transition-colors',
+            'shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-cond text-[12px] font-bold uppercase tracking-[0.13em] transition-colors',
             active === t.key
               ? 'border-gold text-content'
               : 'border-transparent text-muted hover:text-content',
@@ -192,7 +231,9 @@ export function TabBar({
         >
           {t.label}
           {t.count != null && (
-            <span className="ml-1.5 tabular-nums text-muted-2">{t.count}</span>
+            <span className="ml-1.5 font-data text-[11px] font-normal tracking-normal text-muted-2">
+              {t.count}
+            </span>
           )}
         </button>
       ))}
@@ -211,7 +252,7 @@ export const TYPE_LABEL: Record<MediaType, string> = {
   SPECIAL: 'Special',
 };
 
-/** Empty-state block used across browse and profile tabs. */
+/** An empty shelf: ruled card stock with the reason typed onto it. */
 export function EmptyState({
   title,
   body,
@@ -222,9 +263,11 @@ export function EmptyState({
   action?: React.ReactNode;
 }): JSX.Element {
   return (
-    <div className="rounded border border-dashed border-border-hi bg-surface/40 px-6 py-14 text-center">
-      <p className="font-cond text-lg font-bold uppercase tracking-tight text-content">{title}</p>
-      {body && <p className="mx-auto mt-2 max-w-md text-sm text-muted">{body}</p>}
+    <div className="rounded-sm border border-dashed border-border-hi bg-surface/40 px-6 py-14 text-center">
+      <p className="font-cond text-lg font-extrabold uppercase tracking-[0.06em] text-content">
+        {title}
+      </p>
+      {body && <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-muted">{body}</p>}
       {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
   );

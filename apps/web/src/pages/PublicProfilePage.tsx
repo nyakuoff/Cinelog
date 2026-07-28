@@ -175,7 +175,7 @@ export function PublicProfilePage(): JSX.Element {
                   {profile.topGenres.map((g) => (
                     <span
                       key={g.genre}
-                      className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-muted"
+                      className="rounded-sm border border-border-hi bg-surface-2 px-2.5 py-1 font-cond text-[11px] font-bold uppercase tracking-[0.08em] text-muted"
                     >
                       {g.genre} <span className="text-muted-2">· {g.count}</span>
                     </span>
@@ -565,7 +565,7 @@ function WatchedTab({ username }: { username: string }): JSX.Element {
 
 function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <h2 className="mb-3 font-cond text-[13px] font-extrabold uppercase tracking-[0.12em] text-muted">
+    <h2 className="mb-3 font-cond text-[13px] font-extrabold uppercase tracking-[0.16em] text-content">
       {children}
     </h2>
   );
@@ -603,11 +603,11 @@ function RatingHistogram({ buckets }: { buckets: { bucket: number; count: number
       {buckets.map((b) => (
         <div key={b.bucket} className="flex flex-1 flex-col items-center gap-1">
           <div
-            className="w-full rounded-t bg-gradient-to-t from-gold/40 to-gold"
+            className={cn('w-full', b.count > 0 ? 'bg-gold' : 'bg-border')}
             style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }}
             title={`${b.count} rating${b.count === 1 ? '' : 's'}`}
           />
-          <span className="text-[10px] text-muted-2">{b.bucket}</span>
+          <span className="font-data text-[10px] text-muted-2">{b.bucket}</span>
         </div>
       ))}
     </div>
@@ -721,8 +721,8 @@ function StatsRow({ profile }: { profile: PublicProfile }): JSX.Element {
     <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border pt-6 sm:grid-cols-6">
       {items.map((i) => (
         <div key={i.label} className="text-center">
-          <p className="font-cond text-2xl font-extrabold tabular-nums text-content">{i.value}</p>
-          <p className="font-cond text-[11px] font-bold uppercase tracking-wide text-muted-2">
+          <p className="font-data text-2xl font-bold text-content">{i.value}</p>
+          <p className="font-cond text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2">
             {i.label}
           </p>
         </div>

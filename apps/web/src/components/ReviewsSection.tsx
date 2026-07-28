@@ -5,7 +5,7 @@ import { fromNormalized, type RatingScale } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Avatar } from './Avatar';
-import { Button, Spinner } from './ui';
+import { Button, Select, Spinner } from './ui';
 
 const SORTS: { value: ReviewSort; label: string }[] = [
   { value: 'POPULAR', label: 'Popular' },
@@ -36,17 +36,17 @@ export function ReviewsSection({ mediaId, scale }: { mediaId: string; scale: Rat
         <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
           Reviews
         </h2>
-        <select
+        <Select
           value={sort}
           onChange={(e) => setSort(e.target.value as ReviewSort)}
-          className="h-8 rounded-lg border border-border bg-surface-2 px-2.5 text-[13px] text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+          className="h-8"
         >
           {SORTS.map((s) => (
             <option key={s.value} value={s.value}>
               Sort: {s.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       <ReviewComposer mediaId={mediaId} scale={scale} existing={ownReview} onSaved={invalidate} />

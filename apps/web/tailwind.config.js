@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Cinelog identity — "teal & orange" cinema grade on indigo-plum night.
-        // Driven by CSS variables (index.css) so a light theme can be added later.
+        // Archive & Accession — see index.css for the world these serve.
+        // Driven by CSS variables so a light theme stays possible later.
         bg: 'rgb(var(--bg) / <alpha-value>)',
         'bg-2': 'rgb(var(--bg-2) / <alpha-value>)',
         surface: 'rgb(var(--surface) / <alpha-value>)',
@@ -16,7 +16,7 @@ export default {
         content: 'rgb(var(--content) / <alpha-value>)',
         muted: 'rgb(var(--muted) / <alpha-value>)',
         'muted-2': 'rgb(var(--muted-2) / <alpha-value>)',
-        // Accents: amber (primary) · cyan (secondary) · rose (affection)
+        // Three inks: acetate/edge-code · verdigris · stamp red.
         accent: 'rgb(var(--gold) / <alpha-value>)',
         gold: 'rgb(var(--gold) / <alpha-value>)',
         cyan: 'rgb(var(--cyan) / <alpha-value>)',
@@ -24,47 +24,37 @@ export default {
         ink: 'rgb(var(--ink) / <alpha-value>)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Arial', 'sans-serif'],
-        // Condensed grotesque for uppercase eyebrows, titles, and data.
-        cond: ['"Haas Grot Disp"', '"Helvetica Neue"', '"Arial Narrow"', 'system-ui', 'sans-serif'],
+        // One superfamily carries text and labels; its width axis supplies the
+        // condensed cut (see .font-cond in index.css). Self-hosted via
+        // fontsource — a self-hosted instance may have no outbound internet,
+        // so a CDN font would simply fail to load there.
+        sans: ['"Archivo Variable"', 'system-ui', '-apple-system', 'Segoe UI', 'Arial', 'sans-serif'],
+        cond: ['"Archivo Variable"', '"Arial Narrow"', 'system-ui', 'sans-serif'],
+        // Typewriter for machine records: codes, dates, counts, runtimes.
+        data: ['"Courier Prime"', '"Courier New"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
-        xl: '0.75rem',
-        '2xl': '1rem',
+        // Labels are cut rectangles. The scale is deliberately near-square, so
+        // every `rounded-xl`/`rounded-2xl` already in the codebase resolves to
+        // a label corner instead of a pill — the world holds across a hundred
+        // call sites without editing each one.
+        DEFAULT: '2px',
+        sm: '1px',
+        md: '2px',
+        lg: '3px',
+        xl: '3px',
+        '2xl': '4px',
+        '3xl': '5px',
       },
       boxShadow: {
-        soft: '0 12px 34px -12px rgb(0 0 0 / 0.72)',
-        'glow-gold': '0 20px 42px -12px rgb(255 177 60 / 0.32)',
+        // Printed matter sits on a shelf: it does not float and never glows.
+        // Real offset + blur, no coloured halos.
+        soft: '0 10px 24px -14px rgb(0 0 0 / 0.85)',
+        lift: '0 16px 34px -18px rgb(0 0 0 / 0.9)',
       },
-      keyframes: {
-        fadeup: {
-          from: { opacity: '0', transform: 'translateY(18px)' },
-          to: { opacity: '1', transform: 'none' },
-        },
-        kenburns: {
-          from: { transform: 'scale(1) translate(0,0)' },
-          to: { transform: 'scale(1.12) translate(-2%, -1.5%)' },
-        },
-        marquee: {
-          from: { transform: 'translateX(0)' },
-          to: { transform: 'translateX(-50%)' },
-        },
-        glowpulse: {
-          '0%,100%': { boxShadow: '0 6px 18px -6px rgb(255 177 60 / 0.5)' },
-          '50%': { boxShadow: '0 6px 20px -6px rgb(69 208 221 / 0.55)' },
-        },
-        blip: {
-          '0%': { boxShadow: '0 0 0 0 rgb(69 208 221 / 0.6)' },
-          '70%,100%': { boxShadow: '0 0 0 7px rgb(69 208 221 / 0)' },
-        },
-      },
-      animation: {
-        fadeup: 'fadeup 0.6s both',
-        kenburns: 'kenburns 26s ease-in-out infinite alternate',
-        marquee: 'marquee 42s linear infinite',
-        glowpulse: 'glowpulse 5s ease-in-out infinite',
-        blip: 'blip 1.8s ease-out infinite',
-      },
+      // Everything that used to live here — kenburns, glowpulse, blip, the
+      // staggered fadeup on every tile — was scattered decoration. The world's
+      // single authored motion is the stamp strike, defined in index.css.
     },
   },
   plugins: [],

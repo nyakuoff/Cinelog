@@ -18,9 +18,9 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
   return (
     <Link
       to={`/lists/${list.id}`}
-      className="group block rounded border border-border bg-surface/60 p-3 transition-colors hover:border-border-hi"
+      className="group block rounded-sm border border-border bg-surface p-3 transition-colors hover:border-gold"
     >
-      <div className="flex h-[86px] items-center justify-center overflow-hidden rounded bg-surface-2">
+      <div className="flex h-[86px] items-center justify-center overflow-hidden rounded-sm bg-bg-2">
         {posters.length === 0 ? (
           <span className="font-cond text-[11px] font-bold uppercase tracking-wider text-muted-2">
             Empty list
@@ -48,14 +48,14 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
                 style={{ marginLeft: -18, zIndex: posters.length }}
                 className="grid h-[86px] w-[58px] shrink-0 place-items-center overflow-hidden rounded-[2px] bg-black/70 ring-1 ring-black/40"
               >
-                <span className="font-cond text-[13px] font-extrabold text-white">+{overflow}</span>
+                <span className="font-data text-[13px] font-bold text-content">+{overflow}</span>
               </div>
             )}
           </div>
         )}
       </div>
 
-      <h3 className="mt-2.5 truncate font-cond text-[15px] font-bold uppercase tracking-tight text-content group-hover:text-gold">
+      <h3 className="mt-2.5 truncate font-cond text-[15px] font-extrabold uppercase tracking-[0.04em] text-content group-hover:text-gold">
         {list.title}
       </h3>
       <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-2">
@@ -65,13 +65,13 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
         />
         <span className="truncate">{list.owner.displayName || list.owner.username}</span>
         <span>·</span>
-        <span className="tabular-nums">
-          {list.itemCount} {list.itemCount === 1 ? 'film' : 'films'}
+        <span className="font-data">
+          {list.itemCount} {list.itemCount === 1 ? 'title' : 'titles'}
         </span>
         {list.likeCount > 0 && (
           <>
             <span>·</span>
-            <span className="tabular-nums text-rose">♥ {list.likeCount}</span>
+            <span className="font-data text-rose">♥ {list.likeCount}</span>
           </>
         )}
         {!list.isPublic && (

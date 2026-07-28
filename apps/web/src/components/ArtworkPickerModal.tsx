@@ -50,7 +50,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/85 p-4"
       onClick={onClose}
     >
       <div
@@ -108,7 +108,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
                       </span>
                     )}
                     {c.language && (
-                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] uppercase text-muted backdrop-blur">
+                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] uppercase text-muted">
                         {c.language}
                       </span>
                     )}

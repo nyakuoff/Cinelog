@@ -1,5 +1,6 @@
 import { cn } from '../lib/cn';
 import { SORT_OPTIONS, type SortKey } from '../lib/sortLibrary';
+import { Select } from './ui';
 
 interface Props {
   value: SortKey;
@@ -14,7 +15,7 @@ export function SortSelect({ value, onChange, className }: Props): JSX.Element {
       <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2">
         Sort
       </span>
-      <select
+      <Select
         value={value}
         onChange={(e) => onChange(e.target.value as SortKey)}
         aria-label="Sort by"
@@ -28,7 +29,7 @@ export function SortSelect({ value, onChange, className }: Props): JSX.Element {
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }

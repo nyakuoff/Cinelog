@@ -15,7 +15,7 @@ import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { LogModal } from '../components/LogModal';
-import { Poster, SectionHeader, StarText, TabBar } from '../components/lb';
+import { Accession, Poster, SectionHeader, StarText, TabBar, TYPE_LABEL } from '../components/lb';
 import { Avatar } from '../components/Avatar';
 
 type InfoTab = 'cast' | 'crew' | 'details' | 'genres';
@@ -90,7 +90,7 @@ export function MediaDetailPage(): JSX.Element {
           header, with the poster overlapping its lower edge. */}
       <div className="relative">
         {m.backdropUrl && (
-          <div className="absolute inset-x-0 top-0 h-[380px] overflow-hidden sm:h-[520px]">
+          <div className="absolute inset-x-0 top-0 h-[240px] overflow-hidden sm:h-[340px]">
             <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
             <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/75 to-bg/25" />
             <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg to-transparent" />
@@ -100,7 +100,7 @@ export function MediaDetailPage(): JSX.Element {
         <div
           className={cn(
             'relative mx-auto max-w-6xl px-4 sm:px-6',
-            m.backdropUrl ? 'pt-56 sm:pt-80' : 'pt-10',
+            m.backdropUrl ? 'pt-32 sm:pt-48' : 'pt-10',
           )}
         >
           <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
@@ -115,7 +115,7 @@ export function MediaDetailPage(): JSX.Element {
                 <button
                   onClick={() => setEditingArtwork(true)}
                   title="Change poster"
-                  className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-black/70 text-content opacity-0 backdrop-blur transition-opacity group-hover:opacity-100 focus:opacity-100"
+                  className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                 >
                   ✎
                 </button>
@@ -159,21 +159,30 @@ export function MediaDetailPage(): JSX.Element {
                 </p>
               )}
 
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
-                {m.runtime && <span className="tabular-nums">{formatRuntime(m.runtime)}</span>}
+              {/* Accession line — the catalogue coordinates for this record,
+                  and genuinely the id you'd search the provider for. */}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <Accession
+                  provider={m.provider}
+                  externalId={m.externalId}
+                  runtime={m.runtime}
+                />
+                <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
+                  {TYPE_LABEL[m.type]}
+                </span>
                 {m.trailerUrl && (
                   <a
                     href={m.trailerUrl}
                     target="_blank"
                     rel="noreferrer noopener"
-                    className="text-cyan hover:underline"
+                    className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-cyan hover:underline"
                   >
                     ▶ Trailer
                   </a>
                 )}
                 <button
                   onClick={() => setFixingMismatch(true)}
-                  className="text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
+                  className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
                 >
                   Wrong title?
                 </button>
@@ -247,7 +256,11 @@ export function MediaDetailPage(): JSX.Element {
   );
 }
 
-/** The boxed action stack under the poster: watch / like / watchlist, then rate. */
+/**
+ * The record card under the poster. Each state is a stamp struck onto the
+ * record rather than a lit chip — pressing one plays the single authored
+ * motion in the app, so marking a title watched actually feels like marking it.
+ */
 function ActionPanel({
   state,
   scale,
@@ -269,68 +282,77 @@ function ActionPanel({
 }): JSX.Element {
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
   return (
-    <div className="rounded border border-border bg-surface/80 p-3">
-      <div className="flex items-stretch justify-between gap-1">
-        <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} icon="👁" />
-        <PanelAction label="Like" active={state.isFavorite} tone="rose" onClick={onLike} icon={state.isFavorite ? '♥' : '♡'} />
-        <PanelAction
-          label="Watchlist"
-          active={state.isWatchlisted}
-          tone="gold"
-          onClick={onWatchlist}
-          icon={state.isWatchlisted ? '🔖' : '＋'}
-        />
+    <div className="rounded-sm border border-border-hi bg-surface">
+      <p className="border-b border-border px-3 py-1.5 font-cond text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+        Your record
+      </p>
+
+      <div className="flex items-stretch gap-1 p-2">
+        <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} />
+        <PanelAction label="Liked" active={state.isFavorite} tone="rose" onClick={onLike} />
+        <PanelAction label="Watchlist" active={state.isWatchlisted} tone="gold" onClick={onWatchlist} />
       </div>
 
-      <div className="mt-3 border-t border-border pt-3">
-        <p className="mb-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
+      <div className="border-t border-border px-3 py-3">
+        <p className="mb-1.5 font-cond text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
           Your rating
         </p>
         <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
       </div>
 
-      <div className="mt-3 border-t border-border pt-3">
+      <div className="border-t border-border px-3 py-3">
         <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
       </div>
 
-      <button
-        onClick={onLog}
-        className="mt-2 w-full rounded bg-accent px-3 py-2 font-cond text-[12px] font-extrabold uppercase tracking-[0.08em] text-ink hover:brightness-110"
-      >
-        Review or log
-      </button>
+      <div className="border-t border-border p-2">
+        <button
+          onClick={onLog}
+          className="w-full rounded-sm bg-accent px-3 py-2 font-cond text-[12px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90"
+        >
+          Review or log
+        </button>
+      </div>
     </div>
   );
 }
 
+/**
+ * One state on the record card. Unset reads as an empty ruled box waiting to
+ * be filled; set reads as struck ink, and strikes on the press that sets it.
+ */
 function PanelAction({
   label,
   active,
   tone,
   onClick,
-  icon,
 }: {
   label: string;
   active: boolean;
   tone: 'cyan' | 'rose' | 'gold';
   onClick: () => void;
-  icon: string;
 }): JSX.Element {
+  // Only animate a strike the user just caused, never on first paint.
+  const [everPressed, setEverPressed] = useState(false);
   const activeTone = tone === 'cyan' ? 'text-cyan' : tone === 'rose' ? 'text-rose' : 'text-gold';
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        setEverPressed(true);
+        onClick();
+      }}
       aria-pressed={active}
       title={label}
-      className={cn(
-        'flex flex-1 flex-col items-center gap-1 rounded px-1 py-2 transition-colors hover:bg-surface-2',
-        active ? activeTone : 'text-muted',
-      )}
+      className="flex flex-1 items-center justify-center rounded-sm px-1 py-2.5 hover:bg-surface-2"
     >
-      <span aria-hidden="true" className="text-lg leading-none">
-        {icon}
+      <span
+        className={cn(
+          'stamp',
+          active ? activeTone : 'text-muted-2 opacity-55',
+          active && everPressed && 'stamp-strike',
+        )}
+      >
+        {label}
       </span>
-      <span className="font-cond text-[10px] font-bold uppercase tracking-[0.08em]">{label}</span>
     </button>
   );
 }
@@ -348,19 +370,23 @@ function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
       ) : (
         <div className="flex items-end gap-3">
           <div className="shrink-0">
-            <p className="font-cond text-3xl font-extrabold leading-none tabular-nums text-gold">
+            <p className="font-data text-2xl font-bold leading-none text-gold">
               {fromNormalized(media.communityRating ?? 0, 'TEN')}
             </p>
-            <p className="mt-1 text-[11px] text-muted-2">
+            <p className="mt-1 font-data text-[11px] text-muted-2">
               {media.ratingCount} rating{media.ratingCount === 1 ? '' : 's'}
             </p>
           </div>
+          {/* Flat bars, no gradient — a printed tally, not a chart widget. */}
           <div className="flex h-12 flex-1 items-end gap-[2px]" aria-hidden="true">
             {media.ratingDistribution.map((b) => (
               <div
                 key={b.bucket}
-                className="flex-1 rounded-t bg-gradient-to-t from-gold/35 to-gold"
-                style={{ height: `${Math.max(5, (b.count / max) * 100)}%` }}
+                className={cn('flex-1', b.count > 0 ? 'bg-gold' : 'bg-border-hi/50')}
+                // An empty bucket still shows a readable baseline tick, so a
+                // sparsely rated title reads as "few ratings" and not as a
+                // broken chart.
+                style={{ height: b.count > 0 ? `${Math.max(12, (b.count / max) * 100)}%` : '3px' }}
                 title={`${b.bucket}/10 — ${b.count} rating${b.count === 1 ? '' : 's'}`}
               />
             ))}
@@ -412,17 +438,20 @@ function StatsPanel({ media }: { media: MediaDetail }): JSX.Element {
   return (
     <div>
       <SectionHeader title="On Cinelog" />
+      {/* A shelf ledger: label left, count typed right, leader between. */}
       <dl className="space-y-1.5 text-sm">
         {rows.map((r) => (
-          <div key={r.label} className="flex items-baseline justify-between gap-3">
+          <div key={r.label} className="flex items-baseline gap-2">
             <dt className="text-muted">{r.label}</dt>
-            <dd className="font-semibold tabular-nums text-content">{r.value}</dd>
+            <span aria-hidden="true" className="min-w-4 flex-1 border-b border-dotted border-border" />
+            <dd className="font-data text-[13px] font-bold text-content">{r.value}</dd>
           </div>
         ))}
         {media.providerRating !== null && (
-          <div className="flex items-baseline justify-between gap-3 border-t border-border pt-1.5">
+          <div className="flex items-baseline gap-2 border-t border-border pt-1.5">
             <dt className="text-muted">TMDB</dt>
-            <dd className="font-semibold tabular-nums text-content">
+            <span aria-hidden="true" className="min-w-4 flex-1 border-b border-dotted border-border" />
+            <dd className="font-data text-[13px] font-bold text-content">
               {(media.providerRating / 10).toFixed(1)}
             </dd>
           </div>

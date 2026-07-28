@@ -117,7 +117,7 @@ function ActivityRow({ item }: { item: ActivityItem }): JSX.Element {
             </>
           )}
         </p>
-        <p className="mt-0.5 text-[11px] text-muted-2">{relativeTime(item.createdAt)}</p>
+        <p className="mt-0.5 font-data text-[11px] text-muted-2">{relativeTime(item.createdAt)}</p>
 
         {allMedia.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -136,7 +136,7 @@ function MiniPoster({ media }: { media: MediaSummary }): JSX.Element {
     <Link
       to={`/media/${media.id}`}
       title={media.title}
-      className="block h-[66px] w-11 shrink-0 overflow-hidden rounded-[2px] ring-1 ring-border-hi/50 hover:ring-2 hover:ring-cyan"
+      className="block h-[66px] w-11 shrink-0 overflow-hidden rounded-sm ring-1 ring-border-hi/60 hover:ring-2 hover:ring-gold"
     >
       {media.posterUrl ? (
         <img src={media.posterUrl} alt={media.title} loading="lazy" className="h-full w-full object-cover" />

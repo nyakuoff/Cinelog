@@ -3,26 +3,52 @@
 @tailwind utilities;
 
 /* ============================================================
-   Cinelog identity — committed dark cinema world.
-   Amber = projector · Cyan = screen glow · Rose = affection.
+   Cinelog — ARCHIVE & ACCESSION
+
+   The visual world is a film & broadcast archive's *labelling
+   system*: gummed labels, stencil-cut titles, rubber-stamped
+   states, typewriter accession codes, sprocket-perforated rules.
+   The back room of cinema, not its front of house.
+
+   Why it fits: this is a library you host and own — accessioned
+   by you, on your shelf. An archive holds broadcast tape and
+   animation as readily as film, which is the point: not just
+   films.
+
+   Rules this world imposes:
+   · Matte and printed. No glow, no glass, no blur-as-decoration.
+   · Corners are cut, not rounded — labels are rectangles.
+   · Colour is ink and stock, reserved for what matters now;
+     the ground stays near-neutral so poster artwork reads true.
+   · Data (codes, dates, counts, ratings) is always typewritten.
+
    Tokens are RGB channel triplets for `rgb(var(--x) / <alpha>)`.
    ============================================================ */
 :root,
 :root.dark {
-  --bg: 21 18 28; /* #15121c indigo-plum night */
-  --bg-2: 16 13 22; /* #100d16 */
-  --surface: 30 26 40; /* #1e1a28 */
-  --surface-2: 42 36 56; /* #2a2438 */
-  --card: 47 40 66; /* #2f2842 */
-  --border: 44 38 64; /* #2c2640 */
-  --border-hi: 69 61 99; /* #453d63 */
-  --content: 236 231 244; /* #ece7f4 */
-  --muted: 169 159 196; /* #a99fc4 lilac-grey */
-  --muted-2: 114 104 137; /* #726889 */
-  --gold: 255 177 60; /* #ffb13c */
-  --cyan: 69 208 221; /* #45d0dd */
-  --rose: 255 93 122; /* #ff5d7a */
-  --ink: 36 21 40; /* #241528 dark text on accents */
+  /* Ground: oxidised steel of a film can — a cold graphite with a
+     faint green cast. Deliberately near-neutral: every screen here
+     is mostly poster artwork, and a tinted ground would falsify
+     several hundred of them at once. */
+  --bg: 22 25 24; /* #161918 vault graphite */
+  --bg-2: 17 20 19; /* #111413 shelf shadow */
+  --surface: 30 34 33; /* #1e2221 label plane */
+  --surface-2: 41 46 44; /* #292e2c raised stock */
+  --card: 51 57 55; /* #333937 */
+  --border: 45 51 49; /* #2d3331 */
+  --border-hi: 74 83 79; /* #4a534f */
+
+  /* Ink on stock — warm off-white, never pure white; a gummed
+     label is paper, not a screen. */
+  --content: 234 232 226; /* #eae8e2 */
+  --muted: 160 163 156; /* #a0a39c  ~6.9:1 on ground */
+  --muted-2: 134 140 135; /* #868c87  ~4.9:1 — still body-legible */
+
+  /* Three inks, each with one job. */
+  --gold: 250 176 58; /* #fab03a acetate + edge-code — your own marks */
+  --cyan: 88 190 178; /* #58beb2 verdigris — annotation, system */
+  --rose: 240 92 100; /* #f05c64 stamp ink — affection */
+  --ink: 20 24 22; /* #141816 dark type on an ink field */
 }
 
 html,
@@ -57,27 +83,26 @@ body {
   }
 }
 
-/* Filmic grain — subtle, fixed, above everything, ignores input. */
+/* Paper tooth. Material, not decoration: it gives the flat fields the
+   slight noise of printed stock so they don't read as glass. */
 body::after {
   content: '';
   position: fixed;
   inset: 0;
   z-index: 9999;
   pointer-events: none;
-  opacity: 0.04;
+  opacity: 0.05;
   mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 a,
 button {
   transition:
-    color 120ms ease,
-    background-color 120ms ease,
-    border-color 120ms ease,
-    opacity 120ms ease,
-    transform 120ms ease,
-    box-shadow 200ms ease;
+    color 110ms ease,
+    background-color 110ms ease,
+    border-color 110ms ease,
+    opacity 110ms ease;
 }
 
 ::-webkit-scrollbar {
@@ -85,11 +110,83 @@ button {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(var(--card));
-  border-radius: 9999px;
+  background-color: rgb(var(--border-hi));
+  border-radius: 0;
 }
 ::-webkit-scrollbar-track {
-  background-color: transparent;
+  background-color: rgb(var(--bg-2));
+}
+
+@layer utilities {
+  /* Condensed cut of the same family — the gummed-label voice.
+     `font-cond` is used throughout for uppercase labels and titles;
+     routing it through the variable width axis makes it genuinely
+     condensed rather than merely bold. */
+  .font-cond {
+    font-stretch: 79%;
+  }
+
+  /* Typewriter data. Every accession code, date, count, and runtime
+     is typeset as a machine record, which is what it is. */
+  .font-data {
+    font-family: 'Courier Prime', 'Courier New', monospace;
+    font-feature-settings: 'tnum' 1;
+  }
+}
+
+/* ---- Rubber stamp ------------------------------------------------
+   State is struck onto the record, never glowed. Used for WATCHED /
+   LIKED / WATCHLISTED and any other "this is now true of this title"
+   mark. The tilt is what makes it read as struck by hand. */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32em;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  padding: 0.2em 0.42em;
+  font-stretch: 79%;
+  font-weight: 800;
+  font-size: 0.6875rem;
+  line-height: 1;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transform: rotate(-1.6deg);
+  opacity: 0.94;
+}
+
+/* The one authored moment in the app: a stamp lands. Fast, firm,
+   slightly overshot — the physics of a hand press, not a fade. */
+@keyframes stamp-strike {
+  0% {
+    transform: rotate(-1.6deg) scale(1.45);
+    opacity: 0;
+  }
+  55% {
+    transform: rotate(-1.6deg) scale(0.93);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(-1.6deg) scale(1);
+    opacity: 0.94;
+  }
+}
+.stamp-strike {
+  animation: stamp-strike 260ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* ---- Sprocket rule -----------------------------------------------
+   The archive's own divider: a perforated edge. Used for major
+   divisions so a section break reads as film stock, not a hairline. */
+.rule-perf {
+  height: 7px;
+  background-image: radial-gradient(
+    circle at 3.5px 3.5px,
+    rgb(var(--border-hi)) 1.6px,
+    transparent 1.7px
+  );
+  background-size: 13px 7px;
+  background-repeat: repeat-x;
 }
 
 /* Star rating (overlay-fill technique). Set width on .stars-fill 0–100%. */
@@ -99,7 +196,7 @@ button {
   font-family: Georgia, 'Times New Roman', serif;
   white-space: nowrap;
   line-height: 1;
-  color: rgb(58 51 82); /* empty star */
+  color: rgb(58 64 61); /* empty star */
 }
 .stars::before,
 .stars-fill::before {
@@ -127,26 +224,14 @@ button {
   display: none;
 }
 
-/* Auto-scrolling marquee row; pause on hover. */
-.marquee-mask {
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
-}
-.marquee-track {
-  display: flex;
-  width: max-content;
-  animation: marquee 42s linear infinite;
-}
-.marquee-mask:hover .marquee-track {
-  animation-play-state: paused;
+/* Edge fade for horizontally scrolling rails. */
+.rail-mask {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 3%, #000 97%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track,
-  .animate-kenburns,
-  .animate-glowpulse,
-  .animate-blip,
-  .animate-fadeup {
+  .stamp-strike {
     animation: none !important;
   }
 }

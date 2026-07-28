@@ -1,5 +1,6 @@
 import type { TrackingStatus } from '@cinelog/contracts';
 import { cn } from '../lib/cn';
+import { Select } from './ui';
 
 export const STATUS_LABELS: Record<TrackingStatus, string> = {
   WATCHING: 'Watching',
@@ -27,14 +28,10 @@ interface Props {
 
 export function StatusPicker({ value, onChange, className }: Props): JSX.Element {
   return (
-    <select
+    <Select
       value={value ?? ''}
       onChange={(e) => onChange((e.target.value || null) as TrackingStatus | null)}
-      className={cn(
-        'h-10 rounded-xl border border-border bg-surface-2 px-3 pr-8 text-sm text-content',
-        'focus:outline-none focus:ring-2 focus:ring-accent/50',
-        className,
-      )}
+      className={className}
     >
       <option value="">Set status…</option>
       {ORDER.map((s) => (
@@ -42,6 +39,6 @@ export function StatusPicker({ value, onChange, className }: Props): JSX.Element
           {STATUS_LABELS[s]}
         </option>
       ))}
-    </select>
+    </Select>
   );
 }

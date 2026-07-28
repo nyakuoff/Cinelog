@@ -105,7 +105,7 @@ export function DiscoverPage(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <h1 className="mb-6 font-cond text-3xl font-extrabold uppercase tracking-tight">Discover</h1>
+      <h1 className="mb-6 font-cond text-3xl font-extrabold uppercase tracking-[0.04em]">Discover</h1>
 
       <FilterBar filters={filters} onChange={setFilters} />
 
@@ -188,7 +188,7 @@ function FilterBar({
   onChange: (f: Filters) => void;
 }): JSX.Element {
   const selectClass =
-    'h-9 rounded-lg border border-border bg-surface-2 px-2.5 text-[13px] text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50';
+    'h-9 rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[12px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold';
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
       <select
@@ -268,27 +268,28 @@ function Rail({
 }): JSX.Element {
   return (
     <section>
-      <div className="mb-3 flex items-baseline gap-2.5">
-        <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
-          {section.title}
-        </h2>
-        <span
-          className={cn(
-            'font-cond text-[10px] font-bold uppercase tracking-wider',
-            section.source === 'CINELOG' ? 'text-gold' : 'text-muted-2',
-          )}
-        >
-          {section.source === 'CINELOG' ? 'Cinelog community' : 'via TMDB'}
-        </span>
-      </div>
-      <div className="marquee-mask -mx-1 overflow-x-auto pb-2">
+      <SectionHeader
+        title={section.title}
+        right={
+          <span
+            className={cn(
+              'font-cond text-[10px] font-bold uppercase tracking-[0.14em]',
+              section.source === 'CINELOG' ? 'text-gold' : 'text-muted-2',
+            )}
+          >
+            {section.source === 'CINELOG' ? 'Cinelog community' : 'via TMDB'}
+          </span>
+        }
+      />
+      <div className="rail-mask -mx-1 overflow-x-auto pb-2 scrollbar-none">
         <div className="flex gap-3.5 px-1">
           {section.items.map((item, i) => (
             <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
+              {/* No type chip here: the section heading above already
+                  states the medium, so per-tile labels would just repeat it. */}
               <PosterCard
                 title={item.title}
                 year={item.year}
-                type={item.type}
                 posterUrl={item.posterUrl}
                 index={i}
                 onClick={() => onOpen(item)}

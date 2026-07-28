@@ -90,19 +90,22 @@ export const ProfileWatchlistResponse = z.object({
 });
 export type ProfileWatchlistResponse = z.infer<typeof ProfileWatchlistResponse>;
 
-/** One rated title on a member's profile — the "Ratings" tab, a poster grid
- *  with the star rating overlaid (mirrors Letterboxd's Films-rated grid). */
-export const ProfileRatingEntry = z.object({
+/** One watched title on a member's profile — the "Watched" tab, a poster grid
+ *  of everything they've rated, marked completed, or logged, with the rating
+ *  overlaid when one exists (mirrors Letterboxd's Films grid). This is the
+ *  same membership test used for the profile's Films/Shows stats, so the
+ *  count in the header always matches what's in the grid. */
+export const ProfileWatchedEntry = z.object({
   media: MediaSummary,
-  rating: z.number().min(0).max(100),
-  ratedAt: z.string().datetime(),
+  rating: z.number().min(0).max(100).nullable(),
+  watchedAt: z.string().datetime(),
 });
-export type ProfileRatingEntry = z.infer<typeof ProfileRatingEntry>;
+export type ProfileWatchedEntry = z.infer<typeof ProfileWatchedEntry>;
 
-export const ProfileRatingsResponse = z.object({
-  entries: z.array(ProfileRatingEntry),
+export const ProfileWatchedResponse = z.object({
+  entries: z.array(ProfileWatchedEntry),
 });
-export type ProfileRatingsResponse = z.infer<typeof ProfileRatingsResponse>;
+export type ProfileWatchedResponse = z.infer<typeof ProfileWatchedResponse>;
 
 /** A single rating from someone the viewer follows, for the "Ratings from
  *  people you follow" panel on a film's page. */

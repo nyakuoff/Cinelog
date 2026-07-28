@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   FavoriteSlot,
   ProfileDiaryResponse,
-  ProfileRatingsResponse,
+  ProfileWatchedResponse,
   ProfileWatchlistResponse,
   PublicProfile,
   UserReviewListResponse,
@@ -55,12 +55,12 @@ export class ProfilesController {
   }
 
   @Public()
-  @Get('users/:username/ratings')
-  getRatings(
+  @Get('users/:username/watched')
+  getWatched(
     @Param('username') username: string,
     @CurrentUser('sub') viewerId: string | undefined,
-  ): Promise<ProfileRatingsResponse> {
-    return this.profiles.getRatings(username, viewerId);
+  ): Promise<ProfileWatchedResponse> {
+    return this.profiles.getWatched(username, viewerId);
   }
 
   @ApiBearerAuth()

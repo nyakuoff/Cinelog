@@ -5,8 +5,7 @@ import type {
   AdminUpdateUserRequest,
   AdminUser,
   AdminUserListResponse,
-  ArtworkKind,
-  ArtworkOptionsResponse,
+  PosterOptionsResponse,
   AuthResponse,
   BackupData,
   BackupImportResult,
@@ -44,7 +43,7 @@ import type {
   MediaDetail,
   MediaRef,
   ProfileDiaryResponse,
-  ProfileRatingsResponse,
+  ProfileWatchedResponse,
   ProfileWatchlistResponse,
   PublicProfile,
   UserReviewListResponse,
@@ -223,8 +222,8 @@ export const api = {
     request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
   getProfileReviews: (username: string) =>
     request<UserReviewListResponse>('GET', `/users/${encodeURIComponent(username)}/reviews`),
-  getProfileRatings: (username: string) =>
-    request<ProfileRatingsResponse>('GET', `/users/${encodeURIComponent(username)}/ratings`),
+  getProfileWatched: (username: string) =>
+    request<ProfileWatchedResponse>('GET', `/users/${encodeURIComponent(username)}/watched`),
 
   // -- social graph -------------------------------------------------------------
   getMembers: (query: Partial<MemberListQuery>) =>
@@ -298,10 +297,10 @@ export const api = {
   getMedia: (id: string) => request<MediaDetail>('GET', `/media/${id}`),
   getSimilar: (id: string) => request<SearchResponse>('GET', `/media/${id}/similar`),
   getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
-  getArtworkOptions: (mediaId: string) =>
-    request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),
-  setArtwork: (mediaId: string, kind: ArtworkKind, sourceUrl: string | null) =>
-    request<void>('PUT', `/media/${mediaId}/artwork`, { kind, sourceUrl }),
+  getPosterOptions: (mediaId: string) =>
+    request<PosterOptionsResponse>('GET', `/media/${mediaId}/poster`),
+  setPoster: (mediaId: string, sourceUrl: string) =>
+    request<void>('PUT', `/media/${mediaId}/poster`, { sourceUrl }),
   rematchMedia: (mediaId: string, dto: RematchRequest) =>
     request<MediaDetail>('PUT', `/media/${mediaId}/rematch`, dto),
   updateMediaCast: (mediaId: string, dto: AdminUpdateCastRequest) =>

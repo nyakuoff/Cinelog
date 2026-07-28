@@ -14,9 +14,9 @@ import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
 import { FollowButton, MemberCard } from '../components/MemberCard';
 import { ListCard } from '../components/ListCard';
 import { CreateListModal } from './ListsPage';
-import { EmptyState, Poster } from '../components/lb';
+import { EmptyState } from '../components/lb';
 
-type Tab = 'overview' | 'diary' | 'reviews' | 'ratings' | 'lists' | 'watchlist' | 'network';
+type Tab = 'overview' | 'diary' | 'reviews' | 'watched' | 'lists' | 'watchlist' | 'network';
 
 export function PublicProfilePage(): JSX.Element {
   const params = useParams<{ username?: string }>();
@@ -94,8 +94,8 @@ export function PublicProfilePage(): JSX.Element {
         <TabButton active={tab === 'reviews'} onClick={() => setTab('reviews')}>
           Reviews
         </TabButton>
-        <TabButton active={tab === 'ratings'} onClick={() => setTab('ratings')}>
-          Ratings
+        <TabButton active={tab === 'watched'} onClick={() => setTab('watched')}>
+          Watched
         </TabButton>
         <TabButton active={tab === 'lists'} onClick={() => setTab('lists')}>
           Lists
@@ -189,7 +189,7 @@ export function PublicProfilePage(): JSX.Element {
 
       {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
       {tab === 'reviews' && <ReviewsTab username={profile.username} />}
-      {tab === 'ratings' && <RatingsTab username={profile.username} />}
+      {tab === 'watched' && <WatchedTab username={profile.username} />}
       {tab === 'lists' && (
         <ListsTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
       )}
@@ -523,11 +523,15 @@ function ReviewsTab({ username }: { username: string }): JSX.Element {
   );
 }
 
-function RatingsTab({ username }: { username: string }): JSX.Element {
+/** Every title the member has watched, rated, or marked completed — not just
+ *  the ones with a diary entry. Uses PosterCard (rating badge top-right) to
+ *  match the same convention as Library/Watchlist, rather than the inline
+ *  star-text style used elsewhere on the page. */
+function WatchedTab({ username }: { username: string }): JSX.Element {
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({
-    queryKey: ['profile-ratings', username],
-    queryFn: () => api.getProfileRatings(username),
+    queryKey: ['profile-watched', username],
+    queryFn: () => api.getProfileWatched(username),
   });
 
   if (isLoading) {
@@ -538,17 +542,20 @@ function RatingsTab({ username }: { username: string }): JSX.Element {
     );
   }
   if ((data?.entries.length ?? 0) === 0) {
-    return <p className="py-10 text-center text-muted">No ratings yet.</p>;
+    return <p className="py-10 text-center text-muted">Nothing watched yet.</p>;
   }
 
   return (
     <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-      {data?.entries.map((e) => (
-        <Poster
+      {data?.entries.map((e, i) => (
+        <PosterCard
           key={e.media.id}
           title={e.media.title}
+          year={e.media.year}
+          type={e.media.type}
           posterUrl={e.media.posterUrl}
           rating={e.rating}
+          index={i}
           onClick={() => navigate(`/media/${e.media.id}`)}
         />
       ))}

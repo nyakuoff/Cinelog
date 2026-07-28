@@ -6,7 +6,7 @@ import {
   type FavoriteSlot,
   type MediaSummary,
   type ProfileDiaryResponse,
-  type ProfileRatingsResponse,
+  type ProfileWatchedResponse,
   type ProfileWatchlistResponse,
   type PublicProfile,
   type UpdateFavoritesRequest,
@@ -134,7 +134,7 @@ export class ProfilesService {
     };
     if (!canView) return base;
 
-    const [favoriteFilmRows, favoriteShowRows, history, ratings, episodeRatingCount, genreRows] =
+    const [favoriteFilmRows, favoriteShowRows, watchedEntries, ratings, episodeRatingCount, genreRows] =
       await Promise.all([
       this.prisma.userMediaStatus.findMany({
         where: { userId: user.id, favoritePosition: { not: null } },
@@ -146,11 +146,7 @@ export class ProfilesService {
         include: { media: true },
         orderBy: { favoriteShowPosition: 'asc' },
       }),
-      this.prisma.watchHistory.findMany({
-        where: { userId: user.id },
-        distinct: ['mediaItemId'],
-        include: { media: { select: { type: true } } },
-      }),
+      this.getWatchedEntries(user.id),
       this.prisma.rating.findMany({ where: { userId: user.id }, select: { value: true } }),
       this.prisma.episodeRating.count({ where: { userId: user.id } }),
       this.prisma.mediaItem.findMany({
@@ -166,8 +162,19 @@ export class ProfilesService {
       .filter((r) => r.favoriteShowPosition != null)
       .map((r) => ({ position: r.favoriteShowPosition as number, media: this.toSummary(r.media) }));
 
-    const moviesWatched = history.filter((h) => h.media.type === 'MOVIE').length;
-    const showsWatched = history.filter((h) => SHOW_TYPES.has(MediaType.catch('MOVIE').parse(h.media.type))).length;
+    // Same membership test that powers the "Watched" tab, so the counts here
+    // always match what's actually in that grid.
+    const watchedIds = [...watchedEntries.keys()];
+    const watchedTypes = watchedIds.length
+      ? await this.prisma.mediaItem.findMany({
+          where: { id: { in: watchedIds } },
+          select: { type: true },
+        })
+      : [];
+    const moviesWatched = watchedTypes.filter((m) => m.type === 'MOVIE').length;
+    const showsWatched = watchedTypes.filter((m) =>
+      SHOW_TYPES.has(MediaType.catch('MOVIE').parse(m.type)),
+    ).length;
     const totalRatings = ratings.length;
     const averageRating = totalRatings
       ? Math.round((ratings.reduce((sum, r) => sum + r.value, 0) / totalRatings) * 10) / 10
@@ -294,24 +301,72 @@ export class ProfilesService {
     }
   }
 
-  async getRatings(username: string, viewerId: string | undefined): Promise<ProfileRatingsResponse> {
+  /** Every title the member has ever watched — the "Watched" tab, a poster
+   *  grid mirroring Letterboxd's Films tab. "Watched" means a diary entry, a
+   *  rating, or a status of COMPLETED; a title can arrive via any of those
+   *  without the other two (e.g. rating something without logging a date),
+   *  and previously only diary entries counted, which badly undercounted
+   *  both this list and the profile's Films/Shows stats. */
+  async getWatched(username: string, viewerId: string | undefined): Promise<ProfileWatchedResponse> {
     const user = await this.findUserOrThrow(username);
     const { canView } = await this.resolveAccess(user, viewerId);
     if (!canView) return { entries: [] };
 
-    const ratings = await this.prisma.rating.findMany({
-      where: { userId: user.id },
-      include: { media: true },
-      orderBy: { updatedAt: 'desc' },
-      take: 200,
-    });
+    const entries = await this.getWatchedEntries(user.id);
+    const ids = [...entries.keys()];
+    if (ids.length === 0) return { entries: [] };
+
+    const media = await this.prisma.mediaItem.findMany({ where: { id: { in: ids } } });
+    const byId = new Map(media.map((m) => [m.id, m]));
+
     return {
-      entries: ratings.map((r) => ({
-        media: this.toSummary(r.media),
-        rating: r.value,
-        ratedAt: r.updatedAt.toISOString(),
-      })),
+      entries: ids
+        .map((id) => {
+          const m = byId.get(id);
+          const e = entries.get(id);
+          if (!m || !e) return null;
+          return { media: this.toSummary(m), rating: e.rating, watchedAt: e.activityAt.toISOString() };
+        })
+        .filter((e): e is { media: MediaSummary; rating: number | null; watchedAt: string } => e !== null)
+        .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime()),
     };
+  }
+
+  /** Unions watch history, ratings, and COMPLETED status into one "have they
+   *  watched this" membership map, keyed by media id, keeping the latest
+   *  rating and the most recent relevant timestamp for each title. */
+  private async getWatchedEntries(
+    userId: string,
+  ): Promise<Map<string, { rating: number | null; activityAt: Date }>> {
+    const [history, ratings, completed] = await Promise.all([
+      this.prisma.watchHistory.findMany({
+        where: { userId },
+        select: { mediaItemId: true, watchedAt: true },
+      }),
+      this.prisma.rating.findMany({
+        where: { userId },
+        select: { mediaItemId: true, value: true, updatedAt: true },
+      }),
+      this.prisma.userMediaStatus.findMany({
+        where: { userId, status: 'COMPLETED' },
+        select: { mediaItemId: true, updatedAt: true },
+      }),
+    ]);
+
+    const entries = new Map<string, { rating: number | null; activityAt: Date }>();
+    const touch = (mediaItemId: string, at: Date, rating?: number): void => {
+      const cur = entries.get(mediaItemId);
+      if (!cur) {
+        entries.set(mediaItemId, { rating: rating ?? null, activityAt: at });
+        return;
+      }
+      if (rating !== undefined) cur.rating = rating;
+      if (at > cur.activityAt) cur.activityAt = at;
+    };
+    for (const h of history) touch(h.mediaItemId, h.watchedAt);
+    for (const c of completed) touch(c.mediaItemId, c.updatedAt);
+    for (const r of ratings) touch(r.mediaItemId, r.updatedAt, r.value);
+    return entries;
   }
 
   private async findUserOrThrow(username: string): Promise<User> {

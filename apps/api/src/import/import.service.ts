@@ -8,6 +8,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { ProviderRegistry } from '../metadata/provider-registry.service';
 import { MediaService } from '../media/media.service';
+import { ActivityService } from '../social/activity.service';
 
 /** Run an async mapper over items with a bounded concurrency. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
@@ -31,6 +32,7 @@ export class ImportService {
     private readonly prisma: PrismaService,
     private readonly registry: ProviderRegistry,
     private readonly media: MediaService,
+    private readonly activity: ActivityService,
   ) {}
 
   /**
@@ -99,18 +101,39 @@ export class ImportService {
       }
       // Without this, "watched" only ever set status+rating — never a diary
       // row — so an imported Letterboxd history never showed up in Diary.
+      let watchedAt: Date | null = null;
       if (item.watchedDate) {
-        const watchedAt = new Date(item.watchedDate);
-        if (!Number.isNaN(watchedAt.getTime())) {
+        const parsed = new Date(item.watchedDate);
+        if (!Number.isNaN(parsed.getTime())) {
+          watchedAt = parsed;
           const exists = await this.prisma.watchHistory.findFirst({
-            where: { userId, mediaItemId: media.id, watchedAt },
+            where: { userId, mediaItemId: media.id, watchedAt: parsed },
           });
           if (!exists) {
             await this.prisma.watchHistory.create({
-              data: { userId, mediaItemId: media.id, watchedAt, isRewatch: false },
+              data: { userId, mediaItemId: media.id, watchedAt: parsed, isRewatch: false },
             });
           }
         }
+      }
+
+      // Imports bypass the normal write paths, so without this an imported
+      // library produces no feed activity at all. Events are dated to the
+      // real watch date where the CSV has one, so a back catalogue slots
+      // into history rather than flooding the top of everyone's feed.
+      await this.activity.recordReplacing({
+        actorId: userId,
+        type: 'WATCHED',
+        mediaItemId: media.id,
+        createdAt: watchedAt,
+      });
+      if (item.rating != null) {
+        await this.activity.recordReplacing({
+          actorId: userId,
+          type: 'RATED',
+          mediaItemId: media.id,
+          createdAt: watchedAt,
+        });
       }
     }
     return { ok: true, name: item.name };

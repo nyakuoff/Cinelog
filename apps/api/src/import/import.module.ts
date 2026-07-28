@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MetadataModule } from '../metadata/metadata.module';
 import { MediaModule } from '../media/media.module';
+import { SocialModule } from '../social/social.module';
 import { ImportController } from './import.controller';
 import { ImportService } from './import.service';
 import { LetterboxdSyncService } from './letterboxd-sync.service';
 
 @Module({
-  imports: [MetadataModule, MediaModule],
+  imports: [MetadataModule, MediaModule, SocialModule],
   controllers: [ImportController],
   providers: [ImportService, LetterboxdSyncService],
 })

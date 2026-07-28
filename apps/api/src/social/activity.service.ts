@@ -9,6 +9,13 @@ export interface RecordActivityInput {
   reviewId?: string | null;
   listId?: string | null;
   targetUserId?: string | null;
+  /**
+   * When the action actually happened, if that isn't now — imports carry a
+   * real watched date, and dating those events "now" would dump a whole
+   * back catalogue at the top of everyone's feed instead of slotting each
+   * entry into its proper place in history.
+   */
+  createdAt?: Date | null;
 }
 
 /**
@@ -34,6 +41,7 @@ export class ActivityService {
           reviewId: input.reviewId ?? null,
           listId: input.listId ?? null,
           targetUserId: input.targetUserId ?? null,
+          ...(input.createdAt ? { createdAt: input.createdAt } : {}),
         },
       });
     } catch (err) {

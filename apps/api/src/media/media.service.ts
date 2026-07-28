@@ -181,7 +181,6 @@ export class MediaService {
       status,
       rating,
       allRatings,
-      posterOverride,
       watchedCount,
       likedCount,
       reviewCount,
@@ -193,9 +192,6 @@ export class MediaService {
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
       this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
-      this.prisma.userPosterOverride.findUnique({
-        where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
-      }),
       // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
       this.prisma.watchHistory
         .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
@@ -237,7 +233,11 @@ export class MediaService {
       runtime: item.runtime,
       overview: item.overview,
       tagline: item.tagline,
-      posterUrl: this.artwork.toProxyUrl(posterOverride?.url ?? item.posterPath),
+      // The media page itself always shows the canonical poster — poster
+      // overrides only ever surface in a library context (Diary, Watchlist,
+      // Watched, Favorites, Reviews, the tracking Library page), never here,
+      // no matter who's viewing or how they navigated in.
+      posterUrl: this.artwork.toProxyUrl(item.posterPath),
       backdropUrl: this.artwork.toProxyUrl(item.backdropPath),
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
@@ -352,9 +352,10 @@ export class MediaService {
   }
 
   /** Set (or clear, when sourceUrl is null) this member's own poster
-   *  override. Only changes how the title looks to them — and to anyone
-   *  else specifically browsing their profile/library — never the title
-   *  globally. The chosen URL must be one of the options actually offered. */
+   *  override. Only ever surfaces in library contexts — their own library,
+   *  or someone else browsing their profile/library — never on the media
+   *  page itself for anyone, including this member. The chosen URL must be
+   *  one of the options actually offered. */
   async setPoster(userId: string, mediaId: string, sourceUrl: string | null): Promise<void> {
     if (sourceUrl === null) {
       await this.prisma.userPosterOverride.deleteMany({ where: { userId, mediaItemId: mediaId } });

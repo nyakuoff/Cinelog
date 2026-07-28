@@ -10,9 +10,10 @@ interface Props {
 }
 
 /** Poster picker — sets the caller's own poster override for this title. Only
- *  changes what they (and anyone browsing their profile/library) see; the
- *  title's default poster, and everyone else's view of it, is untouched.
- *  There's no backdrop picker: backdrops aren't editable, only posters. */
+ *  ever surfaces in a library context: their own library, and anyone else's
+ *  view of their profile/library. The media page itself — even the caller's
+ *  own view of it, however they navigated in — always shows the title's
+ *  actual default poster. There's no backdrop picker: posters only. */
 export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
   const queryClient = useQueryClient();
 
@@ -120,7 +121,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
 
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
           <p className="text-xs text-muted-2">
-            Only changes what you (and people browsing your library) see.
+            Changes it in your library, not on this page.
           </p>
           <div className="flex gap-2">
             {data?.hasOverride && (

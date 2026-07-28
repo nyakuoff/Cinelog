@@ -124,11 +124,11 @@ model MediaItem {
 }
 
 // Per-user poster override: lets a member pick a different poster than the
-// title's default, from the set of images the provider offers. Only affects
-// how that title's poster looks *to that member* — their own view of the
-// title, their own library — plus how it looks to other members specifically
-// browsing that member's profile/library (their choice travels with their
-// library, not the title itself). Absence of a row means "use the default".
+// title's default, from the set of images the provider offers. Only ever
+// surfaces in a library context — that member's own library, and anyone
+// else's view of that member's profile/library — never on the media page
+// itself for anyone, including that member (their choice travels with their
+// library, not the title). Absence of a row means "use the default".
 // Backdrops aren't overridable — posters only.
 model UserPosterOverride {
   id          String   @id @default(cuid())

@@ -67,9 +67,10 @@ export class MediaController {
     return this.media.getPosterOptions(userId, id);
   }
 
-  /** Sets (or clears) the caller's own poster override — visible to them and
-   *  to anyone browsing their profile/library, never to anyone else's view
-   *  of the title itself. */
+  /** Sets (or clears) the caller's own poster override — only surfaces in
+   *  library contexts (their own library, or anyone browsing their
+   *  profile/library), never on the media page itself for anyone, including
+   *  the caller. */
   @Put('media/:id/poster')
   @HttpCode(204)
   async setPoster(

@@ -130,10 +130,13 @@ export class TrackingService {
     });
 
     const mediaIds = statuses.map((s) => s.mediaItemId);
-    const ratings = await this.prisma.rating.findMany({
-      where: { userId, mediaItemId: { in: mediaIds } },
-    });
+    const [ratings, posterOverrides] = await Promise.all([
+      this.prisma.rating.findMany({ where: { userId, mediaItemId: { in: mediaIds } } }),
+      // The member's own poster picks must show here too, not just on the detail page.
+      this.prisma.userPosterOverride.findMany({ where: { userId, mediaItemId: { in: mediaIds } } }),
+    ]);
     const ratingByMedia = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
+    const posterByMedia = new Map(posterOverrides.map((a) => [a.mediaItemId, a.url]));
 
     return {
       items: statuses.map((s) => ({
@@ -141,7 +144,7 @@ export class TrackingService {
         type: MediaType.safeParse(s.media.type).data ?? 'MOVIE',
         title: s.media.title,
         year: yearOf(s.media.releaseDate),
-        posterUrl: this.artwork.toProxyUrl(s.media.posterPath),
+        posterUrl: this.artwork.toProxyUrl(posterByMedia.get(s.mediaItemId) ?? s.media.posterPath),
         status: s.status ? (TrackingStatus.safeParse(s.status).data ?? null) : null,
         isFavorite: s.isFavorite,
         isWatchlisted: s.isWatchlisted,

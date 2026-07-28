@@ -146,6 +146,9 @@ export class MediaService {
 
     await this.prisma.$transaction([
       this.prisma.season.deleteMany({ where: { mediaItemId: mediaId } }),
+      // Rematching swaps which title this record actually is, so any poster
+      // override picked from the old title's image set no longer applies.
+      this.prisma.userPosterOverride.deleteMany({ where: { mediaItemId: mediaId } }),
       this.prisma.mediaItem.update({
         where: { id: mediaId },
         data: {
@@ -178,6 +181,7 @@ export class MediaService {
       status,
       rating,
       allRatings,
+      posterOverride,
       watchedCount,
       likedCount,
       reviewCount,
@@ -189,6 +193,9 @@ export class MediaService {
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
       this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
+      this.prisma.userPosterOverride.findUnique({
+        where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
+      }),
       // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
       this.prisma.watchHistory
         .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
@@ -230,7 +237,7 @@ export class MediaService {
       runtime: item.runtime,
       overview: item.overview,
       tagline: item.tagline,
-      posterUrl: this.artwork.toProxyUrl(item.posterPath),
+      posterUrl: this.artwork.toProxyUrl(posterOverride?.url ?? item.posterPath),
       backdropUrl: this.artwork.toProxyUrl(item.backdropPath),
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
@@ -322,30 +329,46 @@ export class MediaService {
     };
   }
 
-  /** Every poster the provider offers for this title. Posters are a shared
-   *  property of the title, not a personal preference — there's no per-user
-   *  override here, just the options and the current global choice. */
-  async getPosterOptions(mediaId: string): Promise<PosterOptionsResponse> {
+  /** Every poster the provider offers for this title, plus which one is
+   *  currently effective for this member (their own override, or the shared
+   *  default). Never affects any other member's view. */
+  async getPosterOptions(userId: string, mediaId: string): Promise<PosterOptionsResponse> {
     const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
     if (!item) throw new NotFoundException('Media not found');
+
+    const override = await this.prisma.userPosterOverride.findUnique({
+      where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
+    });
 
     const raw = this.parseRaw(item.rawMetadata);
     const posters = this.artworkChoices(raw, item.posterPath);
 
-    return { mediaId, posters, currentPosterUrl: item.posterPath };
+    return {
+      mediaId,
+      posters,
+      currentPosterUrl: override?.url ?? item.posterPath,
+      hasOverride: override != null,
+    };
   }
 
-  /** Sets the poster for this title for every member — a shared data
-   *  correction (like Letterboxd), not a personal preference. The chosen URL
-   *  must be one of the options actually offered for this media. */
-  async setPoster(mediaId: string, sourceUrl: string): Promise<void> {
-    const options = await this.getPosterOptions(mediaId);
+  /** Set (or clear, when sourceUrl is null) this member's own poster
+   *  override. Only changes how the title looks to them — and to anyone
+   *  else specifically browsing their profile/library — never the title
+   *  globally. The chosen URL must be one of the options actually offered. */
+  async setPoster(userId: string, mediaId: string, sourceUrl: string | null): Promise<void> {
+    if (sourceUrl === null) {
+      await this.prisma.userPosterOverride.deleteMany({ where: { userId, mediaItemId: mediaId } });
+      return;
+    }
+
+    const options = await this.getPosterOptions(userId, mediaId);
     const valid = options.posters.some((c) => c.sourceUrl === sourceUrl);
     if (!valid) throw new BadRequestException('That poster is not available for this title');
 
-    await this.prisma.mediaItem.update({
-      where: { id: mediaId },
-      data: { posterPath: sourceUrl },
+    await this.prisma.userPosterOverride.upsert({
+      where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
+      create: { userId, mediaItemId: mediaId, url: sourceUrl },
+      update: { url: sourceUrl },
     });
   }
 

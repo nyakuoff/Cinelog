@@ -44,6 +44,9 @@ export const BackupItem = z.object({
   completedAt: z.string().datetime().nullable(),
   rating: z.number().min(0).max(100).nullable(),
   review: BackupReview.nullable().optional().default(null),
+  // The caller's own poster override, if they've set one. Optional/nullable
+  // so older backups without it still parse.
+  posterOverride: z.string().nullable().optional().default(null),
   watchHistory: z.array(BackupWatchEvent),
   episodeRatings: z.array(BackupEpisodeRating),
 });

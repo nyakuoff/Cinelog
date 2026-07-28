@@ -37,6 +37,25 @@ export class ProfilesService {
     };
   }
 
+  /** Overlays `ownerId`'s own poster overrides onto a list of media summaries,
+   *  mutating in place. A poster override travels with its owner's library —
+   *  so anyone browsing this profile's diary/watchlist/watched/favorites sees
+   *  the owner's chosen poster, the same as the owner does themselves. It
+   *  never applies when the title is shown outside that owner's context
+   *  (Discover, Films browse, another member's own library). */
+  private async applyOwnerPosters(ownerId: string, medias: MediaSummary[]): Promise<void> {
+    if (medias.length === 0) return;
+    const overrides = await this.prisma.userPosterOverride.findMany({
+      where: { userId: ownerId, mediaItemId: { in: medias.map((m) => m.id) } },
+    });
+    if (overrides.length === 0) return;
+    const byId = new Map(overrides.map((o) => [o.mediaItemId, o.url]));
+    for (const m of medias) {
+      const url = byId.get(m.id);
+      if (url) m.posterUrl = this.artwork.toProxyUrl(url);
+    }
+  }
+
   async getDiary(username: string, viewerId: string | undefined): Promise<ProfileDiaryResponse> {
     const user = await this.findUserOrThrow(username);
     const { canView } = await this.resolveAccess(user, viewerId);
@@ -54,15 +73,15 @@ export class ProfilesService {
       : [];
     const ratingByMedia = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
 
-    return {
-      entries: history.map((h) => ({
-        id: h.id,
-        media: this.toSummary(h.media),
-        watchedAt: h.watchedAt.toISOString(),
-        isRewatch: h.isRewatch,
-        rating: ratingByMedia.get(h.mediaItemId) ?? null,
-      })),
-    };
+    const entries = history.map((h) => ({
+      id: h.id,
+      media: this.toSummary(h.media),
+      watchedAt: h.watchedAt.toISOString(),
+      isRewatch: h.isRewatch,
+      rating: ratingByMedia.get(h.mediaItemId) ?? null,
+    }));
+    await this.applyOwnerPosters(user.id, entries.map((e) => e.media));
+    return { entries };
   }
 
   async getWatchlist(username: string, viewerId: string | undefined): Promise<ProfileWatchlistResponse> {
@@ -75,7 +94,9 @@ export class ProfilesService {
       include: { media: true },
       orderBy: { updatedAt: 'desc' },
     });
-    return { items: rows.map((r) => this.toSummary(r.media)) };
+    const items = rows.map((r) => this.toSummary(r.media));
+    await this.applyOwnerPosters(user.id, items);
+    return { items };
   }
 
   async getReviews(
@@ -86,7 +107,9 @@ export class ProfilesService {
     const user = await this.findUserOrThrow(username);
     const { canView } = await this.resolveAccess(user, viewerId);
     if (!canView) return { reviews: [], nextCursor: null };
-    return this.reviews.listByAuthor(user.id, viewerId, cursor);
+    const result = await this.reviews.listByAuthor(user.id, viewerId, cursor);
+    await this.applyOwnerPosters(user.id, result.reviews.map((r) => r.media));
+    return result;
   }
 
   async getPublicProfile(username: string, viewerId: string | undefined): Promise<PublicProfile> {
@@ -161,6 +184,10 @@ export class ProfilesService {
     const favoriteShows: FavoriteSlot[] = favoriteShowRows
       .filter((r) => r.favoriteShowPosition != null)
       .map((r) => ({ position: r.favoriteShowPosition as number, media: this.toSummary(r.media) }));
+    await this.applyOwnerPosters(user.id, [
+      ...favoriteFilms.map((f) => f.media),
+      ...favoriteShows.map((f) => f.media),
+    ]);
 
     // Same membership test that powers the "Watched" tab, so the counts here
     // always match what's actually in that grid.
@@ -319,17 +346,17 @@ export class ProfilesService {
     const media = await this.prisma.mediaItem.findMany({ where: { id: { in: ids } } });
     const byId = new Map(media.map((m) => [m.id, m]));
 
-    return {
-      entries: ids
-        .map((id) => {
-          const m = byId.get(id);
-          const e = entries.get(id);
-          if (!m || !e) return null;
-          return { media: this.toSummary(m), rating: e.rating, watchedAt: e.activityAt.toISOString() };
-        })
-        .filter((e): e is { media: MediaSummary; rating: number | null; watchedAt: string } => e !== null)
-        .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime()),
-    };
+    const result = ids
+      .map((id) => {
+        const m = byId.get(id);
+        const e = entries.get(id);
+        if (!m || !e) return null;
+        return { media: this.toSummary(m), rating: e.rating, watchedAt: e.activityAt.toISOString() };
+      })
+      .filter((e): e is { media: MediaSummary; rating: number | null; watchedAt: string } => e !== null)
+      .sort((a, b) => new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime());
+    await this.applyOwnerPosters(user.id, result.map((e) => e.media));
+    return { entries: result };
   }
 
   /** Unions watch history, ratings, and COMPLETED status into one "have they

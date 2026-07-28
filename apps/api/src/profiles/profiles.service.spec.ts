@@ -32,6 +32,7 @@ function makePrisma(
     userMediaStatus: { findMany: jest.fn().mockResolvedValue(watchlistRows) },
     watchHistory: { findMany: jest.fn().mockResolvedValue([]) },
     rating: { findMany: jest.fn().mockResolvedValue([]) },
+    userPosterOverride: { findMany: jest.fn().mockResolvedValue([]) },
     episodeRating: { count: jest.fn().mockResolvedValue(0) },
     mediaItem: { findMany: jest.fn().mockResolvedValue([]) },
   } as unknown as PrismaService;

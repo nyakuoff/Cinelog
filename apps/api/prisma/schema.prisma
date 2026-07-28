@@ -48,6 +48,7 @@ model User {
   watchHistory   WatchHistory[]
   ratings        Rating[]
   episodeRatings EpisodeRating[]
+  posterOverrides UserPosterOverride[]
   reviews        Review[]
   reviewLikes    ReviewLike[]
   reviewComments ReviewComment[]
@@ -111,6 +112,7 @@ model MediaItem {
   history  WatchHistory[]
   ratings  Rating[]
   seasons  Season[]
+  posterOverrides UserPosterOverride[]
   reviews  Review[]
   listItems ListItem[]
   activityEvents ActivityEvent[]
@@ -121,9 +123,28 @@ model MediaItem {
   @@map("media_items")
 }
 
-// Per-user artwork override: lets a user pick a different poster/backdrop than
-// the media's default, from the set of images the provider offers. Never
-// affects other users. Absence of a row means "use the provider default".
+// Per-user poster override: lets a member pick a different poster than the
+// title's default, from the set of images the provider offers. Only affects
+// how that title's poster looks *to that member* — their own view of the
+// title, their own library — plus how it looks to other members specifically
+// browsing that member's profile/library (their choice travels with their
+// library, not the title itself). Absence of a row means "use the default".
+// Backdrops aren't overridable — posters only.
+model UserPosterOverride {
+  id          String   @id @default(cuid())
+  userId      String
+  mediaItemId String
+  url         String // raw provider source URL (proxied for display at read time)
+  createdAt   DateTime @default(now())
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mediaItemId])
+  @@index([mediaItemId])
+  @@map("user_poster_override")
+}
+
 // ---------------------------------------------------------------------------
 // Seasons & episodes (first-class; cached from the provider)
 // ---------------------------------------------------------------------------

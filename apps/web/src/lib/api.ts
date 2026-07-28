@@ -299,7 +299,7 @@ export const api = {
   getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
   getPosterOptions: (mediaId: string) =>
     request<PosterOptionsResponse>('GET', `/media/${mediaId}/poster`),
-  setPoster: (mediaId: string, sourceUrl: string) =>
+  setPoster: (mediaId: string, sourceUrl: string | null) =>
     request<void>('PUT', `/media/${mediaId}/poster`, { sourceUrl }),
   rematchMedia: (mediaId: string, dto: RematchRequest) =>
     request<MediaDetail>('PUT', `/media/${mediaId}/rematch`, dto),

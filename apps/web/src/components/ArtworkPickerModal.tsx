@@ -9,9 +9,10 @@ interface Props {
   onClose: () => void;
 }
 
-/** Poster picker — changes the poster for this title for every member, like a
- *  Letterboxd data correction rather than a personal preference. There's no
- *  backdrop picker: backdrops aren't editable, only posters. */
+/** Poster picker — sets the caller's own poster override for this title. Only
+ *  changes what they (and anyone browsing their profile/library) see; the
+ *  title's default poster, and everyone else's view of it, is untouched.
+ *  There's no backdrop picker: backdrops aren't editable, only posters. */
 export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
   const queryClient = useQueryClient();
 
@@ -28,18 +29,23 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
     queryFn: () => api.getPosterOptions(mediaId),
   });
 
+  const invalidate = (): void => {
+    void queryClient.invalidateQueries({ queryKey: ['poster-options', mediaId] });
+    void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
+    void queryClient.invalidateQueries({ queryKey: ['library'] });
+  };
   const applyMut = useMutation({
     mutationFn: (sourceUrl: string) => api.setPoster(mediaId, sourceUrl),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['poster-options', mediaId] });
-      void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
-      void queryClient.invalidateQueries({ queryKey: ['library'] });
-      void queryClient.invalidateQueries({ queryKey: ['discover'] });
-    },
+    onSuccess: invalidate,
+  });
+  const resetMut = useMutation({
+    mutationFn: () => api.setPoster(mediaId, null),
+    onSuccess: invalidate,
   });
 
   const choices = data?.posters ?? [];
   const selected = data?.currentPosterUrl ?? null;
+  const busy = applyMut.isPending || resetMut.isPending;
 
   return (
     <div
@@ -82,7 +88,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
                 return (
                   <button
                     key={c.sourceUrl}
-                    disabled={applyMut.isPending}
+                    disabled={busy}
                     onClick={() => applyMut.mutate(c.sourceUrl)}
                     className={cn(
                       'group relative aspect-[2/3] overflow-hidden rounded-lg border-2 bg-surface-2 transition-colors disabled:opacity-60',
@@ -113,10 +119,19 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
-          <p className="text-xs text-muted-2">Changes the poster for everyone, not just you.</p>
-          <Button size="sm" variant="ghost" onClick={onClose}>
-            Done
-          </Button>
+          <p className="text-xs text-muted-2">
+            Only changes what you (and people browsing your library) see.
+          </p>
+          <div className="flex gap-2">
+            {data?.hasOverride && (
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => resetMut.mutate()}>
+                Reset to default
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              Done
+            </Button>
+          </div>
         </div>
       </div>
     </div>

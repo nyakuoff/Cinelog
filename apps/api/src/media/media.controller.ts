@@ -60,17 +60,24 @@ export class MediaController {
   }
 
   @Get('media/:id/poster')
-  posterOptions(@Param('id') id: string): Promise<PosterOptionsResponse> {
-    return this.media.getPosterOptions(id);
+  posterOptions(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ): Promise<PosterOptionsResponse> {
+    return this.media.getPosterOptions(userId, id);
   }
 
-  /** Changes the poster for this title for everyone, not just the caller —
-   *  any signed-in member can do this, matching Letterboxd's community
-   *  poster corrections. */
+  /** Sets (or clears) the caller's own poster override — visible to them and
+   *  to anyone browsing their profile/library, never to anyone else's view
+   *  of the title itself. */
   @Put('media/:id/poster')
   @HttpCode(204)
-  async setPoster(@Param('id') id: string, @Body() dto: SetPosterDto): Promise<void> {
-    await this.media.setPoster(id, dto.sourceUrl);
+  async setPoster(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+    @Body() dto: SetPosterDto,
+  ): Promise<void> {
+    await this.media.setPoster(userId, id, dto.sourceUrl);
   }
 
   /** Fix a mismatched title: re-point this cached entry at the correct

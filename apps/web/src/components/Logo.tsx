@@ -1,10 +1,9 @@
 import { cn } from '../lib/cn';
 
 /**
- * Cinelog mark — three punched holes in a strip of film leader, inked in the
- * three archive colours. Read as sprocket perforations rather than as dots:
- * the strip and its rounded-square holes are what make it belong to this
- * world instead of to any app with three circles.
+ * Cinelog mark — three overlapping flat dots in the brand palette
+ * (gold / cyan / rose). Flat fills, no stroke, no glow: it sits quietly
+ * beside the wordmark.
  */
 export function LogoMark({
   size = 28,
@@ -21,28 +20,16 @@ export function LogoMark({
       style={{ width: size, height: size }}
     >
       <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden="true">
-        {/* Leader strip */}
-        <rect x="1.5" y="6" width="25" height="16" rx="1.5" fill="rgb(var(--surface-2))" />
-        <rect
-          x="1.5"
-          y="6"
-          width="25"
-          height="16"
-          rx="1.5"
-          fill="none"
-          stroke="rgb(var(--border-hi))"
-          strokeWidth="1"
-        />
-        {/* Punched perforations, in palette order */}
-        <rect x="4.6" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--gold))" />
-        <rect x="11.2" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--cyan))" />
-        <rect x="17.8" y="11.2" width="5.6" height="5.6" rx="1.4" fill="rgb(var(--rose))" />
+        {/* Slightly overlapping, in palette order. */}
+        <circle cx="9" cy="14" r="5.4" fill="rgb(var(--gold))" />
+        <circle cx="14" cy="14" r="5.4" fill="rgb(var(--cyan))" />
+        <circle cx="19" cy="14" r="5.4" fill="rgb(var(--rose))" />
       </svg>
     </span>
   );
 }
 
-/** Full lockup: perforated leader + wordmark, the "log" struck in acetate amber. */
+/** Full lockup: dot mark + wordmark, the "log" struck in acetate amber. */
 export function Logo({
   size = 28,
   className,

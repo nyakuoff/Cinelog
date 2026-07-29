@@ -16,7 +16,7 @@ const buttonVariants: Record<ButtonVariant, string> = {
   danger: 'bg-transparent text-rose border border-rose/50 hover:bg-rose/10 hover:border-rose',
 };
 const buttonSizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-[12px]',
+  sm: 'h-8 px-3 text-[13px]',
   md: 'h-10 px-4 text-[13px]',
   lg: 'h-11 px-5 text-sm',
 };
@@ -78,7 +78,7 @@ export const Select = forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<H
           ref={ref}
           className={cn(
             'h-9 w-full appearance-none rounded-sm border border-border bg-bg-2 pl-2.5 pr-7',
-            'font-cond text-[12px] font-bold uppercase tracking-[0.08em] text-content',
+            'font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content',
             'focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold',
             className,
           )}

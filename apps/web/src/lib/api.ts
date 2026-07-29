@@ -12,7 +12,6 @@ import type {
   BrowseQuery,
   BrowseResponse,
   ChangePasswordRequest,
-  ConnectLetterboxdRequest,
   DiscoverFilterQuery,
   DiscoverFilterResponse,
   DiscoverResponse,
@@ -33,8 +32,6 @@ import type {
   EpisodesResponse,
   ImportSummary,
   LetterboxdImportRequest,
-  LetterboxdSyncResult,
-  LetterboxdSyncStatus,
   LibraryResponse,
   LoginRequest,
   MarkWatchedRequest,
@@ -316,6 +313,7 @@ export const api = {
     request<TrackingResponse>('PUT', '/tracking/watchlist', { ...ref, value }),
   markWatched: (req: MarkWatchedRequest) =>
     request<TrackingResponse>('POST', '/tracking/watch', req),
+  unmarkWatched: (ref: MediaRef) => request<TrackingResponse>('DELETE', '/tracking/watch', ref),
 
   // -- reviews -----------------------------------------------------------------
   createReview: (mediaId: string, dto: CreateReviewRequest) =>
@@ -372,12 +370,6 @@ export const api = {
   adminDeleteUser: (id: string) => request<void>('DELETE', `/admin/users/${id}`),
 
   // -- letterboxd live sync ---------------------------------------------------
-  getLetterboxdStatus: () => request<LetterboxdSyncStatus>('GET', '/import/letterboxd/status'),
-  connectLetterboxd: (dto: ConnectLetterboxdRequest) =>
-    request<LetterboxdSyncStatus>('PUT', '/import/letterboxd/connect', dto),
-  disconnectLetterboxd: () =>
-    request<LetterboxdSyncStatus>('DELETE', '/import/letterboxd/connect'),
-  syncLetterboxdNow: () => request<LetterboxdSyncResult>('POST', '/import/letterboxd/sync'),
 };
 
 export { ApiError };

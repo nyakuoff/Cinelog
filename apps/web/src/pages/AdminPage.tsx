@@ -159,7 +159,7 @@ function UserRow({ u, isSelf }: { u: AdminUser; isSelf: boolean }): JSX.Element 
           <div className="flex items-center gap-2">
             <span className="truncate font-medium text-content">{u.username}</span>
             {isSelf && (
-              <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase text-muted-2">
+              <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[11px] uppercase text-muted-2">
                 you
               </span>
             )}
@@ -242,7 +242,7 @@ function RolePicker({
           disabled={disabled}
           onClick={() => value !== r && onChange(r)}
           className={cn(
-            'rounded-lg px-3 py-1 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50',
+            'rounded-lg px-3 py-1 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50',
             value === r ? 'bg-gold text-ink' : 'text-muted hover:text-content',
           )}
         >

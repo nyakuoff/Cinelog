@@ -36,10 +36,6 @@ model User {
   profileVisibility   String  @default("PUBLIC") // ProfileVisibility
   watchlistVisibility String  @default("PUBLIC") // ProfileVisibility
 
-  // Letterboxd live sync: pulls the user's public diary RSS feed on demand.
-  letterboxdUsername String?
-  letterboxdSyncedAt DateTime?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

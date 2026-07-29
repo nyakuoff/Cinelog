@@ -155,6 +155,7 @@ export function FilmsPage(): JSX.Element {
                   title={item.title}
                   posterUrl={item.posterUrl}
                   rating={item.ratingCount > 0 ? item.communityRating : null}
+                  ratingTone="community"
                   onClick={() => void open(item)}
                 />
               ))}
@@ -194,7 +195,7 @@ function FilterBar({
   onChange: (next: Partial<Filters>) => void;
 }): JSX.Element {
   const select =
-    'h-9 rounded border border-border bg-surface-2 px-2.5 font-cond text-[12px] font-bold uppercase tracking-wide text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50';
+    'h-9 rounded border border-border bg-surface-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-wide text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50';
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -204,7 +205,7 @@ function FilterBar({
             key={t}
             onClick={() => onChange({ type: t, genre: '' })}
             className={cn(
-              'rounded px-3 py-1.5 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors',
+              'rounded px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
               filters.type === t ? 'bg-gold text-ink' : 'text-muted hover:text-content',
             )}
           >
@@ -272,7 +273,7 @@ function FilterBar({
         }
         title="Restrict to titles rated by members of this Cinelog instance"
         className={cn(
-          'h-9 rounded border px-3 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors',
+          'h-9 rounded border px-3 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
           filters.source === 'CINELOG'
             ? 'border-gold bg-gold/15 text-gold'
             : 'border-border bg-surface-2 text-muted hover:text-content',

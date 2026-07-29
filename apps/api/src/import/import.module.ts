@@ -4,11 +4,10 @@ import { MediaModule } from '../media/media.module';
 import { SocialModule } from '../social/social.module';
 import { ImportController } from './import.controller';
 import { ImportService } from './import.service';
-import { LetterboxdSyncService } from './letterboxd-sync.service';
 
 @Module({
   imports: [MetadataModule, MediaModule, SocialModule],
   controllers: [ImportController],
-  providers: [ImportService, LetterboxdSyncService],
+  providers: [ImportService],
 })
 export class ImportModule {}

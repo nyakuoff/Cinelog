@@ -54,8 +54,11 @@ export function MediaDetailPage(): JSX.Element {
     mutationFn: (value: boolean) => api.setWatchlist({ mediaId: id }, value),
     onSuccess: invalidate,
   });
+  // The Watched control is a toggle, so it needs the un-watch path too —
+  // previously it could only ever be switched on.
   const watchMut = useMutation({
-    mutationFn: (isRewatch: boolean) => api.markWatched({ mediaId: id, isRewatch }),
+    mutationFn: (next: boolean) =>
+      next ? api.markWatched({ mediaId: id }) : api.unmarkWatched({ mediaId: id }),
     onSuccess: invalidate,
   });
   const ratingMut = useMutation({
@@ -126,7 +129,9 @@ export function MediaDetailPage(): JSX.Element {
                 <ActionPanel
                   state={state}
                   scale={scale}
-                  onWatch={() => watchMut.mutate(false)}
+                  onWatch={() =>
+                    watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
+                  }
                   onLike={() => favoriteMut.mutate(!state.isFavorite)}
                   onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
                   onRate={(v) => ratingMut.mutate(v)}
@@ -139,7 +144,7 @@ export function MediaDetailPage(): JSX.Element {
             {/* Main column */}
             <div className="min-w-0">
               {directors.length > 0 && (
-                <p className="font-cond text-[12px] font-bold uppercase tracking-[0.16em] text-muted-2">
+                <p className="font-cond text-[13px] font-bold uppercase tracking-[0.16em] text-muted-2">
                   Directed by
                 </p>
               )}
@@ -283,7 +288,7 @@ function ActionPanel({
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
   return (
     <div className="rounded-sm border border-border-hi bg-surface">
-      <p className="border-b border-border px-3 py-1.5 font-cond text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+      <p className="border-b border-border px-3 py-1.5 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
         Your record
       </p>
 
@@ -294,7 +299,7 @@ function ActionPanel({
       </div>
 
       <div className="border-t border-border px-3 py-3">
-        <p className="mb-1.5 font-cond text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+        <p className="mb-1.5 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
           Your rating
         </p>
         <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
@@ -307,7 +312,7 @@ function ActionPanel({
       <div className="border-t border-border p-2">
         <button
           onClick={onLog}
-          className="w-full rounded-sm bg-accent px-3 py-2 font-cond text-[12px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90"
+          className="w-full rounded-sm bg-accent px-3 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90"
         >
           Review or log
         </button>
@@ -526,7 +531,7 @@ function DetailsList({ media }: { media: MediaDetail }): JSX.Element {
     <dl className="space-y-2 text-sm">
       {rows.map((r) => (
         <div key={r.label} className="grid grid-cols-[120px_minmax(0,1fr)] gap-3">
-          <dt className="font-cond text-[12px] font-bold uppercase tracking-[0.1em] text-muted-2">
+          <dt className="font-cond text-[13px] font-bold uppercase tracking-[0.1em] text-muted-2">
             {r.label}
           </dt>
           <dd className="text-content/90">{r.value}</dd>

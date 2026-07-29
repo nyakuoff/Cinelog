@@ -47,7 +47,7 @@ export function FollowButton({
       aria-pressed={following}
       className={cn(
         'shrink-0 rounded border font-cond font-bold uppercase tracking-[0.08em] transition-colors disabled:opacity-60',
-        size === 'sm' ? 'px-2.5 py-1 text-[11px]' : 'px-3.5 py-1.5 text-[12px]',
+        size === 'sm' ? 'px-2.5 py-1 text-[11px]' : 'px-3.5 py-1.5 text-[13px]',
         following
           ? 'border-border-hi bg-surface-2 text-muted hover:border-rose hover:text-rose'
           : 'border-gold bg-gold text-ink hover:brightness-110',

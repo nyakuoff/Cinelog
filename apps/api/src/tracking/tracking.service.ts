@@ -60,6 +60,39 @@ export class TrackingService {
     return result;
   }
 
+  /**
+   * The inverse of markWatched, for toggling the Watched control back off.
+   * Clears every diary entry for the title, resets a COMPLETED status and its
+   * rewatch tally, and retracts the feed event — otherwise the control could
+   * only ever be switched on, and the claim would outlive the data.
+   *
+   * A non-COMPLETED status (WATCHING, ON_HOLD, DROPPED) is preserved: the user
+   * asked to undo "watched", not to stop tracking the title altogether.
+   */
+  async unmarkWatched(userId: string, ref: MediaRef): Promise<TrackingResponse> {
+    const mediaItemId = (await this.media.resolveRef(ref)).id;
+    const existing = await this.prisma.userMediaStatus.findUnique({
+      where: { userId_mediaItemId: { userId, mediaItemId } },
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.watchHistory.deleteMany({ where: { userId, mediaItemId } }),
+      this.prisma.userMediaStatus.upsert({
+        where: { userId_mediaItemId: { userId, mediaItemId } },
+        create: { userId, mediaItemId },
+        update: {
+          ...(existing?.status === 'COMPLETED' ? { status: null, completedAt: null } : {}),
+          rewatchCount: 0,
+        },
+      }),
+      this.prisma.activityEvent.deleteMany({
+        where: { actorId: userId, type: 'WATCHED', mediaItemId },
+      }),
+    ]);
+
+    return { mediaId: mediaItemId, userState: await this.getUserState(userId, mediaItemId) };
+  }
+
   async setWatchlist(userId: string, ref: MediaRef, value: boolean): Promise<TrackingResponse> {
     return this.setFlag(userId, ref, { isWatchlisted: value });
   }

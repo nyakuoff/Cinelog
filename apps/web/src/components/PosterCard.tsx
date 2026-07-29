@@ -1,5 +1,6 @@
-import { fromNormalized, type MediaType, type RatingScale } from '@cinelog/contracts';
+import type { MediaType, RatingScale } from '@cinelog/contracts';
 import { cn } from '../lib/cn';
+import { RatingBadge } from './lb';
 import { posterGradient } from '../lib/poster';
 
 /**
@@ -44,7 +45,6 @@ export function PosterCard({
   liked = false,
   onClick,
 }: Props): JSX.Element {
-  const hasRating = rating !== null && rating !== undefined;
   return (
     <button
       type="button"
@@ -71,25 +71,12 @@ export function PosterCard({
         )}
 
         {type && (
-          <span className="absolute left-0 top-0 bg-bg-2/90 px-1.5 py-[3px] font-cond text-[9.5px] font-extrabold uppercase tracking-[0.12em] text-content/90">
+          <span className="absolute left-0 top-0 bg-bg-2/90 px-1.5 py-[3px] font-cond text-[11px] font-extrabold uppercase tracking-[0.12em] text-content/90">
             {TYPE_LABELS[type]}
           </span>
         )}
 
-        {/* Your own marks, top right — the convention the library established.
-            Typewritten, on a flat ink field, never a glowing chip. */}
-        <div className="absolute right-0 top-0 flex items-stretch">
-          {liked && (
-            <span className="flex items-center bg-bg-2/90 px-1.5 text-[12px] leading-none text-rose">
-              ♥
-            </span>
-          )}
-          {hasRating && (
-            <span className="flex items-center bg-gold px-1.5 py-[3px] font-data text-[11px] font-bold leading-none text-ink">
-              {fromNormalized(rating, ratingScale)}
-            </span>
-          )}
-        </div>
+        <RatingBadge value={rating} scale={ratingScale} liked={liked} />
       </div>
     </button>
   );

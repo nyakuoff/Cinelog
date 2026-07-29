@@ -108,7 +108,7 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
                       </span>
                     )}
                     {c.language && (
-                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[10px] uppercase text-muted">
+                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] uppercase text-muted">
                         {c.language}
                       </span>
                     )}

@@ -56,7 +56,8 @@ export const BackupUser = z.object({
   username: z.string(),
   bio: z.string().nullable(),
   ratingScale: RatingScale,
-  letterboxdUsername: z.string().nullable(),
+  // Backups written before Letterboxd live-sync was removed carry a
+  // letterboxdUsername here; Zod strips it, so they still import cleanly.
 });
 
 /** Full Cinelog data export — the JSON a user downloads and can re-import. */

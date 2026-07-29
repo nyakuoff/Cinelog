@@ -3,7 +3,13 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { LibraryResponse, TrackingResponse } from '@cinelog/contracts';
 import { CurrentUser } from '../common/decorators';
 import { TrackingService } from './tracking.service';
-import { MarkWatchedDto, SetFlagDto, SetStatusDto, UpdateWatchEntryDto } from './tracking.dto';
+import {
+  MarkWatchedDto,
+  SetFlagDto,
+  SetStatusDto,
+  UnwatchDto,
+  UpdateWatchEntryDto,
+} from './tracking.dto';
 
 @ApiTags('tracking')
 @ApiBearerAuth()
@@ -46,6 +52,15 @@ export class TrackingController {
     @Body() dto: MarkWatchedDto,
   ): Promise<TrackingResponse> {
     return this.tracking.markWatched(userId, dto);
+  }
+
+  /** Toggle the Watched control back off for a whole title. */
+  @Delete('watch')
+  unmarkWatched(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: UnwatchDto,
+  ): Promise<TrackingResponse> {
+    return this.tracking.unmarkWatched(userId, dto);
   }
 
   @Patch('watch/:id')

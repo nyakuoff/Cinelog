@@ -171,7 +171,7 @@ function FavoriteSide({
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-muted">{label}</h3>
+        <h3 className="font-cond text-[13px] font-bold uppercase tracking-[0.12em] text-muted">{label}</h3>
         <span className="text-xs text-muted-2">{slots.length}/4 selected — drag to reorder</span>
       </div>
 
@@ -240,7 +240,7 @@ function FavoriteSide({
                   <div className="absolute inset-0" style={{ background: posterGradient(item.title) }} />
                 )}
                 {isSelected && (
-                  <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-gold text-[10px] font-bold text-ink">
+                  <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-gold text-[11px] font-bold text-ink">
                     {slots.indexOf(item.id) + 1}
                   </span>
                 )}

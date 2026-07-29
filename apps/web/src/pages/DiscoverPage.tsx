@@ -188,7 +188,7 @@ function FilterBar({
   onChange: (f: Filters) => void;
 }): JSX.Element {
   const selectClass =
-    'h-9 rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[12px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold';
+    'h-9 rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold';
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
       <select
@@ -273,7 +273,7 @@ function Rail({
         right={
           <span
             className={cn(
-              'font-cond text-[10px] font-bold uppercase tracking-[0.14em]',
+              'font-cond text-[11px] font-bold uppercase tracking-[0.14em]',
               section.source === 'CINELOG' ? 'text-gold' : 'text-muted-2',
             )}
           >
@@ -281,8 +281,8 @@ function Rail({
           </span>
         }
       />
-      <div className="rail-mask -mx-1 overflow-x-auto pb-2 scrollbar-none">
-        <div className="flex gap-3.5 px-1">
+      <div className="rail-mask -mx-2 overflow-x-auto px-1 pb-2 pt-2 scrollbar-none">
+        <div className="flex gap-3.5">
           {section.items.map((item, i) => (
             <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
               {/* No type chip here: the section heading above already

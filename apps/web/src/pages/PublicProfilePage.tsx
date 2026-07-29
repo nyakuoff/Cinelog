@@ -426,7 +426,7 @@ function NetworkTab({ username }: { username: string }): JSX.Element {
             key={s}
             onClick={() => setSide(s)}
             className={cn(
-              'flex-1 rounded px-4 py-1.5 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors sm:flex-none',
+              'flex-1 rounded px-4 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors sm:flex-none',
               side === s ? 'bg-gold text-ink' : 'text-muted hover:text-content',
             )}
           >
@@ -607,7 +607,7 @@ function RatingHistogram({ buckets }: { buckets: { bucket: number; count: number
             style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }}
             title={`${b.count} rating${b.count === 1 ? '' : 's'}`}
           />
-          <span className="font-data text-[10px] text-muted-2">{b.bucket}</span>
+          <span className="font-data text-[11px] text-muted-2">{b.bucket}</span>
         </div>
       ))}
     </div>
@@ -722,7 +722,7 @@ function StatsRow({ profile }: { profile: PublicProfile }): JSX.Element {
       {items.map((i) => (
         <div key={i.label} className="text-center">
           <p className="font-data text-2xl font-bold text-content">{i.value}</p>
-          <p className="font-cond text-[10px] font-bold uppercase tracking-[0.16em] text-muted-2">
+          <p className="font-cond text-[11px] font-bold uppercase tracking-[0.16em] text-muted-2">
             {i.label}
           </p>
         </div>

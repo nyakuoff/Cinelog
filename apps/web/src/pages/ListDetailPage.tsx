@@ -177,7 +177,7 @@ function LikeButton({ list }: { list: ListDetail }): JSX.Element {
       onClick={() => mut.mutate(!liked)}
       aria-pressed={liked}
       className={cn(
-        'rounded border px-3 py-1.5 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors',
+        'rounded border px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
         liked
           ? 'border-rose bg-rose/15 text-rose'
           : 'border-border bg-surface-2 text-muted hover:text-content',

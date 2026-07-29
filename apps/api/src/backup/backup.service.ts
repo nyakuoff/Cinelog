@@ -123,7 +123,6 @@ export class BackupService {
         username: user.username,
         bio: user.bio,
         ratingScale: RatingScale.catch('TEN').parse(user.ratingScale),
-        letterboxdUsername: user.letterboxdUsername,
       },
       items,
     };
@@ -150,7 +149,6 @@ export class BackupService {
       data: {
         bio: data.user.bio,
         ratingScale: data.user.ratingScale,
-        letterboxdUsername: data.user.letterboxdUsername,
       },
     });
 

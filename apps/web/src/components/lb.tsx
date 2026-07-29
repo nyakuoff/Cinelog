@@ -7,7 +7,7 @@
  * from the tokens in index.css; only the grammar lives here.
  */
 import { Link } from 'react-router-dom';
-import type { MediaType } from '@cinelog/contracts';
+import { fromNormalized, type MediaType, type RatingScale } from '@cinelog/contracts';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
 
@@ -65,6 +65,8 @@ export function Poster({
   to,
   onClick,
   rating,
+  ratingScale = 'TEN',
+  ratingTone = 'own',
   liked,
   className,
 }: {
@@ -72,8 +74,10 @@ export function Poster({
   posterUrl?: string | null;
   to?: string;
   onClick?: () => void;
-  /** Normalized 0..100 — renders a small star row beneath the tile. */
+  /** Normalized 0..100 — shown as the shared corner badge. */
   rating?: number | null;
+  ratingScale?: RatingScale;
+  ratingTone?: 'own' | 'community';
   liked?: boolean;
   className?: string;
 }): JSX.Element {
@@ -94,6 +98,7 @@ export function Poster({
           </span>
         </span>
       )}
+      <RatingBadge value={rating} scale={ratingScale} liked={liked} tone={ratingTone} />
     </span>
   );
 
@@ -114,11 +119,57 @@ export function Poster({
           {tile}
         </button>
       )}
-      {(rating != null || liked) && (
-        <div className="mt-1 flex items-center gap-1.5">
-          {rating != null && <StarText value={rating} size={11} />}
-          {liked && <span className="text-[11px] leading-none text-rose">♥</span>}
-        </div>
+    </div>
+  );
+}
+
+/**
+ * The rating mark that sits in a poster's top-right corner, and the app's one
+ * way of showing "what you gave this". Every poster surface uses it — library,
+ * watchlist, watched, search, similar — so the same information never appears
+ * in two different costumes.
+ *
+ * The star glyph rides with the number: a bare figure on artwork reads as an
+ * arbitrary badge, whereas "★ 4.5" reads as a rating at a glance.
+ */
+export function RatingBadge({
+  value,
+  scale = 'TEN',
+  liked = false,
+  tone = 'own',
+}: {
+  /** Normalized 0..100. */
+  value?: number | null;
+  scale?: RatingScale;
+  liked?: boolean;
+  /**
+   * `own` is the viewer's own rating, struck in acetate amber. `community` is
+   * the instance average — same badge, same corner, but on label stock, since
+   * presenting an average in the "your mark" ink would claim something untrue.
+   */
+  tone?: 'own' | 'community';
+}): JSX.Element | null {
+  const hasRating = value !== null && value !== undefined;
+  if (!hasRating && !liked) return null;
+  return (
+    <div className="absolute right-0 top-0 flex items-stretch">
+      {liked && (
+        <span className="flex items-center bg-bg-2/95 px-1.5 text-[13px] leading-none text-rose">
+          ♥
+        </span>
+      )}
+      {hasRating && (
+        <span
+          className={cn(
+            'flex items-center gap-0.5 px-1.5 py-1 font-data text-[13px] font-bold leading-none',
+            tone === 'own' ? 'bg-gold text-ink' : 'bg-bg-2/95 text-gold',
+          )}
+        >
+          <span aria-hidden="true" className="text-[11px] leading-none">
+            ★
+          </span>
+          {fromNormalized(value, scale)}
+        </span>
       )}
     </div>
   );
@@ -136,8 +187,8 @@ export function PosterGrid({ children }: { children: React.ReactNode }): JSX.Ele
 /** A horizontally scrolling poster rail, for "recent"/"popular" strips. */
 export function PosterRail({ children }: { children: React.ReactNode }): JSX.Element {
   return (
-    <div className="rail-mask -mx-1 overflow-x-auto pb-1 scrollbar-none">
-      <div className="flex gap-2.5 px-1">{children}</div>
+    <div className="rail-mask -mx-2 overflow-x-auto px-1 pb-2 pt-2 scrollbar-none">
+      <div className="flex gap-2.5">{children}</div>
     </div>
   );
 }
@@ -223,7 +274,7 @@ export function TabBar({
           aria-selected={active === t.key}
           onClick={() => onChange(t.key)}
           className={cn(
-            'shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-cond text-[12px] font-bold uppercase tracking-[0.13em] transition-colors',
+            'shrink-0 whitespace-nowrap border-b-2 px-3 py-2.5 font-cond text-[13px] font-bold uppercase tracking-[0.13em] transition-colors',
             active === t.key
               ? 'border-gold text-content'
               : 'border-transparent text-muted hover:text-content',

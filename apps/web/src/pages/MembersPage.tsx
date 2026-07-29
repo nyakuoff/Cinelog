@@ -39,7 +39,7 @@ export function MembersPage(): JSX.Element {
               key={s.key}
               onClick={() => setSort(s.key)}
               className={cn(
-                'rounded px-3 py-1.5 font-cond text-[12px] font-bold uppercase tracking-wide transition-colors',
+                'rounded px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
                 sort === s.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
               )}
             >

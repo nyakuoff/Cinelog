@@ -45,18 +45,20 @@ export function WhereToWatch({ media }: { media: MediaDetail }): JSX.Element | n
       </p>
 
       <div className="divide-y divide-border">
-        {/* The instance's own copy comes first — it's the one you can play now. */}
+        {/* The instance's own copy comes first — it's the one you can play now.
+            Same grammar as the paid tiers below it: the source named on the
+            left, its mark in the logo lane, so the box reads as one list. */}
         {data.jellyfinUrl && (
           <a
             href={data.jellyfinUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-surface-2"
+            className="flex items-start gap-2 px-3 py-2.5 hover:bg-surface-2"
           >
-            <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-cyan">
-              On Jellyfin
+            <span className="w-[62px] shrink-0 pt-1 font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-cyan">
+              Jellyfin
             </span>
-            <span className="font-data text-[11px] text-muted-2">play →</span>
+            <JellyfinMark />
           </a>
         )}
 
@@ -91,6 +93,42 @@ export function WhereToWatch({ media }: { media: MediaDetail }): JSX.Element | n
   );
 }
 
+/**
+ * Jellyfin's mark, in the same 28px square the streaming services get.
+ *
+ * Drawn inline rather than fetched: a self-hosted instance may have no outbound
+ * internet, and the one row that is definitely about this server should not be
+ * the row that fails to load its image.
+ */
+function JellyfinMark(): JSX.Element {
+  return (
+    <span
+      title="Jellyfin"
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-[#101820] ring-1 ring-border-hi/60"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="jf-mark" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stopColor="#AA5CC3" />
+            <stop offset="1" stopColor="#00A4DC" />
+          </linearGradient>
+        </defs>
+        {/* Two nested rounded triangles — the stacked sheets of the Jellyfin
+            mark, the lower one carrying the gradient at full strength. */}
+        <path
+          fill="url(#jf-mark)"
+          d="M12 9.4c1 0 6.6 10.2 6.1 11.3-.5 1-11.7 1-12.2 0C5.4 19.6 11 9.4 12 9.4Z"
+        />
+        <path
+          fill="url(#jf-mark)"
+          opacity="0.62"
+          d="M12 2c.8 0 5.3 8.1 4.9 9-.4.8-9.4.8-9.8 0C6.7 10.1 11.2 2 12 2Z"
+        />
+      </svg>
+    </span>
+  );
+}
+
 /** A payment tier and the services offering it, shown by their own logos. */
 function ProviderRow({
   label,
@@ -103,7 +141,7 @@ function ProviderRow({
 }): JSX.Element {
   const body = (
     <>
-      <span className="w-11 shrink-0 pt-1 font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2">
+      <span className="w-[62px] shrink-0 pt-1 font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2">
         {label}
       </span>
       <span className="flex flex-wrap gap-1.5">

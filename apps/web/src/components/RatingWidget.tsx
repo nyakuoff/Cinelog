@@ -18,6 +18,10 @@ export function RatingWidget({ value, scale, onChange, readOnly }: WidgetProps):
   }
   // No numeric readout: the filled stars already say the score, and the figure
   // beside them was reading as a second, competing rating.
+  //
+  // Five stars get the room to be struck properly; ten have to earn theirs, so
+  // they run a size down and closer together (see StarInput) — a ten-star row
+  // is one control, not ten separate marks.
   return (
     <div className="flex justify-center">
       <StarInput
@@ -25,7 +29,7 @@ export function RatingWidget({ value, scale, onChange, readOnly }: WidgetProps):
         scale={scale}
         onChange={onChange}
         readOnly={readOnly}
-        size={cfg.max === 10 ? 22 : 30}
+        size={cfg.max === 10 ? 20 : 30}
       />
     </div>
   );
@@ -68,7 +72,7 @@ export function StarInput({ value, scale, onChange, readOnly, size = 24 }: StarI
             key={starIndex}
             type="button"
             disabled={readOnly}
-            className={cn('relative block', groupGap && 'ml-1', !readOnly && 'cursor-pointer')}
+            className={cn('relative block', groupGap && 'ml-1.5', !readOnly && 'cursor-pointer')}
             onMouseMove={(e) => !readOnly && setHover(pick(starIndex, e))}
             onClick={(e) => {
               if (readOnly) return;
@@ -104,7 +108,11 @@ function Star({ fill, size }: { fill: number; size: number }): JSX.Element {
 
 function StarSvg({ size, className }: { size: number; className?: string }): JSX.Element {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className}>
+    // Cropped to the glyph rather than the icon grid it was drawn on. The stock
+    // 24-unit box padded every star with ~12% of dead space on each side, which
+    // is what made the row read as loose and the stars as small — the button's
+    // hit area still matches exactly what you see.
+    <svg width={size} height={size} viewBox="3 3.5 18 18" fill="currentColor" className={className}>
       <path d="M12 17.3l-5.4 3.3 1.4-6.2-4.7-4.1 6.3-.5L12 4l2.4 5.8 6.3.5-4.7 4.1 1.4 6.2z" />
     </svg>
   );

@@ -18,6 +18,7 @@ import { sortLibrary, type SortKey } from '../lib/sortLibrary';
 import { PosterCard } from '../components/PosterCard';
 import { SortSelect } from '../components/SortSelect';
 import { Stars } from '../components/Stars';
+import { formatRuntime } from '../components/lb';
 import { Button, Spinner } from '../components/ui';
 
 type Filter = 'all' | 'WATCHING' | 'COMPLETED' | 'ON_HOLD' | 'DROPPED';
@@ -329,10 +330,4 @@ function Stat({
   ) : (
     <div className={cellClass}>{inner}</div>
   );
-}
-
-function formatRuntime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }

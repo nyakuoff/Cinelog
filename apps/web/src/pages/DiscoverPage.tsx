@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type {
@@ -285,22 +285,105 @@ function Rail({
           </span>
         }
       />
-      <div className="rail-mask -mx-2 overflow-x-auto px-1 pb-2 pt-2 scrollbar-none">
-        <div className="flex gap-3.5">
-          {section.items.map((item, i) => (
-            <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
-              <PosterCard
-                title={item.title}
-                year={item.year}
-                type={item.type}
-                posterUrl={item.posterUrl}
-                index={i}
-                onClick={() => onOpen(item)}
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      <ScrollRail>
+        {section.items.map((item, i) => (
+          <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
+            <PosterCard
+              title={item.title}
+              year={item.year}
+              type={item.type}
+              posterUrl={item.posterUrl}
+              index={i}
+              onClick={() => onOpen(item)}
+            />
+          </div>
+        ))}
+      </ScrollRail>
     </section>
+  );
+}
+
+/**
+ * A horizontally scrolling rail with step arrows.
+ *
+ * Dragging a rail sideways is fine with a trackpad and miserable with a mouse,
+ * so each rail carries its own controls. They're hidden when there's nothing
+ * further that way, which doubles as the signal for how much rail is left.
+ */
+function ScrollRail({ children }: { children: React.ReactNode }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+
+  const measure = (): void => {
+    const el = ref.current;
+    if (!el) return;
+    // A pixel of slack: fractional scroll widths otherwise leave the end arrow
+    // showing on a rail that is already fully scrolled.
+    setEdges({
+      start: el.scrollLeft > 1,
+      end: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+    });
+  };
+
+  // Re-measure when the rail's contents or size change, not just on scroll:
+  // posters arrive after the first paint, and a resize changes what fits.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [children]);
+
+  const step = (direction: -1 | 1): void => {
+    const el = ref.current;
+    if (!el) return;
+    // Just under a full pane, so the poster at the edge stays visible as an
+    // anchor rather than jumping out of view.
+    el.scrollBy({ left: direction * el.clientWidth * 0.85, behavior: 'smooth' });
+  };
+
+  return (
+    <div className="group/rail relative">
+      <div
+        ref={ref}
+        onScroll={measure}
+        className="rail-mask -mx-2 overflow-x-auto px-1 pb-2 pt-2 scrollbar-none"
+      >
+        <div className="flex gap-3.5">{children}</div>
+      </div>
+      <RailArrow side="start" show={edges.start} onClick={() => step(-1)} />
+      <RailArrow side="end" show={edges.end} onClick={() => step(1)} />
+    </div>
+  );
+}
+
+function RailArrow({
+  side,
+  show,
+  onClick,
+}: {
+  side: 'start' | 'end';
+  show: boolean;
+  onClick: () => void;
+}): JSX.Element | null {
+  if (!show) return null;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={side === 'start' ? 'Scroll left' : 'Scroll right'}
+      className={cn(
+        'absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-sm',
+        'border border-border-hi bg-bg-2/95 text-lg leading-none text-content shadow-soft',
+        'opacity-0 transition-opacity hover:border-gold hover:text-gold',
+        'focus-visible:opacity-100 group-hover/rail:opacity-100',
+        side === 'start' ? '-left-1' : '-right-1',
+      )}
+    >
+      {side === 'start' ? '‹' : '›'}
+    </button>
   );
 }

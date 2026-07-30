@@ -263,13 +263,25 @@ export function Accession({
   const parts: string[] = [];
   if (provider && externalId) parts.push(`${provider}·${externalId.replace(/^\w+:/, '')}`);
   if (year) parts.push(String(year));
-  if (runtime) parts.push(`${runtime}m`);
+  if (runtime) parts.push(formatRuntime(runtime));
   if (parts.length === 0) return null;
   return (
     <p className={cn('font-data text-[11px] leading-none text-muted-2', className)}>
       {parts.join('  ·  ')}
     </p>
   );
+}
+
+/**
+ * A duration as a person would say it: 2h 18m, not 138m. Feature lengths are
+ * read as hours, so minute counts past an hour make you do the division
+ * yourself. Under an hour there's nothing to convert.
+ */
+export function formatRuntime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
 export interface TabItem {

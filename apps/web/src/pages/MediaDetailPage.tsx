@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
+import type { CreditPerson, MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
 import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -16,7 +16,15 @@ import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { LogModal } from '../components/LogModal';
 import { WhereToWatch } from '../components/WhereToWatch';
-import { Accession, Poster, SectionHeader, StarText, TabBar, TYPE_LABEL } from '../components/lb';
+import {
+  Accession,
+  formatRuntime,
+  Poster,
+  SectionHeader,
+  StarText,
+  TabBar,
+  TYPE_LABEL,
+} from '../components/lb';
 import { Avatar } from '../components/Avatar';
 
 type InfoTab = 'cast' | 'crew' | 'details' | 'genres';
@@ -140,8 +148,24 @@ export function MediaDetailPage(): JSX.Element {
 
               {/* Under the poster sits where-to-watch; the record card moved to
                   the right rail, above the community ratings it belongs beside. */}
-              <div className="min-w-0 flex-1 lg:mt-4">
+              {/* Where to watch, and the trailer directly beneath it: both
+                  answer "can I see this now", so they belong together rather
+                  than with the catalogue coordinates. */}
+              <div className="min-w-0 flex-1 space-y-2 lg:mt-4">
                 <WhereToWatch media={m} />
+                {m.trailerUrl && (
+                  <a
+                    href={m.trailerUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="flex items-center justify-between gap-2 rounded-sm border border-border-hi bg-surface px-3 py-2.5 hover:bg-surface-2"
+                  >
+                    <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content">
+                      Trailer
+                    </span>
+                    <span className="font-data text-[11px] text-muted-2">▶ watch</span>
+                  </a>
+                )}
               </div>
             </div>
 
@@ -164,7 +188,14 @@ export function MediaDetailPage(): JSX.Element {
               </div>
               {directors.length > 0 && (
                 <p className="mt-1 text-sm text-content/90">
-                  {directors.map((d) => d.name).join(', ')}
+                  {directors.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && ', '}
+                      <Link to={personPath(d)} className="hover:text-gold hover:underline">
+                        {d.name}
+                      </Link>
+                    </span>
+                  ))}
                 </p>
               )}
 
@@ -179,16 +210,6 @@ export function MediaDetailPage(): JSX.Element {
                 <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
                   {TYPE_LABEL[m.type]}
                 </span>
-                {m.trailerUrl && (
-                  <a
-                    href={m.trailerUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-cyan hover:underline"
-                  >
-                    ▶ Trailer
-                  </a>
-                )}
                 <button
                   onClick={() => setFixingMismatch(true)}
                   className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
@@ -526,19 +547,26 @@ function CastGrid({
     <div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
         {people.slice(0, 12).map((c) => (
-          <div key={c.id} className="flex items-center gap-2.5">
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface-2">
+          <Link
+            key={c.id}
+            to={personPath(c)}
+            className="group flex items-center gap-2.5"
+            title={`Everything by ${c.name}`}
+          >
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface-2 ring-1 ring-transparent transition-colors group-hover:ring-gold">
               {c.profileUrl && (
                 <img src={c.profileUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
               )}
             </div>
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-content">{c.name}</p>
+              <p className="truncate text-sm font-medium text-content group-hover:text-gold">
+                {c.name}
+              </p>
               {(c.character || c.role) && (
                 <p className="truncate text-xs text-muted-2">{c.character ?? c.role}</p>
               )}
             </div>
-          </div>
+          </Link>
         ))}
       </div>
       {canEdit && onEdit && (
@@ -648,8 +676,13 @@ function SimilarSection({
   );
 }
 
-function formatRuntime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+/**
+ * Where a credited name leads. Credits cached before person ids were recorded
+ * carry only a name, so those route through the by-name lookup instead of being
+ * left as dead text — the same page either way.
+ */
+function personPath(c: CreditPerson): string {
+  return c.personId
+    ? `/person/${encodeURIComponent(c.personId)}`
+    : `/person/name/${encodeURIComponent(c.name)}`;
 }

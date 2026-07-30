@@ -31,8 +31,6 @@ export type ImportMode = z.infer<typeof ImportMode>;
 export const LetterboxdImportRequest = z.object({
   mode: ImportMode,
   items: z.array(LetterboxdItem).min(1).max(5000),
-  /** Watchlist titles, carried alongside so a whole-ZIP import is one call. */
-  watchlistItems: z.array(LetterboxdItem).max(5000).optional().default([]),
 });
 export type LetterboxdImportRequest = z.infer<typeof LetterboxdImportRequest>;
 

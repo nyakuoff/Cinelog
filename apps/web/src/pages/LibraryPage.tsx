@@ -10,6 +10,7 @@ import {
   type TrackingStatus,
 } from '@cinelog/contracts';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { useCountUp } from '../lib/useCountUp';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
@@ -48,6 +49,10 @@ function groupOf(type: MediaType): Group {
 }
 
 export function LibraryPage(): JSX.Element {
+  const { user } = useAuth();
+  // Links carry whose library view this is, which is what makes artwork
+  // editable here and nowhere else.
+  const mine = user?.username ? `?libraryOf=${encodeURIComponent(user.username)}` : '';
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('all');
   const [group, setGroup] = useState<Group>('FILMS');
@@ -91,7 +96,7 @@ export function LibraryPage(): JSX.Element {
 
   return (
     <>
-      {featured && <FeaturedHero item={featured} onOpen={(id) => navigate(`/media/${id}`)} />}
+      {featured && <FeaturedHero item={featured} onOpen={(id) => navigate(`/media/${id}${mine}`)} />}
 
       <StatsStrip items={items} />
 
@@ -159,7 +164,7 @@ export function LibraryPage(): JSX.Element {
                   ratingScale={scaleForMediaType(item.type)}
                   liked={item.isFavorite}
                   index={i}
-                  onClick={() => navigate(`/media/${item.id}`)}
+                  onClick={() => navigate(`/media/${item.id}${mine}`)}
                 />
               ))}
             </div>

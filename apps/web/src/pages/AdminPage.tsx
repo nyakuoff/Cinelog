@@ -16,11 +16,12 @@ export function AdminPage(): JSX.Element {
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
       <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">Admin</p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">User management</h1>
+      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Instance</h1>
       <p className="mt-1 text-sm text-muted">
-        Create accounts, change roles, reset passwords, and remove users.
+        Manage accounts and point Cinelog at the other services you host.
       </p>
 
+      <IntegrationsCard />
       <CreateUserCard />
       <UserList currentUserId={user?.id ?? ''} />
     </div>
@@ -28,6 +29,97 @@ export function AdminPage(): JSX.Element {
 }
 
 // -------------------------------------------------------------------------
+
+/**
+ * Deep-link targets for services this instance's owner also runs. Cinelog only
+ * ever builds URLs from these — it holds no API key and never calls them — so
+ * a wrong value produces a broken link and nothing worse.
+ */
+function IntegrationsCard(): JSX.Element {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['integrations'],
+    queryFn: () => api.getIntegrations(),
+  });
+  const [jellyfinUrl, setJellyfinUrl] = useState<string | null>(null);
+  const [seerrUrl, setSeerrUrl] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  // Uncontrolled until loaded, then the fetched value seeds the fields.
+  const jf = jellyfinUrl ?? data?.jellyfinUrl ?? '';
+  const sr = seerrUrl ?? data?.seerrUrl ?? '';
+
+  const mut = useMutation({
+    mutationFn: () => api.updateIntegrations({ jellyfinUrl: jf, seerrUrl: sr }),
+    onSuccess: (next) => {
+      setSaved(true);
+      setJellyfinUrl(next.jellyfinUrl ?? '');
+      setSeerrUrl(next.seerrUrl ?? '');
+      void queryClient.invalidateQueries({ queryKey: ['integrations'] });
+      setTimeout(() => setSaved(false), 2500);
+    },
+  });
+
+  return (
+    <Card className="mt-6 p-6">
+      <h2 className="mb-1 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
+        Integrations
+      </h2>
+      <p className="mb-4 text-sm leading-relaxed text-muted">
+        Set either one and a &ldquo;Where to watch&rdquo; box appears under the poster on every
+        title. Leave a field empty to hide its link. Cinelog only links out &mdash; it stores no
+        API key and can&rsquo;t tell whether a title is actually on your server, so the Jellyfin
+        link opens a search.
+      </p>
+
+      {isLoading ? (
+        <Spinner />
+      ) : (
+        <form
+          className="space-y-4"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault();
+            mut.mutate();
+          }}
+        >
+          <Field label="Jellyfin URL">
+            <Input
+              value={jf}
+              onChange={(e) => setJellyfinUrl(e.target.value)}
+              placeholder="https://jellyfin.example.com"
+              inputMode="url"
+            />
+          </Field>
+          <Field label="Jellyseerr / Overseerr URL">
+            <Input
+              value={sr}
+              onChange={(e) => setSeerrUrl(e.target.value)}
+              placeholder="https://requests.example.com"
+              inputMode="url"
+            />
+          </Field>
+
+          {mut.isError && (
+            <p className="rounded-sm border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+              {errorMessage(mut.error)}
+            </p>
+          )}
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" variant="primary" disabled={mut.isPending}>
+              {mut.isPending ? 'Saving…' : 'Save integrations'}
+            </Button>
+            {saved && (
+              <span className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-cyan">
+                Saved
+              </span>
+            )}
+          </div>
+        </form>
+      )}
+    </Card>
+  );
+}
 
 function CreateUserCard(): JSX.Element {
   const queryClient = useQueryClient();

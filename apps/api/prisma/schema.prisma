@@ -119,18 +119,20 @@ model MediaItem {
   @@map("media_items")
 }
 
-// Per-user poster override: lets a member pick a different poster than the
-// title's default, from the set of images the provider offers. Only ever
-// surfaces in a library context — that member's own library, and anyone
-// else's view of that member's profile/library — never on the media page
-// itself for anyone, including that member (their choice travels with their
-// library, not the title). Absence of a row means "use the default".
-// Backdrops aren't overridable — posters only.
+// Per-user artwork override: lets a member pick a different poster or backdrop
+// than the title's default, from the set of images the provider offers.
+//
+// It only ever surfaces in a library context — that member's own library, and
+// anyone else's view of that member's profile/library — never on the title's
+// own page for anyone, including that member. Their choice travels with their
+// library, not with the title. Absence of a row, or a null column, means "use
+// the provider default".
 model UserPosterOverride {
   id          String   @id @default(cuid())
   userId      String
   mediaItemId String
-  url         String // raw provider source URL (proxied for display at read time)
+  url         String? // poster: raw provider source URL (proxied at read time)
+  backdropUrl String? // backdrop: same
   createdAt   DateTime @default(now())
 
   user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)

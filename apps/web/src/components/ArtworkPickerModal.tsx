@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ArtworkKind } from '@cinelog/contracts';
 import { api } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Button, Spinner } from './ui';
@@ -9,12 +10,21 @@ interface Props {
   onClose: () => void;
 }
 
-/** Poster picker — sets the caller's own poster override for this title. Only
- *  ever surfaces in a library context: their own library, and anyone else's
- *  view of their profile/library. The media page itself — even the caller's
- *  own view of it, however they navigated in — always shows the title's
- *  actual default poster. There's no backdrop picker: posters only. */
+const TABS: { key: ArtworkKind; label: string }[] = [
+  { key: 'POSTER', label: 'Poster' },
+  { key: 'BACKDROP', label: 'Backdrop' },
+];
+
+/**
+ * Artwork picker for your own library.
+ *
+ * A choice here is yours: it changes how the title looks in your library, and
+ * to anyone browsing your profile, but never on the title's own page and never
+ * in anyone else's library. That's why this is only reachable from your
+ * library — see MediaDetailPage.
+ */
 export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
+  const [kind, setKind] = useState<ArtworkKind>('POSTER');
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -26,26 +36,32 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
   }, [onClose]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['poster-options', mediaId],
-    queryFn: () => api.getPosterOptions(mediaId),
+    queryKey: ['artwork-options', mediaId],
+    queryFn: () => api.getArtworkOptions(mediaId),
   });
 
   const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['poster-options', mediaId] });
+    void queryClient.invalidateQueries({ queryKey: ['artwork-options', mediaId] });
     void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
     void queryClient.invalidateQueries({ queryKey: ['library'] });
+    void queryClient.invalidateQueries({ queryKey: ['profile'] });
   };
   const applyMut = useMutation({
-    mutationFn: (sourceUrl: string) => api.setPoster(mediaId, sourceUrl),
+    mutationFn: (sourceUrl: string) => api.setArtwork(mediaId, kind, sourceUrl),
     onSuccess: invalidate,
   });
   const resetMut = useMutation({
-    mutationFn: () => api.setPoster(mediaId, null),
+    mutationFn: () => api.setArtwork(mediaId, kind, null),
     onSuccess: invalidate,
   });
 
-  const choices = data?.posters ?? [];
-  const selected = data?.currentPosterUrl ?? null;
+  const choices = data ? (kind === 'POSTER' ? data.posters : data.backdrops) : [];
+  const selected = data ? (kind === 'POSTER' ? data.currentPosterUrl : data.currentBackdropUrl) : null;
+  const hasOverride = data
+    ? kind === 'POSTER'
+      ? data.hasPosterOverride
+      : data.hasBackdropOverride
+    : false;
   const busy = applyMut.isPending || resetMut.isPending;
 
   return (
@@ -56,18 +72,32 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Change poster"
+        aria-label="Change artwork"
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-border bg-surface shadow-soft"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-sm border border-border-hi bg-surface shadow-soft"
       >
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-          <h2 className="w-full font-cond text-lg font-extrabold uppercase tracking-tight sm:w-auto sm:mr-auto">
-            Change poster
+          <h2 className="w-full font-cond text-lg font-extrabold uppercase tracking-tight sm:mr-auto sm:w-auto">
+            Change artwork
           </h2>
+          <div className="flex gap-1 rounded-sm border border-border bg-bg-2 p-1">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setKind(t.key)}
+                className={cn(
+                  'rounded-sm px-3 py-1 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
+                  kind === t.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-lg text-muted hover:bg-surface-2 hover:text-content sm:ml-0"
+            className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-content sm:ml-0"
           >
             ✕
           </button>
@@ -80,10 +110,16 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
             </div>
           ) : choices.length === 0 ? (
             <p className="py-16 text-center text-sm text-muted">
-              No alternate posters are available for this title.
+              No alternate {kind === 'POSTER' ? 'posters' : 'backdrops'} are available for this
+              title.
             </p>
           ) : (
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+            <div
+              className={cn(
+                'grid gap-3',
+                kind === 'POSTER' ? 'grid-cols-3 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3',
+              )}
+            >
               {choices.map((c) => {
                 const isSelected = c.sourceUrl === selected;
                 return (
@@ -92,7 +128,8 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
                     disabled={busy}
                     onClick={() => applyMut.mutate(c.sourceUrl)}
                     className={cn(
-                      'group relative aspect-[2/3] overflow-hidden rounded-lg border-2 bg-surface-2 transition-colors disabled:opacity-60',
+                      'group relative overflow-hidden rounded-sm border-2 bg-surface-2 transition-colors disabled:opacity-60',
+                      kind === 'POSTER' ? 'aspect-[2/3]' : 'aspect-video',
                       isSelected ? 'border-gold' : 'border-transparent hover:border-border-hi',
                     )}
                   >
@@ -103,12 +140,12 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
                       className="h-full w-full object-cover"
                     />
                     {isSelected && (
-                      <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-full bg-gold text-[11px] font-bold text-ink">
+                      <span className="absolute right-1.5 top-1.5 grid h-5 w-5 place-items-center rounded-sm bg-gold text-[11px] font-bold text-ink">
                         ✓
                       </span>
                     )}
                     {c.language && (
-                      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] uppercase text-muted">
+                      <span className="absolute bottom-1.5 left-1.5 rounded-sm bg-bg-2/90 px-1.5 py-0.5 font-data text-[11px] uppercase text-muted">
                         {c.language}
                       </span>
                     )}
@@ -121,10 +158,10 @@ export function ArtworkPickerModal({ mediaId, onClose }: Props): JSX.Element {
 
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
           <p className="text-xs text-muted-2">
-            Changes it in your library, not on this page.
+            Changes it in your library, not on this title&rsquo;s own page.
           </p>
           <div className="flex gap-2">
-            {data?.hasOverride && (
+            {hasOverride && (
               <Button size="sm" variant="secondary" disabled={busy} onClick={() => resetMut.mutate()}>
                 Reset to default
               </Button>

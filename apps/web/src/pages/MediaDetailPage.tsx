@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
 import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
@@ -15,6 +15,7 @@ import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { LogModal } from '../components/LogModal';
+import { WhereToWatch } from '../components/WhereToWatch';
 import { Accession, Poster, SectionHeader, StarText, TabBar, TYPE_LABEL } from '../components/lb';
 import { Avatar } from '../components/Avatar';
 
@@ -25,6 +26,15 @@ export function MediaDetailPage(): JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [params] = useSearchParams();
+
+  /**
+   * Artwork choices belong to a library, so they're only shown — and only
+   * editable — when you got here from one. `libraryOf` names whose library
+   * view this is; you can edit only your own.
+   */
+  const libraryOf = params.get('libraryOf');
+  const canEditArtwork = !!libraryOf && libraryOf === user?.username;
   const [editingArtwork, setEditingArtwork] = useState(false);
   const [fixingMismatch, setFixingMismatch] = useState(false);
   const [editingCast, setEditingCast] = useState(false);
@@ -32,8 +42,8 @@ export function MediaDetailPage(): JSX.Element {
   const [infoTab, setInfoTab] = useState<InfoTab>('cast');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['media', id],
-    queryFn: () => api.getMedia(id),
+    queryKey: ['media', id, libraryOf],
+    queryFn: () => api.getMedia(id, libraryOf ?? undefined),
     enabled: id.length > 0,
   });
 
@@ -93,17 +103,19 @@ export function MediaDetailPage(): JSX.Element {
           header, with the poster overlapping its lower edge. */}
       <div className="relative">
         {m.backdropUrl && (
-          <div className="absolute inset-x-0 top-0 h-[240px] overflow-hidden sm:h-[340px]">
+          <div className="absolute inset-x-0 top-0 h-[300px] overflow-hidden sm:h-[440px]">
             <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
-            <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/75 to-bg/25" />
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-bg to-transparent" />
+            {/* One gradient, weighted to the bottom, so the image stays legible
+                at the top and only fades where text begins. */}
+            <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-transparent to-bg" />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" />
           </div>
         )}
 
         <div
           className={cn(
             'relative mx-auto max-w-6xl px-4 sm:px-6',
-            m.backdropUrl ? 'pt-32 sm:pt-48' : 'pt-10',
+            m.backdropUrl ? 'pt-40 sm:pt-64' : 'pt-10',
           )}
         >
           <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
@@ -115,29 +127,21 @@ export function MediaDetailPage(): JSX.Element {
                     <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
                   )}
                 </div>
-                <button
-                  onClick={() => setEditingArtwork(true)}
-                  title="Change poster"
-                  className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-                >
-                  ✎
-                </button>
+                {canEditArtwork && (
+                  <button
+                    onClick={() => setEditingArtwork(true)}
+                    title="Change artwork in your library"
+                    className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-sm border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                  >
+                    ✎
+                  </button>
+                )}
               </div>
 
-              {/* On phones the panel sits beside the poster; from lg it stacks under it. */}
+              {/* Under the poster sits where-to-watch; the record card moved to
+                  the right rail, above the community ratings it belongs beside. */}
               <div className="min-w-0 flex-1 lg:mt-4">
-                <ActionPanel
-                  state={state}
-                  scale={scale}
-                  onWatch={() =>
-                    watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
-                  }
-                  onLike={() => favoriteMut.mutate(!state.isFavorite)}
-                  onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
-                  onRate={(v) => ratingMut.mutate(v)}
-                  onStatus={(s) => statusMut.mutate(s)}
-                  onLog={() => setLogging(true)}
-                />
+                <WhereToWatch media={m} />
               </div>
             </div>
 
@@ -233,6 +237,18 @@ export function MediaDetailPage(): JSX.Element {
 
             {/* Right rail: community ratings + stats */}
             <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
+              <ActionPanel
+                state={state}
+                scale={scale}
+                onWatch={() =>
+                  watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
+                }
+                onLike={() => favoriteMut.mutate(!state.isFavorite)}
+                onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
+                onRate={(v) => ratingMut.mutate(v)}
+                onStatus={(s) => statusMut.mutate(s)}
+                onLog={() => setLogging(true)}
+              />
               <RatingsPanel media={m} />
               <FriendRatingsPanel mediaId={id} />
               <StatsPanel media={m} />

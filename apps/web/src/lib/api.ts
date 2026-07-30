@@ -5,7 +5,8 @@ import type {
   AdminUpdateUserRequest,
   AdminUser,
   AdminUserListResponse,
-  PosterOptionsResponse,
+  ArtworkKind,
+  ArtworkOptionsResponse,
   AuthResponse,
   BackupData,
   BackupImportResult,
@@ -31,6 +32,7 @@ import type {
   MemberListResponse,
   EpisodesResponse,
   ImportSummary,
+  IntegrationSettings,
   LetterboxdImportRequest,
   LibraryResponse,
   LoginRequest,
@@ -258,6 +260,11 @@ export const api = {
       })}`,
     ),
 
+  // -- instance settings ---------------------------------------------------------
+  getIntegrations: () => request<IntegrationSettings>('GET', '/settings/integrations'),
+  updateIntegrations: (dto: IntegrationSettings) =>
+    request<IntegrationSettings>('PUT', '/settings/integrations', dto),
+
   // -- lists ---------------------------------------------------------------------
   browseLists: (query: Partial<ListBrowseQuery>) =>
     request<ListListResponse>('GET', `/lists${toQuery(query)}`),
@@ -302,13 +309,16 @@ export const api = {
       `/search?q=${encodeURIComponent(q)}${type ? `&type=${type}` : ''}`,
     ),
   resolveMedia: (ref: MediaRef) => request<MediaDetail>('POST', '/media/resolve', ref),
-  getMedia: (id: string) => request<MediaDetail>('GET', `/media/${id}`),
+  /** `libraryOf` renders the title as it appears in that member's library,
+   *  with their artwork choices applied. */
+  getMedia: (id: string, libraryOf?: string) =>
+    request<MediaDetail>('GET', `/media/${id}${toQuery({ libraryOf })}`),
   getSimilar: (id: string) => request<SearchResponse>('GET', `/media/${id}/similar`),
   getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
-  getPosterOptions: (mediaId: string) =>
-    request<PosterOptionsResponse>('GET', `/media/${mediaId}/poster`),
-  setPoster: (mediaId: string, sourceUrl: string | null) =>
-    request<void>('PUT', `/media/${mediaId}/poster`, { sourceUrl }),
+  getArtworkOptions: (mediaId: string) =>
+    request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),
+  setArtwork: (mediaId: string, kind: ArtworkKind, sourceUrl: string | null) =>
+    request<void>('PUT', `/media/${mediaId}/artwork`, { kind, sourceUrl }),
   rematchMedia: (mediaId: string, dto: RematchRequest) =>
     request<MediaDetail>('PUT', `/media/${mediaId}/rematch`, dto),
   updateMediaCast: (mediaId: string, dto: AdminUpdateCastRequest) =>

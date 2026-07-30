@@ -6,7 +6,27 @@ import { parseCsv } from '../lib/csv';
 import { parseLetterboxdZip, type ParsedExport } from '../lib/letterboxdZip';
 import { Button, Card, Spinner } from './ui';
 
-const MAX = 2000;
+const MAX = 5000;
+
+/**
+ * Titles per request. Each one costs a TMDB lookup server-side, so a batch is
+ * sized to finish well inside a normal request timeout while still keeping the
+ * progress counter moving visibly.
+ */
+const BATCH = 25;
+
+/** Fold one batch's result into the running total. */
+function accumulate(acc: ImportSummary, r: ImportSummary): void {
+  acc.total += r.total;
+  acc.imported += r.imported;
+  acc.failed += r.failed;
+  acc.failures.push(...r.failures);
+  acc.ratingsImported += r.ratingsImported;
+  acc.diaryEntriesImported += r.diaryEntriesImported;
+  acc.likesImported += r.likesImported;
+  acc.reviewsImported += r.reviewsImported;
+  acc.watchlistImported += r.watchlistImported;
+}
 
 /**
  * The Data section of Settings: bring a library in from Letterboxd, and take
@@ -161,6 +181,7 @@ function LetterboxdImportCard(): JSX.Element {
   const [parsed, setParsed] = useState<ParsedExport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
 
   /**
@@ -228,24 +249,68 @@ function LetterboxdImportCard(): JSX.Element {
   const total = (parsed?.items.length ?? 0) + (parsed?.watchlistItems.length ?? 0);
   const overLimit = total > MAX;
 
+  /**
+   * Imports in batches rather than one giant request. Two reasons: a library of
+   * a few thousand titles needs a TMDB lookup each, which would sit far past
+   * any sensible request timeout as a single call; and batching is what makes a
+   * real progress count possible instead of an indeterminate spinner.
+   *
+   * Per-batch results are accumulated so the final summary still reports the
+   * whole import, and a failed batch stops the run with what completed intact.
+   */
   async function doImport(): Promise<void> {
     if (!parsed) return;
+    const watched = parsed.items.slice(0, MAX);
+    const watchlist = parsed.watchlistItems.slice(0, MAX);
+    const grandTotal = watched.length + watchlist.length;
+
     setBusy(true);
     setError(null);
+    setSummary(null);
+    setProgress({ done: 0, total: grandTotal });
+
+    const acc: ImportSummary = {
+      total: 0,
+      imported: 0,
+      failed: 0,
+      failures: [],
+      ratingsImported: 0,
+      diaryEntriesImported: 0,
+      likesImported: 0,
+      reviewsImported: 0,
+      watchlistImported: 0,
+    };
+    let done = 0;
+
     try {
-      const result = await api.importLetterboxd({
-        mode: 'watched',
-        items: parsed.items.slice(0, MAX),
-        watchlistItems: parsed.watchlistItems.slice(0, MAX),
-      });
-      setSummary(result);
+      for (let i = 0; i < watched.length; i += BATCH) {
+        const batch = watched.slice(i, i + BATCH);
+        const r = await api.importLetterboxd({ mode: 'watched', items: batch });
+        accumulate(acc, r);
+        done += batch.length;
+        setProgress({ done, total: grandTotal });
+      }
+      for (let i = 0; i < watchlist.length; i += BATCH) {
+        const batch = watchlist.slice(i, i + BATCH);
+        const r = await api.importLetterboxd({ mode: 'watchlist', items: batch });
+        accumulate(acc, r);
+        done += batch.length;
+        setProgress({ done, total: grandTotal });
+      }
+      setSummary(acc);
       void queryClient.invalidateQueries({ queryKey: ['library'] });
       void queryClient.invalidateQueries({ queryKey: ['profile'] });
       void queryClient.invalidateQueries({ queryKey: ['activity'] });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      // Whatever completed is already saved, so report progress honestly
+      // rather than implying the whole import was lost.
+      setSummary(acc);
+      setError(
+        `${err instanceof Error ? err.message : 'Import failed'} — stopped after ${done} of ${grandTotal} titles. Everything up to that point was saved; re-running skips what's already there.`,
+      );
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -314,16 +379,34 @@ function LetterboxdImportCard(): JSX.Element {
           >
             {busy ? (
               <>
-                <Spinner className="h-4 w-4" /> Importing&hellip;
+                <Spinner className="h-4 w-4" />
+                {progress ? `Importing ${progress.done} / ${progress.total}` : 'Importing…'}
               </>
             ) : (
               `Import ${Math.min(total, MAX * 2)} titles`
             )}
           </Button>
-          {busy && (
-            <p className="mt-2 text-center text-xs text-muted-2">
-              Matching each title against TMDB &mdash; a large library takes a few minutes.
-            </p>
+          {busy && progress && (
+            <>
+              <div
+                className="mt-3 h-1.5 w-full overflow-hidden rounded-sm bg-surface-2"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={progress.total}
+                aria-valuenow={progress.done}
+              >
+                <div
+                  className="h-full bg-gold transition-[width] duration-300"
+                  style={{
+                    width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-2 text-center text-xs text-muted-2">
+                Matching each title against TMDB. You can leave this page open; a large
+                library takes a few minutes.
+              </p>
+            </>
           )}
         </>
       )}

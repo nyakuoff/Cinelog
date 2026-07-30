@@ -129,7 +129,7 @@ export function PublicProfilePage(): JSX.Element {
                     year={f.media.year}
                     type={f.media.type}
                     posterUrl={f.media.posterUrl}
-                    onClick={() => navigate(`/media/${f.media.id}`)}
+                    onClick={() => navigate(`/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`)}
                   />
                 ))}
               </div>
@@ -152,7 +152,7 @@ export function PublicProfilePage(): JSX.Element {
                       year={f.media.year}
                       type={f.media.type}
                       posterUrl={f.media.posterUrl}
-                      onClick={() => navigate(`/media/${f.media.id}`)}
+                      onClick={() => navigate(`/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`)}
                     />
                   ))}
                 </div>
@@ -345,7 +345,7 @@ function WatchlistTab({ username }: { username: string }): JSX.Element {
           type={item.type}
           posterUrl={item.posterUrl}
           index={i}
-          onClick={() => navigate(`/media/${item.id}`)}
+          onClick={() => navigate(`/media/${item.id}?libraryOf=${encodeURIComponent(username)}`)}
         />
       ))}
     </div>
@@ -558,7 +558,7 @@ function WatchedTab({ username }: { username: string }): JSX.Element {
           posterUrl={e.media.posterUrl}
           rating={e.rating}
           index={i}
-          onClick={() => navigate(`/media/${e.media.id}`)}
+          onClick={() => navigate(`/media/${e.media.id}?libraryOf=${encodeURIComponent(username)}`)}
         />
       ))}
     </div>

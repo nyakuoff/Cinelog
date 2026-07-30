@@ -21,6 +21,7 @@ import { ArtworkModule } from './artwork/artwork.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { OgModule } from './og/og.module';
 import { BackupModule } from './backup/backup.module';
+import { SettingsModule } from './settings/settings.module';
 import { AppController } from './app.controller';
 import { JwtAuthGuard } from './common/jwt-auth.guard';
 import { RolesGuard } from './common/roles.guard';
@@ -54,6 +55,7 @@ import { RolesGuard } from './common/roles.guard';
     UploadsModule,
     OgModule,
     BackupModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [

@@ -9,7 +9,8 @@ import {
   type FriendRatingsResponse,
   type MediaDetail,
   type MediaRef,
-  type PosterOptionsResponse,
+  ArtworkKind,
+  type ArtworkOptionsResponse,
   type SearchResponse,
   type SearchResult,
   type UserMediaState,
@@ -169,18 +170,41 @@ export class MediaService {
   }
 
   /** Assemble the full detail payload for a user, merging their personal state. */
-  async getDetail(userId: string, mediaId: string): Promise<MediaDetail> {
+  async getDetail(
+    userId: string,
+    mediaId: string,
+    /**
+     * Username whose library view to render, with their poster and backdrop
+     * choices applied. Used when arriving from a library or profile; the
+     * title's own page passes nothing and always shows the provider default,
+     * for everyone.
+     */
+    asLibraryOf?: string | null,
+  ): Promise<MediaDetail> {
     const item = await this.prisma.mediaItem.findUnique({
       where: { id: mediaId },
       include: { genres: true },
     });
     if (!item) throw new NotFoundException('Media not found');
 
+    // asLibraryOf is a username (that's what the URL carries); overrides are
+    // keyed by user id. An unknown name simply yields no override rather than
+    // an error, so a stale link degrades to the default artwork.
+    const libraryOwnerId = asLibraryOf
+      ? (
+          await this.prisma.user.findUnique({
+            where: { username: asLibraryOf },
+            select: { id: true },
+          })
+        )?.id ?? null
+      : null;
+
     const raw = this.parseRaw(item.rawMetadata);
     const [
       status,
       rating,
       allRatings,
+      libraryArtwork,
       watchedCount,
       likedCount,
       reviewCount,
@@ -192,6 +216,11 @@ export class MediaService {
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
       this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
+      libraryOwnerId
+        ? this.prisma.userPosterOverride.findUnique({
+            where: { userId_mediaItemId: { userId: libraryOwnerId, mediaItemId: mediaId } },
+          })
+        : Promise.resolve(null),
       // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
       this.prisma.watchHistory
         .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
@@ -233,12 +262,10 @@ export class MediaService {
       runtime: item.runtime,
       overview: item.overview,
       tagline: item.tagline,
-      // The media page itself always shows the canonical poster — poster
-      // overrides only ever surface in a library context (Diary, Watchlist,
-      // Watched, Favorites, Reviews, the tracking Library page), never here,
-      // no matter who's viewing or how they navigated in.
-      posterUrl: this.artwork.toProxyUrl(item.posterPath),
-      backdropUrl: this.artwork.toProxyUrl(item.backdropPath),
+      // Only a library view applies overrides; the title's own page shows the
+      // canonical artwork for everyone, including whoever set an override.
+      posterUrl: this.artwork.toProxyUrl(libraryArtwork?.url ?? item.posterPath),
+      backdropUrl: this.artwork.toProxyUrl(libraryArtwork?.backdropUrl ?? item.backdropPath),
       logoUrl: this.artwork.toProxyUrl(item.logoPath),
       genres: item.genres.map((g) => ({ id: g.id, name: g.name })),
       studios: raw?.studios ?? [],
@@ -329,10 +356,12 @@ export class MediaService {
     };
   }
 
-  /** Every poster the provider offers for this title, plus which one is
-   *  currently effective for this member (their own override, or the shared
-   *  default). Never affects any other member's view. */
-  async getPosterOptions(userId: string, mediaId: string): Promise<PosterOptionsResponse> {
+  /**
+   * Every image the provider offers for this title, plus the requesting
+   * member's effective choice for each. Their override is scoped to their own
+   * library — see setArtwork.
+   */
+  async getArtworkOptions(userId: string, mediaId: string): Promise<ArtworkOptionsResponse> {
     const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
     if (!item) throw new NotFoundException('Media not found');
 
@@ -341,43 +370,72 @@ export class MediaService {
     });
 
     const raw = this.parseRaw(item.rawMetadata);
-    const posters = this.artworkChoices(raw, item.posterPath);
-
     return {
       mediaId,
-      posters,
+      posters: this.artworkChoices(raw, 'POSTER', item.posterPath),
+      backdrops: this.artworkChoices(raw, 'BACKDROP', item.backdropPath),
       currentPosterUrl: override?.url ?? item.posterPath,
-      hasOverride: override != null,
+      currentBackdropUrl: override?.backdropUrl ?? item.backdropPath,
+      hasPosterOverride: override?.url != null,
+      hasBackdropOverride: override?.backdropUrl != null,
     };
   }
 
-  /** Set (or clear, when sourceUrl is null) this member's own poster
-   *  override. Only ever surfaces in library contexts — their own library,
-   *  or someone else browsing their profile/library — never on the media
-   *  page itself for anyone, including this member. The chosen URL must be
-   *  one of the options actually offered. */
-  async setPoster(userId: string, mediaId: string, sourceUrl: string | null): Promise<void> {
+  /**
+   * Set (or clear, with a null sourceUrl) this member's own artwork choice.
+   *
+   * The choice is library-scoped: it changes how the title looks in their
+   * library and to anyone browsing their profile, never on the title's own page
+   * and never for another member's library. The URL must be one the provider
+   * actually offers for this title, so this can't be used to point the image at
+   * an arbitrary host.
+   */
+  async setArtwork(
+    userId: string,
+    mediaId: string,
+    kind: ArtworkKind,
+    sourceUrl: string | null,
+  ): Promise<void> {
+    const field = kind === 'POSTER' ? 'url' : 'backdropUrl';
+
     if (sourceUrl === null) {
-      await this.prisma.userPosterOverride.deleteMany({ where: { userId, mediaItemId: mediaId } });
+      const existing = await this.prisma.userPosterOverride.findUnique({
+        where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
+      });
+      if (!existing) return;
+      const other = kind === 'POSTER' ? existing.backdropUrl : existing.url;
+      // Drop the row entirely once neither kind is overridden, rather than
+      // leaving an all-null record behind.
+      if (other === null) {
+        await this.prisma.userPosterOverride.delete({ where: { id: existing.id } });
+      } else {
+        await this.prisma.userPosterOverride.update({
+          where: { id: existing.id },
+          data: { [field]: null },
+        });
+      }
       return;
     }
 
-    const options = await this.getPosterOptions(userId, mediaId);
-    const valid = options.posters.some((c) => c.sourceUrl === sourceUrl);
-    if (!valid) throw new BadRequestException('That poster is not available for this title');
+    const options = await this.getArtworkOptions(userId, mediaId);
+    const valid = (kind === 'POSTER' ? options.posters : options.backdrops).some(
+      (c) => c.sourceUrl === sourceUrl,
+    );
+    if (!valid) throw new BadRequestException('That image is not available for this title');
 
     await this.prisma.userPosterOverride.upsert({
       where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
-      create: { userId, mediaItemId: mediaId, url: sourceUrl },
-      update: { url: sourceUrl },
+      create: { userId, mediaItemId: mediaId, [field]: sourceUrl },
+      update: { [field]: sourceUrl },
     });
   }
 
   private artworkChoices(
     raw: ProviderMediaDetails | null,
+    kind: ArtworkKind,
     defaultUrl: string | null,
   ): ArtworkChoice[] {
-    const fromProvider = (raw?.artwork ?? []).filter((a) => a.type === 'POSTER');
+    const fromProvider = (raw?.artwork ?? []).filter((a) => a.type === kind);
     const seen = new Set<string>();
     const choices: ArtworkChoice[] = [];
 

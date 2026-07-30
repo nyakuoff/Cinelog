@@ -47,10 +47,10 @@ export class ImportService {
   ) {}
 
   /**
-   * Import a Letterboxd export. The web app unzips the archive and merges the
-   * per-file rows into one record per title, so everything a title carries —
-   * rating, watched date, rewatch flag, like, review — arrives together and is
-   * written in one pass. Watchlist titles ride along in the same request.
+   * Import a batch of titles from a Letterboxd export. The web app unzips the
+   * archive, merges the per-file rows into one record per title, and sends
+   * them in batches — each title costs a provider lookup, so one giant request
+   * would outlive any sensible timeout and could report no progress.
    *
    * TMDB matching is the fuzzy part; unmatched titles are reported rather than
    * silently dropped.
@@ -63,17 +63,7 @@ export class ImportService {
       }),
     );
 
-    const watchlistResults = await mapLimit<LetterboxdItem, Wrote>(
-      req.watchlistItems ?? [],
-      5,
-      (item) =>
-        this.importOne(userId, item, 'watchlist').catch((err): Wrote => {
-          this.logger.warn(`Watchlist import failed for "${item.name}": ${String(err)}`);
-          return { ok: false, name: item.name };
-        }),
-    );
-
-    const all = [...results, ...watchlistResults];
+    const all = results;
     const failures = all.filter((r) => !r.ok).map((r) => r.name);
     return {
       total: all.length,

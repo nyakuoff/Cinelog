@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type {
   FriendRatingsResponse,
   MediaDetail,
-  PosterOptionsResponse,
+  ArtworkOptionsResponse,
   SearchResponse,
 } from '@cinelog/contracts';
 import { CurrentUser, Roles } from '../common/decorators';
@@ -13,7 +13,7 @@ import {
   MediaRefDto,
   RematchDto,
   SearchQueryDto,
-  SetPosterDto,
+  SetArtworkDto,
 } from './media.dto';
 
 @ApiTags('media')
@@ -38,12 +38,16 @@ export class MediaController {
     return this.media.getDetail(userId, item.id);
   }
 
+  /** `libraryOf` renders the title as it looks in that member's library, with
+   *  their artwork choices applied — used when arriving from a library or
+   *  profile. Without it, everyone sees the title's canonical artwork. */
   @Get('media/:id')
   detail(
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,
+    @Query('libraryOf') libraryOf?: string,
   ): Promise<MediaDetail> {
-    return this.media.getDetail(userId, id);
+    return this.media.getDetail(userId, id, libraryOf ?? null);
   }
 
   @Get('media/:id/similar')
@@ -59,26 +63,26 @@ export class MediaController {
     return this.media.getFriendRatings(userId, id);
   }
 
-  @Get('media/:id/poster')
-  posterOptions(
+  @Get('media/:id/artwork')
+  artworkOptions(
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,
-  ): Promise<PosterOptionsResponse> {
-    return this.media.getPosterOptions(userId, id);
+  ): Promise<ArtworkOptionsResponse> {
+    return this.media.getArtworkOptions(userId, id);
   }
 
-  /** Sets (or clears) the caller's own poster override — only surfaces in
-   *  library contexts (their own library, or anyone browsing their
-   *  profile/library), never on the media page itself for anyone, including
-   *  the caller. */
-  @Put('media/:id/poster')
+  /** Sets (or clears) the caller's own poster/backdrop choice. It only ever
+   *  surfaces in a library context — their own library, or anyone browsing
+   *  their profile — never on the title's own page for anyone, including the
+   *  caller, and never in another member's library. */
+  @Put('media/:id/artwork')
   @HttpCode(204)
-  async setPoster(
+  async setArtwork(
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,
-    @Body() dto: SetPosterDto,
+    @Body() dto: SetArtworkDto,
   ): Promise<void> {
-    await this.media.setPoster(userId, id, dto.sourceUrl);
+    await this.media.setArtwork(userId, id, dto.kind, dto.sourceUrl);
   }
 
   /** Fix a mismatched title: re-point this cached entry at the correct

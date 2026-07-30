@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-/** One selectable poster image in the "Change poster" gallery. */
+/** Which image a choice applies to. */
+export const ArtworkKind = z.enum(['POSTER', 'BACKDROP']);
+export type ArtworkKind = z.infer<typeof ArtworkKind>;
+
+/** One selectable image in the artwork picker. */
 export const ArtworkChoice = z.object({
   /** Raw provider URL — the value sent back when applying a choice. */
   sourceUrl: z.string(),
@@ -12,22 +16,29 @@ export const ArtworkChoice = z.object({
 });
 export type ArtworkChoice = z.infer<typeof ArtworkChoice>;
 
-/** GET /media/:id/poster — every poster the provider offers for this title,
- *  plus which one is currently effective for the requesting member (their
- *  own override, or the shared default). Posters are a per-user preference:
- *  the choice only changes what that member (and anyone browsing their
- *  profile/library) sees — never the title globally. */
-export const PosterOptionsResponse = z.object({
+/**
+ * GET /media/:id/artwork — every image the provider offers for this title,
+ * plus which one is currently effective for the requesting member.
+ *
+ * Overrides are per-member and library-scoped: a choice changes how the title
+ * looks in that member's library, and to anyone browsing that member's
+ * profile, but never on the title's own page for anyone.
+ */
+export const ArtworkOptionsResponse = z.object({
   mediaId: z.string(),
   posters: z.array(ArtworkChoice),
+  backdrops: z.array(ArtworkChoice),
+  /** The member's effective choice, falling back to the provider default. */
   currentPosterUrl: z.string().nullable(),
-  hasOverride: z.boolean(),
+  currentBackdropUrl: z.string().nullable(),
+  hasPosterOverride: z.boolean(),
+  hasBackdropOverride: z.boolean(),
 });
-export type PosterOptionsResponse = z.infer<typeof PosterOptionsResponse>;
+export type ArtworkOptionsResponse = z.infer<typeof ArtworkOptionsResponse>;
 
-/** PUT /media/:id/poster — sets (or, when sourceUrl is null, clears) the
- *  caller's own poster override for this title. */
-export const SetPosterRequest = z.object({
+/** PUT /media/:id/artwork — `sourceUrl: null` clears the override. */
+export const SetArtworkRequest = z.object({
+  kind: ArtworkKind,
   sourceUrl: z.string().nullable(),
 });
-export type SetPosterRequest = z.infer<typeof SetPosterRequest>;
+export type SetArtworkRequest = z.infer<typeof SetArtworkRequest>;

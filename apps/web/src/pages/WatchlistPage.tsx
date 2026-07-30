@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { scaleForMediaType, type MediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
 import { sortLibrary, type SortKey } from '../lib/sortLibrary';
 import { PosterCard } from '../components/PosterCard';
@@ -20,6 +21,8 @@ function groupOf(type: MediaType): Group {
 }
 
 export function WatchlistPage(): JSX.Element {
+  const { user } = useAuth();
+  const mine = user?.username ? `?libraryOf=${encodeURIComponent(user.username)}` : '';
   const navigate = useNavigate();
   const [group, setGroup] = useState<Group>('FILMS');
   const [sort, setSort] = useState<SortKey>('added');
@@ -97,7 +100,7 @@ export function WatchlistPage(): JSX.Element {
               ratingScale={scaleForMediaType(item.type)}
               liked={item.isFavorite}
               index={i}
-              onClick={() => navigate(`/media/${item.id}`)}
+              onClick={() => navigate(`/media/${item.id}${mine}`)}
             />
           ))}
         </div>

@@ -10,7 +10,9 @@ interface Props {
   onClose: () => void;
 }
 
-type Draft = Omit<CreditPerson, 'id'>;
+/** The editable fields. A hand-entered credit has no provider person id, which
+ *  is why its name links through a name lookup rather than an id. */
+type Draft = Omit<CreditPerson, 'id' | 'personId'>;
 
 function emptyRow(): Draft {
   return { name: '', role: null, character: null, department: null, profileUrl: null };

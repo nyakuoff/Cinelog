@@ -41,6 +41,13 @@ export type Genre = z.infer<typeof Genre>;
 
 export const CreditPerson = z.object({
   id: z.string(),
+  /**
+   * The metadata provider's id for this person, when known — what makes the
+   * name clickable through to a filmography. Null for admin-entered cast and
+   * for credits cached before ids were recorded, where the client falls back to
+   * looking the person up by name.
+   */
+  personId: z.string().nullable(),
   name: z.string(),
   role: z.string().nullable(),
   character: z.string().nullable(),

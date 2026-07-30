@@ -59,6 +59,7 @@ import type {
   ReviewCommentListResponse,
   ReviewListResponse,
   ReviewSort,
+  PersonDetail,
   SearchResponse,
   SetupRequest,
   SetupStatus,
@@ -321,6 +322,10 @@ export const api = {
   getMedia: (id: string, libraryOf?: string) =>
     request<MediaDetail>('GET', `/media/${id}${toQuery({ libraryOf })}`),
   getSimilar: (id: string) => request<SearchResponse>('GET', `/media/${id}/similar`),
+  /** A person's filmography, by provider id or — for older credits — by name. */
+  getPerson: (id: string) => request<PersonDetail>('GET', `/people/${encodeURIComponent(id)}`),
+  getPersonByName: (name: string) =>
+    request<PersonDetail>('GET', `/people/by-name?name=${encodeURIComponent(name)}`),
   getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
   getArtworkOptions: (mediaId: string) =>
     request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),

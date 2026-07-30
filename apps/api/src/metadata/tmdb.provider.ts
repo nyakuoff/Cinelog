@@ -10,6 +10,8 @@ import type {
   ProviderCredit,
   ProviderEpisode,
   ProviderMediaDetails,
+  ProviderPerson,
+  ProviderPersonCredit,
   ProviderSearchResult,
   ProviderSeason,
   ProviderWatchProviders,
@@ -229,6 +231,7 @@ export class TmdbProvider implements MetadataProvider {
 
   private mapDetails(kind: TmdbKind, d: TmdbDetails): ProviderMediaDetails {
     const cast: ProviderCredit[] = (d.credits?.cast ?? []).slice(0, 24).map((c) => ({
+      personId: c.id != null ? String(c.id) : null,
       name: c.name,
       role: null,
       character: c.character ?? null,
@@ -239,6 +242,7 @@ export class TmdbProvider implements MetadataProvider {
       .filter((c) => ['Director', 'Writer', 'Screenplay', 'Producer', 'Creator'].includes(c.job ?? ''))
       .slice(0, 12)
       .map((c) => ({
+        personId: c.id != null ? String(c.id) : null,
         name: c.name,
         role: c.job ?? null,
         character: null,
@@ -321,6 +325,74 @@ export class TmdbProvider implements MetadataProvider {
     };
   }
 
+  /**
+   * A person and their whole filmography, in one request — TMDB will append
+   * combined credits to the person record, so the page costs a single call.
+   *
+   * Credits come back in TMDB's own arbitrary order, so they're sorted newest
+   * first: a filmography reads as a career, and the thing you most likely
+   * clicked through to find is what they've done lately.
+   */
+  async getPerson(personId: string): Promise<ProviderPerson> {
+    const d = await this.request<TmdbPerson>(`/person/${personId}`, {
+      append_to_response: 'combined_credits',
+    });
+    const map = (c: TmdbPersonCredit): ProviderPersonCredit => {
+      const kind: TmdbKind = c.media_type === 'tv' ? 'tv' : 'movie';
+      const date = c.release_date ?? c.first_air_date ?? null;
+      return {
+        provider: 'tmdb',
+        externalId: encodeExternalId(kind, c.id),
+        type: kind === 'tv' ? 'TV' : 'MOVIE',
+        title: c.title ?? c.name ?? 'Untitled',
+        originalTitle: c.original_title ?? c.original_name ?? null,
+        year: date ? Number(date.slice(0, 4)) || null : null,
+        overview: c.overview || null,
+        posterUrl: img(c.poster_path, 'w500'),
+        character: c.character || null,
+        job: c.job || null,
+      };
+    };
+    // A person can be credited more than once on the same title (writer and
+    // director, say); the page should list it once.
+    const dedupe = (list: ProviderPersonCredit[]): ProviderPersonCredit[] => {
+      const seen = new Map<string, ProviderPersonCredit>();
+      for (const c of list) {
+        const existing = seen.get(c.externalId);
+        if (!existing) seen.set(c.externalId, c);
+        else if (c.job && existing.job && !existing.job.includes(c.job)) {
+          existing.job = `${existing.job}, ${c.job}`;
+        }
+      }
+      return [...seen.values()].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+    };
+
+    return {
+      id: String(d.id),
+      name: d.name ?? 'Unknown',
+      biography: d.biography || null,
+      birthday: d.birthday ?? null,
+      deathday: d.deathday ?? null,
+      placeOfBirth: d.place_of_birth ?? null,
+      knownForDepartment: d.known_for_department ?? null,
+      profileUrl: img(d.profile_path, 'w342'),
+      acting: dedupe((d.combined_credits?.cast ?? []).map(map)),
+      crew: dedupe((d.combined_credits?.crew ?? []).map(map)),
+    };
+  }
+
+  /** Best name match, used only when a cached credit carries no person id. */
+  async findPerson(name: string): Promise<string | null> {
+    const data = await this.request<{ results?: { id: number; name?: string }[] }>(
+      '/search/person',
+      { query: name, include_adult: 'false' },
+    );
+    const results = data.results ?? [];
+    const exact = results.find((r) => (r.name ?? '').toLowerCase() === name.toLowerCase());
+    const hit = exact ?? results[0];
+    return hit ? String(hit.id) : null;
+  }
+
   // -- http ------------------------------------------------------------------
 
   private async request<T>(path: string, params: Record<string, string>): Promise<T> {
@@ -363,6 +435,23 @@ interface TmdbWatchProviders {
       buy?: TmdbWatchProviderEntry[];
     }
   >;
+}
+
+interface TmdbPersonCredit extends TmdbSearchItem {
+  character?: string;
+  job?: string;
+}
+
+interface TmdbPerson {
+  id: number;
+  name?: string;
+  biography?: string;
+  birthday?: string | null;
+  deathday?: string | null;
+  place_of_birth?: string | null;
+  known_for_department?: string | null;
+  profile_path?: string | null;
+  combined_credits?: { cast?: TmdbPersonCredit[]; crew?: TmdbPersonCredit[] };
 }
 
 interface TmdbSearchItem {
@@ -408,8 +497,9 @@ interface TmdbDetails {
   genres?: { id: number; name: string }[];
   production_companies?: { id: number; name: string }[];
   credits?: {
-    cast?: { name: string; character?: string; profile_path?: string | null }[];
+    cast?: { id?: number; name: string; character?: string; profile_path?: string | null }[];
     crew?: {
+      id?: number;
       name: string;
       job?: string;
       department?: string;

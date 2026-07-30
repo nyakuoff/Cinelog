@@ -13,6 +13,7 @@ import { ListDetailPage } from './pages/ListDetailPage';
 import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MediaDetailPage } from './pages/MediaDetailPage';
+import { PersonPage } from './pages/PersonPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { AdminPage } from './pages/AdminPage';
@@ -37,6 +38,9 @@ export function App(): JSX.Element {
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/media/:id" element={<MediaDetailPage />} />
+        {/* Person ids are numeric, so the static "name" segment can't collide. */}
+        <Route path="/person/name/:name" element={<PersonPage byName />} />
+        <Route path="/person/:id" element={<PersonPage />} />
         {/* Import moved into Settings; keep the old path working. */}
         <Route path="/import" element={<Navigate to="/settings?tab=data" replace />} />
         <Route path="/profile" element={<PublicProfilePage />} />

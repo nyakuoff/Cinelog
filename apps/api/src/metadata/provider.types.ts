@@ -14,6 +14,13 @@ export interface ProviderSearchResult {
 }
 
 export interface ProviderCredit {
+  /**
+   * The provider's own id for this person, when it has one. Null for credits
+   * that predate this field in the metadata cache and for admin-entered cast,
+   * which is why every consumer must treat it as optional rather than assuming
+   * a person page exists.
+   */
+  personId: string | null;
   name: string;
   role: string | null;
   character: string | null;
@@ -100,6 +107,34 @@ export interface MetadataProvider {
     externalId: string,
     region: string,
   ): Promise<ProviderWatchProviders | null>;
+
+  /** A person and everything they worked on, for the filmography page. */
+  getPerson?(personId: string): Promise<ProviderPerson>;
+  /**
+   * Best match for a person's name. Needed because credits cached before person
+   * ids were recorded carry only a name, and those names should still be
+   * clickable rather than silently dead.
+   */
+  findPerson?(name: string): Promise<string | null>;
+}
+
+/** One title a person worked on, with the part they played in it. */
+export interface ProviderPersonCredit extends ProviderSearchResult {
+  character: string | null;
+  job: string | null;
+}
+
+export interface ProviderPerson {
+  id: string;
+  name: string;
+  biography: string | null;
+  birthday: string | null;
+  deathday: string | null;
+  placeOfBirth: string | null;
+  knownForDepartment: string | null;
+  profileUrl: string | null;
+  acting: ProviderPersonCredit[];
+  crew: ProviderPersonCredit[];
 }
 
 export type DiscoverListKind = 'TRENDING' | 'POPULAR' | 'UPCOMING';

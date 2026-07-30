@@ -271,6 +271,9 @@ export class MediaService {
       studios: raw?.studios ?? [],
       cast: (this.parseCastOverride(item.castOverride) ?? raw?.cast ?? []).map((c, i) => ({
         id: `${item.id}-cast-${i}`,
+        // Absent on admin-entered cast and on anything cached before person ids
+        // were recorded; the client falls back to a name lookup.
+        personId: c.personId ?? null,
         name: c.name,
         role: c.role,
         character: c.character,
@@ -279,6 +282,7 @@ export class MediaService {
       })),
       crew: (raw?.crew ?? []).map((c, i) => ({
         id: `${item.id}-crew-${i}`,
+        personId: c.personId ?? null,
         name: c.name,
         role: c.role,
         character: c.character,
@@ -495,7 +499,7 @@ export class MediaService {
    *  GET response (already wrapped by toProxyUrl), and getDetail wraps
    *  raw.cast[].profileUrl again on read — storing the proxied form as-is
    *  would double-wrap it into a broken URL on the next fetch. */
-  async updateCast(mediaId: string, cast: Omit<CreditPerson, 'id'>[]): Promise<void> {
+  async updateCast(mediaId: string, cast: Omit<CreditPerson, 'id' | 'personId'>[]): Promise<void> {
     const item = await this.prisma.mediaItem.findUnique({ where: { id: mediaId } });
     if (!item) throw new NotFoundException('Media not found');
 

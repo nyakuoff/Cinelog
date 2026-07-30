@@ -266,6 +266,22 @@ repeat log edits rather than hitting the one-review-per-title constraint.
   `PRAGMA foreign_keys` **off** by default — an artifact of the test cleanup, not the
   schema. Test cleanup now goes through Prisma.)
 
+### People (filmographies)
+
+- `GET /people/:id` and `GET /people/by-name?name=` return a person and everything they
+  worked on, read straight from the metadata provider — nothing about a person is stored
+  locally, because there is no user data to hang off one. Each credit is matched against the
+  cache so an already-known title opens directly instead of being re-resolved.
+- Credits now carry the provider's `personId`, so a director or cast name on a film page
+  links to `/person/:id`. Credits **cached before this change** (and admin-entered cast) have
+  no id and route through `/person/name/:name` instead, which costs one extra provider search
+  on click. Cached details are never refreshed on a timer, so existing titles keep using the
+  name path until they're rematched — the fallback is the design, not a stopgap.
+- Verified live: Christopher Nolan by id (46 acting / 33 crew credits, multi-role credits
+  merged into one entry, newest first, cached titles flagged), Greta Gerwig by name, a
+  nonsense name → 404, unauthenticated → 401, and a freshly fetched title carrying person ids
+  on every credit.
+
 ## Not yet started
 
 - **Notifications** — `Notification` table exists from slice 1; no endpoints or UI yet.

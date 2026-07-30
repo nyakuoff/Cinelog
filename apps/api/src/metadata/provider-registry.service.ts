@@ -7,6 +7,7 @@ import {
   type ProviderBrowseParams,
   type ProviderBrowseResult,
   type ProviderMediaDetails,
+  type ProviderPerson,
   type ProviderSearchResult,
   type ProviderWatchProviders,
 } from './provider.types';
@@ -116,6 +117,31 @@ export class ProviderRegistry {
     } catch (err) {
       this.logger.warn(`Provider '${provider}' getSimilar failed: ${err}`);
       return [];
+    }
+  }
+
+  /**
+   * A person's filmography. Person pages are only ever reached from a credit,
+   * and credits carry the provider that supplied them, so the lookup is scoped
+   * to that provider rather than fanned out.
+   */
+  async getPerson(provider: ProviderId, personId: string): Promise<ProviderPerson> {
+    const impl = this.getById(provider);
+    if (!impl.getPerson) {
+      throw new NotFoundException(`Provider '${provider}' does not serve people`);
+    }
+    return impl.getPerson(personId);
+  }
+
+  /** Resolve a name to a person id, for credits cached without one. */
+  async findPerson(provider: ProviderId, name: string): Promise<string | null> {
+    const impl = this.providers.find((p) => p.id === provider);
+    if (!impl?.findPerson) return null;
+    try {
+      return await impl.findPerson(name);
+    } catch (err) {
+      this.logger.warn(`Provider '${provider}' findPerson failed: ${err}`);
+      return null;
     }
   }
 

@@ -16,3 +16,4 @@ export * from './reviews.js';
 export * from './follows.js';
 export * from './lists.js';
 export * from './integrations.js';
+export * from './people.js';

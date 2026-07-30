@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { MediaModule } from './media/media.module';
+import { PeopleModule } from './people/people.module';
 import { DiscoveryModule } from './discovery/discovery.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SocialModule } from './social/social.module';
@@ -43,6 +44,7 @@ import { RolesGuard } from './common/roles.guard';
     UsersModule,
     ProfilesModule,
     MediaModule,
+    PeopleModule,
     DiscoveryModule,
     ReviewsModule,
     SocialModule,

@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AuthProvider } from './lib/auth';
 import { queryClient } from './lib/queryClient';
+import { SW_UPDATE_EVENT } from './components/UpdateToast';
 
 // Self-hosted type. Bundled and served by the app itself — a self-hosted
 // instance may have no outbound internet, where a CDN font would just fail
@@ -32,8 +33,25 @@ createRoot(document.getElementById('root')!).render(
 // HMR untouched). Served from the app root, so its scope is "/".
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* best-effort; the app works fine without it */
-    });
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((registration) => {
+        // A page that's had a controller since before this registration call
+        // was already running an older SW — an `updatefound` from here means
+        // a new version shipped while the (possibly long-lived, installed)
+        // app was sitting open, not just the very first install.
+        const hadController = Boolean(navigator.serviceWorker.controller);
+        registration.addEventListener('updatefound', () => {
+          const installing = registration.installing;
+          installing?.addEventListener('statechange', () => {
+            if (installing.state === 'installed' && hadController) {
+              window.dispatchEvent(new CustomEvent(SW_UPDATE_EVENT));
+            }
+          });
+        });
+      })
+      .catch(() => {
+        /* best-effort; the app works fine without it */
+      });
   });
 }

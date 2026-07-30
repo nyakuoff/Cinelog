@@ -132,6 +132,31 @@ button {
     font-family: 'Courier Prime', 'Courier New', monospace;
     font-feature-settings: 'tnum' 1;
   }
+
+  /* Installed-standalone-mode clearance for notches/home indicators.
+     Zero on ordinary mobile Safari/Chrome tabs — env() only resolves
+     once viewport-fit=cover is set, which only matters in standalone. */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  /* For `fixed bottom-*`/`fixed top-*` elements, where the notch/home-indicator
+     clearance has to push the box's position rather than pad its (already
+     sized) content. */
+  .bottom-safe-5 {
+    bottom: calc(1.25rem + env(safe-area-inset-bottom));
+  }
+  .top-safe {
+    top: env(safe-area-inset-top);
+  }
+  .pl-safe {
+    padding-left: env(safe-area-inset-left);
+  }
+  .pr-safe {
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* ---- Rubber stamp ------------------------------------------------

@@ -5,6 +5,8 @@ import { cn } from '../lib/cn';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
 import { LogModal } from './LogModal';
+import { InstallPrompt } from './InstallPrompt';
+import { UpdateToast } from './UpdateToast';
 
 const NAV = [
   { to: '/', label: 'Home', end: true },
@@ -85,8 +87,8 @@ export function Layout(): JSX.Element {
   }
 
   return (
-    <div className="min-h-full">
-      <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2">
+    <div className="min-h-full pl-safe pr-safe">
+      <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2 pt-safe">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-5 px-4 sm:h-20 sm:px-6">
           <button
             onClick={() => setNavOpen((v) => !v)}
@@ -285,12 +287,15 @@ export function Layout(): JSX.Element {
       <button
         onClick={() => setLogging(true)}
         aria-label="Log a film"
-        className="fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-sm bg-accent font-cond text-2xl font-extrabold text-ink shadow-lift hover:bg-gold/90 sm:hidden"
+        className="fixed bottom-safe-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-sm bg-accent font-cond text-2xl font-extrabold text-ink shadow-lift hover:bg-gold/90 sm:hidden"
       >
         +
       </button>
 
       {logging && <LogModal onClose={() => setLogging(false)} />}
+
+      <InstallPrompt />
+      <UpdateToast />
     </div>
   );
 }

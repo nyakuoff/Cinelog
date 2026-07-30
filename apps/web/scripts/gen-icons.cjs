@@ -1,6 +1,8 @@
 // Dependency-free PWA icon generator: renders the Cinelog three-dot logo
 // (dark square + gold/cyan/rose dots) to PNG at several sizes using only
-// Node built-ins (zlib for the IDAT deflate, manual PNG chunking).
+// Node built-ins (zlib for the IDAT deflate, manual PNG chunking). Also
+// emits iOS splash screens (same dot cluster centered on a WxH canvas) so
+// launching the installed app doesn't flash white before the UI paints.
 //
 // Regenerate after a logo/color change:
 //   node apps/web/scripts/gen-icons.cjs apps/web/public
@@ -43,19 +45,22 @@ function chunk(type, data) {
   return Buffer.concat([len, typeBuf, data, crc]);
 }
 
-/** Render an S×S RGB icon: opaque bg, three overlapping anti-aliased dots
- *  centered, cluster sized to sit inside the maskable safe zone. */
-function render(S) {
-  const px = Buffer.alloc(S * S * 3);
-  for (let i = 0; i < S * S; i++) {
+/** Render a W×H RGB PNG: opaque bg, three overlapping anti-aliased dots
+ *  centered, cluster sized relative to the smaller dimension so it sits
+ *  inside the maskable safe zone on square icons and stays modestly
+ *  proportioned on tall splash canvases. */
+function renderCanvas(W, H) {
+  const px = Buffer.alloc(W * H * 3);
+  for (let i = 0; i < W * H; i++) {
     px[i * 3] = BG[0];
     px[i * 3 + 1] = BG[1];
     px[i * 3 + 2] = BG[2];
   }
-  const extent = 0.6 * S; // total cluster width (safe for maskable)
+  const base = Math.min(W, H);
+  const extent = 0.6 * base; // total cluster width (safe for maskable)
   const r = 0.26 * extent;
-  const cx = S / 2;
-  const cy = S / 2;
+  const cx = W / 2;
+  const cy = H / 2;
   const offset = 0.24 * extent; // center-to-outer-center distance
   const centers = [
     [cx - offset, cy],
@@ -66,15 +71,15 @@ function render(S) {
     const [ox, oy] = centers[d];
     const [cr, cg, cb] = DOTS[d];
     const minX = Math.max(0, Math.floor(ox - r - 1));
-    const maxX = Math.min(S - 1, Math.ceil(ox + r + 1));
+    const maxX = Math.min(W - 1, Math.ceil(ox + r + 1));
     const minY = Math.max(0, Math.floor(oy - r - 1));
-    const maxY = Math.min(S - 1, Math.ceil(oy + r + 1));
+    const maxY = Math.min(H - 1, Math.ceil(oy + r + 1));
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const dist = Math.hypot(x + 0.5 - ox, y + 0.5 - oy);
         const cov = Math.max(0, Math.min(1, r - dist + 0.5)); // 1px AA band
         if (cov <= 0) continue;
-        const idx = (y * S + x) * 3;
+        const idx = (y * W + x) * 3;
         px[idx] = Math.round(px[idx] * (1 - cov) + cr * cov);
         px[idx + 1] = Math.round(px[idx + 1] * (1 - cov) + cg * cov);
         px[idx + 2] = Math.round(px[idx + 2] * (1 - cov) + cb * cov);
@@ -82,14 +87,14 @@ function render(S) {
     }
   }
   // Filter byte 0 per scanline.
-  const raw = Buffer.alloc(S * (S * 3 + 1));
-  for (let y = 0; y < S; y++) {
-    raw[y * (S * 3 + 1)] = 0;
-    px.copy(raw, y * (S * 3 + 1) + 1, y * S * 3, (y + 1) * S * 3);
+  const raw = Buffer.alloc(H * (W * 3 + 1));
+  for (let y = 0; y < H; y++) {
+    raw[y * (W * 3 + 1)] = 0;
+    px.copy(raw, y * (W * 3 + 1) + 1, y * W * 3, (y + 1) * W * 3);
   }
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(S, 0);
-  ihdr.writeUInt32BE(S, 4);
+  ihdr.writeUInt32BE(W, 0);
+  ihdr.writeUInt32BE(H, 4);
   ihdr[8] = 8; // bit depth
   ihdr[9] = 2; // color type: truecolor RGB
   const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -99,6 +104,9 @@ function render(S) {
     chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
     chunk('IEND', Buffer.alloc(0)),
   ]);
+}
+function render(S) {
+  return renderCanvas(S, S);
 }
 
 const outDir = process.argv[2];
@@ -112,4 +120,25 @@ const targets = [
 for (const [name, size] of targets) {
   fs.writeFileSync(path.join(outDir, name), render(size));
   console.log('wrote', name, size + 'x' + size);
+}
+
+// iOS splash screens (apple-touch-startup-image): current-generation
+// iPhone/iPad sizes only, not an exhaustive device matrix. Each entry is
+// [cssWidth, cssHeight, dpr] as used in the matching index.html media query;
+// the PNG itself is rendered at the physical (css * dpr) pixel size.
+const splashTargets = [
+  [393, 852, 3], // iPhone 15/16/14 Pro
+  [430, 932, 3], // iPhone 15/16 Plus / Pro Max
+  [390, 844, 3], // iPhone 12/13/14
+  [375, 667, 2], // iPhone SE (2nd/3rd gen)
+  [1024, 1366, 2], // iPad Pro 12.9"
+  [834, 1194, 2], // iPad Pro 11" / Air
+  [810, 1080, 2], // iPad mini / 10.2"
+];
+for (const [cw, ch, dpr] of splashTargets) {
+  const w = cw * dpr;
+  const h = ch * dpr;
+  const name = `apple-splash-${w}-${h}.png`;
+  fs.writeFileSync(path.join(outDir, name), renderCanvas(w, h));
+  console.log('wrote', name, w + 'x' + h);
 }

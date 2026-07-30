@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import type { UserPublic } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
@@ -6,10 +7,30 @@ import { useAuth } from '../lib/auth';
 import { posterGradient } from '../lib/poster';
 import { Avatar } from '../components/Avatar';
 import { Field } from '../components/Field';
+import { DataSettings } from '../components/DataSettings';
+import { TabBar } from '../components/lb';
 import { Button, Card, Input, Spinner } from '../components/ui';
+
+type SettingsTab = 'profile' | 'privacy' | 'account' | 'data';
+
+const TABS = [
+  { key: 'profile', label: 'Profile' },
+  { key: 'privacy', label: 'Privacy' },
+  { key: 'account', label: 'Account' },
+  { key: 'data', label: 'Data' },
+];
 
 export function SettingsPage(): JSX.Element {
   const { user } = useAuth();
+  const [params, setParams] = useSearchParams();
+
+  // The tab lives in the URL so the account menu can link straight to Data and
+  // a reload keeps you where you were.
+  const requested = params.get('tab');
+  const tab: SettingsTab = TABS.some((t) => t.key === requested)
+    ? (requested as SettingsTab)
+    : 'profile';
+
   if (!user) return <></>;
 
   return (
@@ -19,12 +40,26 @@ export function SettingsPage(): JSX.Element {
       </p>
       <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Settings</h1>
 
-      <BannerAndAvatar user={user} />
+      <div className="mt-6">
+        <TabBar
+          tabs={TABS}
+          active={tab}
+          onChange={(key) => setParams(key === 'profile' ? {} : { tab: key }, { replace: true })}
+        />
+      </div>
 
-      <div className="mt-8 space-y-6">
-        <ProfileForm user={user} />
-        <PrivacyForm user={user} />
-        <PasswordForm />
+      <div className="mt-8">
+        {tab === 'profile' && (
+          <>
+            <BannerAndAvatar user={user} />
+            <div className="mt-8">
+              <ProfileForm user={user} />
+            </div>
+          </>
+        )}
+        {tab === 'privacy' && <PrivacyForm user={user} />}
+        {tab === 'account' && <PasswordForm />}
+        {tab === 'data' && <DataSettings />}
       </div>
     </div>
   );
@@ -91,18 +126,18 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
             clipped banner box, so it renders fully on top of it. */}
         <div className="absolute -bottom-8 left-5 z-10">
           <div className="relative">
-            <div className="rounded-full ring-4 ring-bg">
+            <div className="rounded-sm ring-4 ring-bg">
               <Avatar user={user} size={80} />
             </div>
             {avatarBusy && (
-              <div className="absolute inset-0 grid place-items-center rounded-full bg-black/40">
+              <div className="absolute inset-0 grid place-items-center rounded-sm bg-ink/60">
                 <Spinner className="h-4 w-4" />
               </div>
             )}
             <button
               onClick={() => avatarRef.current?.click()}
               title="Change avatar"
-              className="absolute -right-1 -top-1 grid h-7 w-7 place-items-center rounded-full border-2 border-bg bg-gold text-xs text-ink shadow-soft hover:brightness-110"
+              className="absolute -right-1 -top-1 grid h-7 w-7 place-items-center rounded-sm border-2 border-bg bg-gold text-xs text-ink hover:bg-gold/90"
             >
               ✎
             </button>

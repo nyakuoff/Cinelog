@@ -659,7 +659,7 @@ function ProfileHeader({
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
         </div>
         <div className="absolute -bottom-8 left-5">
-          <div className="rounded-full ring-4 ring-bg">
+          <div className="rounded-sm ring-4 ring-bg">
             <Avatar user={{ username: profile.username, avatarUrl: profile.avatarUrl }} size={80} />
           </div>
         </div>

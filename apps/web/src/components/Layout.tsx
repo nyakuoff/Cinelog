@@ -21,7 +21,7 @@ const MENU_LINKS = [
   { to: '/library', label: 'Library' },
   { to: '/watchlist', label: 'Watchlist' },
   { to: '/settings', label: 'Settings' },
-  { to: '/import', label: 'Import from Letterboxd' },
+  { to: '/settings?tab=data', label: 'Import & backup' },
 ];
 
 export function Layout(): JSX.Element {

@@ -13,7 +13,6 @@ import { ListDetailPage } from './pages/ListDetailPage';
 import { SearchPage } from './pages/SearchPage';
 import { WatchlistPage } from './pages/WatchlistPage';
 import { MediaDetailPage } from './pages/MediaDetailPage';
-import { ImportPage } from './pages/ImportPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { AdminPage } from './pages/AdminPage';
@@ -38,7 +37,8 @@ export function App(): JSX.Element {
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/media/:id" element={<MediaDetailPage />} />
-        <Route path="/import" element={<ImportPage />} />
+        {/* Import moved into Settings; keep the old path working. */}
+        <Route path="/import" element={<Navigate to="/settings?tab=data" replace />} />
         <Route path="/profile" element={<PublicProfilePage />} />
         <Route path="/u/:username" element={<PublicProfilePage />} />
         <Route path="/settings" element={<SettingsPage />} />

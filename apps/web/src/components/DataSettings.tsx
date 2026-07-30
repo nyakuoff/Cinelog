@@ -4,20 +4,19 @@ import type { BackupImportResult, ImportSummary, LetterboxdItem } from '@cinelog
 import { api, ApiError } from '../lib/api';
 import { parseCsv } from '../lib/csv';
 import { parseLetterboxdZip, type ParsedExport } from '../lib/letterboxdZip';
-import { Button, Card, Spinner } from '../components/ui';
+import { Button, Card, Spinner } from './ui';
 
 const MAX = 2000;
 
-export function ImportPage(): JSX.Element {
+/**
+ * The Data section of Settings: bring a library in from Letterboxd, and take
+ * everything out again as JSON. Both are the same kind of task — moving your
+ * library across a boundary — so they live together rather than on a page of
+ * their own.
+ */
+export function DataSettings(): JSX.Element {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
-        Import &amp; backup
-      </p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">
-        Your data
-      </h1>
-
+    <div className="space-y-6">
       <LetterboxdImportCard />
       <BackupCard />
     </div>
@@ -80,7 +79,7 @@ function BackupCard(): JSX.Element {
   }
 
   return (
-    <Card className="mt-6 p-6">
+    <Card className="p-6">
       <div className="mb-1 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-gold" />
         <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
@@ -251,7 +250,7 @@ function LetterboxdImportCard(): JSX.Element {
   }
 
   return (
-    <Card className="mt-6 p-6">
+    <Card className="p-6">
       <h2 className="mb-1 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
         Import from Letterboxd
       </h2>

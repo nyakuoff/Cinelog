@@ -30,13 +30,13 @@
      faint green cast. Deliberately near-neutral: every screen here
      is mostly poster artwork, and a tinted ground would falsify
      several hundred of them at once. */
-  --bg: 22 25 24; /* #161918 vault graphite */
-  --bg-2: 17 20 19; /* #111413 shelf shadow */
-  --surface: 30 34 33; /* #1e2221 label plane */
-  --surface-2: 41 46 44; /* #292e2c raised stock */
-  --card: 51 57 55; /* #333937 */
-  --border: 45 51 49; /* #2d3331 */
-  --border-hi: 74 83 79; /* #4a534f */
+  --bg: 26 32 37;          /* #1a2025 */
+  --bg-2: 21 27 31;        /* #151b1f */
+  --surface: 34 42 48;     /* #222a30 */
+  --surface-2: 42 51 58;   /* #2a333a */
+  --card: 51 61 69;        /* #333d45 */
+  --border: 54 65 73;      /* #364149 */
+  --border-hi: 80 94 104;  /* #505e68 */
 
   /* Ink on stock — warm off-white, never pure white; a gummed
      label is paper, not a screen. */
@@ -196,7 +196,10 @@ button {
   font-family: Georgia, 'Times New Roman', serif;
   white-space: nowrap;
   line-height: 1;
-  color: rgb(58 64 61); /* empty star */
+  /* Empty stars must be visible before you hover: on the rating control this
+     is what tells you how many stars there are to give. The previous value sat
+     near 1.3:1 against the ground, which read as "no control here". */
+  color: rgb(var(--border-hi));
 }
 .stars::before,
 .stars-fill::before {

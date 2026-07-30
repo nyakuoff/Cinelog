@@ -20,6 +20,16 @@ describe('rating-scale conversions', () => {
     }
   });
 
+  it('supports half stars on the ten-point scale used by shows', () => {
+    expect(fromNormalized(75, 'TEN_HALF')).toBe(7.5);
+    expect(fromNormalized(85, 'TEN_HALF')).toBe(8.5);
+    // Whole values stay whole rather than gaining a spurious .0 step.
+    expect(fromNormalized(80, 'TEN_HALF')).toBe(8);
+    for (const display of [0, 0.5, 5, 7.5, 10]) {
+      expect(fromNormalized(toNormalized(display, 'TEN_HALF'), 'TEN_HALF')).toBe(display);
+    }
+  });
+
   it('clamps out-of-range normalized values', () => {
     expect(toNormalized(200, 'HUNDRED')).toBe(100);
     expect(toNormalized(-5, 'HUNDRED')).toBe(0);

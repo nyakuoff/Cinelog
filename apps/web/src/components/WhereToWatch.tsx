@@ -32,9 +32,11 @@ export function WhereToWatch({ media }: { media: MediaDetail }): JSX.Element | n
   if (isLoading || !data) return null;
 
   const hasStreaming = data.streaming.length > 0 || data.rent.length > 0 || data.buy.length > 0;
-  // Nothing to request once a title is already there — no button, and no row
-  // restating what the Jellyfin link above it already says.
-  const showRequest = data.requestSupported && data.requestStatus !== 'AVAILABLE';
+  // A playable copy settles the question. Once there's a Jellyfin link, no
+  // request row belongs under it — not a button, and not a status restating in
+  // worse words what the link above already proves.
+  const showRequest =
+    data.requestSupported && !data.jellyfinUrl && data.requestStatus !== 'AVAILABLE';
   if (!data.jellyfinUrl && !hasStreaming && !showRequest) return null;
 
   return (
@@ -104,25 +106,40 @@ function JellyfinMark(): JSX.Element {
   return (
     <span
       title="Jellyfin"
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-[#101820] ring-1 ring-border-hi/60"
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-sm bg-[#1b2733] ring-1 ring-border-hi/60"
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-        <defs>
-          <linearGradient id="jf-mark" x1="0" y1="1" x2="1" y2="0">
-            <stop offset="0" stopColor="#AA5CC3" />
-            <stop offset="1" stopColor="#00A4DC" />
-          </linearGradient>
-        </defs>
-        {/* Two nested rounded triangles — the stacked sheets of the Jellyfin
-            mark, the lower one carrying the gradient at full strength. */}
+      <svg width="19" height="19" viewBox="0 0 512 512" aria-hidden="true">
+        <linearGradient
+          id="jf-inner"
+          x1="97.508"
+          x2="522.069"
+          y1="308.135"
+          y2="63.019"
+          gradientTransform="matrix(1 0 0 -1 0 514)"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#aa5cc3" />
+          <stop offset="1" stopColor="#00a4dc" />
+        </linearGradient>
         <path
-          fill="url(#jf-mark)"
-          d="M12 9.4c1 0 6.6 10.2 6.1 11.3-.5 1-11.7 1-12.2 0C5.4 19.6 11 9.4 12 9.4Z"
+          fill="url(#jf-inner)"
+          d="M256 196.2c-22.4 0-94.8 131.3-83.8 153.4s156.8 21.9 167.7 0-61.3-153.4-83.9-153.4"
         />
+        <linearGradient
+          id="jf-outer"
+          x1="94.193"
+          x2="518.754"
+          y1="302.394"
+          y2="57.278"
+          gradientTransform="matrix(1 0 0 -1 0 514)"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#aa5cc3" />
+          <stop offset="1" stopColor="#00a4dc" />
+        </linearGradient>
         <path
-          fill="url(#jf-mark)"
-          opacity="0.62"
-          d="M12 2c.8 0 5.3 8.1 4.9 9-.4.8-9.4.8-9.8 0C6.7 10.1 11.2 2 12 2Z"
+          fill="url(#jf-outer)"
+          d="M256 0C188.3 0-29.8 395.4 3.4 462.2s472.3 66 505.2 0S323.8 0 256 0m165.6 404.3c-21.6 43.2-309.3 43.8-331.1 0S211.7 101.4 256 101.4 443.2 361 421.6 404.3"
         />
       </svg>
     </span>

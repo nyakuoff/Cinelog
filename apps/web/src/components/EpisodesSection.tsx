@@ -229,7 +229,15 @@ function SeasonPanel({
                 <p className="truncate text-sm text-content">{ep.name ?? `Episode ${ep.episodeNumber}`}</p>
                 {ep.airDate && <p className="text-xs tabular-nums text-muted-2">{ep.airDate}</p>}
               </div>
-              <StarInput value={ep.rating} scale={scale} size={14} onChange={(v) => onRate(ep.id, v)} />
+              {/* Ten stars in a list row is a tight target, and half-stars
+                  halve it again — big enough to hit, still subordinate to the
+                  episode title it sits beside. */}
+              <StarInput
+                value={ep.rating}
+                scale={scale}
+                size={18}
+                onChange={(v) => onRate(ep.id, v)}
+              />
               <button
                 onClick={() => onRate(ep.id, null)}
                 aria-label="Clear rating"

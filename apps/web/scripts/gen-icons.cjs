@@ -9,11 +9,14 @@ const zlib = require('node:zlib');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BG = [14, 15, 19]; // #0e0f13 theme background
+// The app's own ground and inks (--bg / --gold / --cyan / --rose in
+// index.css). Keep these in step with the tokens: an icon carrying the
+// pre-Archive background reads as a different app's icon on the tab strip.
+const BG = [26, 32, 37]; // #1a2025 theme background
 const DOTS = [
-  [255, 177, 60], // gold
-  [69, 208, 221], // cyan
-  [255, 93, 122], // rose
+  [250, 176, 58], // gold  #fab03a
+  [88, 190, 178], // cyan  #58beb2
+  [240, 92, 100], // rose  #f05c64
 ];
 
 // CRC32 (PNG uses it per chunk).

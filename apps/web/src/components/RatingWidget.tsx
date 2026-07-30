@@ -60,8 +60,13 @@ export function StarInput({ value, scale, onChange, readOnly, size = 24 }: StarI
   const pick = (starIndex: number, e: React.MouseEvent<HTMLButtonElement>): number =>
     Math.round(starIndex * perStar - (allowHalf && isLeftHalf(e) ? perStar / 2 : 0));
 
+  // Cropping the glyph to its own bounds (see StarSvg) left the stars touching.
+  // A hair of air between them scales with the row so a 14px episode row and a
+  // 30px film row read the same.
+  const gap = Math.max(1, Math.round(size * 0.09));
+
   return (
-    <div className="flex items-center" onMouseLeave={() => setHover(null)}>
+    <div className="flex items-center" style={{ gap }} onMouseLeave={() => setHover(null)}>
       {Array.from({ length: cfg.max }, (_, i) => {
         const starIndex = i + 1;
         const fill = Math.max(0, Math.min(1, fillStars - i));
@@ -72,7 +77,8 @@ export function StarInput({ value, scale, onChange, readOnly, size = 24 }: StarI
             key={starIndex}
             type="button"
             disabled={readOnly}
-            className={cn('relative block', groupGap && 'ml-1.5', !readOnly && 'cursor-pointer')}
+            style={groupGap ? { marginLeft: gap } : undefined}
+            className={cn('relative block', !readOnly && 'cursor-pointer')}
             onMouseMove={(e) => !readOnly && setHover(pick(starIndex, e))}
             onClick={(e) => {
               if (readOnly) return;

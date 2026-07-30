@@ -17,6 +17,7 @@ export const RATING_SCALES: Record<RatingScale, RatingScaleConfig> = {
   FIVE_STAR_HALF: { max: 5, step: 0.5, decimals: 1, isStars: true },
   // IMDB-style: ten whole stars.
   TEN: { max: 10, step: 1, decimals: 0, isStars: true },
+  TEN_HALF: { max: 10, step: 0.5, decimals: 1, isStars: true },
   HUNDRED: { max: 100, step: 1, decimals: 0, isStars: false },
 };
 
@@ -39,7 +40,12 @@ export function toNormalized(value: number, scale: RatingScale): number {
  * Rating scale by media type: standalone works (movies, specials) use a
  * 5-star scale; episodic works (TV, anime, etc.) use 10 so episodes have the
  * granularity to average cleanly.
+ *
+ * Both carry half stars. A half is how people actually rate — the gap between
+ * "good" and "very good" is real and a whole step is too coarse to hold it —
+ * and having it on one scale but not the other made rating a show feel blunter
+ * than rating a film for no reason a viewer could name.
  */
 export function scaleForMediaType(type: MediaType): RatingScale {
-  return type === 'MOVIE' || type === 'SPECIAL' ? 'FIVE_STAR_HALF' : 'TEN';
+  return type === 'MOVIE' || type === 'SPECIAL' ? 'FIVE_STAR_HALF' : 'TEN_HALF';
 }

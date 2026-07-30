@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#0e0f13"/>
-  <circle cx="11.2" cy="16" r="5.4" fill="#ffb13c"/>
-  <circle cx="16" cy="16" r="5.4" fill="#45d0dd"/>
-  <circle cx="20.8" cy="16" r="5.4" fill="#ff5d7a"/>
+  <!-- Ground and inks match index.css (--bg, --gold, --cyan, --rose).
+       Keep in sync with scripts/gen-icons.cjs, which renders the PNG sizes. -->
+  <rect width="32" height="32" rx="7" fill="#1a2025"/>
+  <circle cx="11.2" cy="16" r="5.4" fill="#fab03a"/>
+  <circle cx="16" cy="16" r="5.4" fill="#58beb2"/>
+  <circle cx="20.8" cy="16" r="5.4" fill="#f05c64"/>
 </svg>

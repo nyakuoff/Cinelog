@@ -31,7 +31,13 @@ export const UserRole = z.enum(['ADMIN', 'USER']);
 export type UserRole = z.infer<typeof UserRole>;
 
 /** Configurable rating scales. Values are stored normalized 0..100; the scale controls display + input. */
-export const RatingScale = z.enum(['FIVE_STAR', 'FIVE_STAR_HALF', 'TEN', 'HUNDRED']);
+export const RatingScale = z.enum([
+  'FIVE_STAR',
+  'FIVE_STAR_HALF',
+  'TEN',
+  'TEN_HALF',
+  'HUNDRED',
+]);
 export type RatingScale = z.infer<typeof RatingScale>;
 
 /** Artwork kinds a provider may expose. */

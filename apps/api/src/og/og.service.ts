@@ -31,12 +31,7 @@ export class OgService {
       title: `${title} · ${SITE_NAME}`,
       description,
       canonical: `${baseUrl}/media/${item.id}`,
-      // The wide backdrop drives the large card; the poster ships alongside it
-      // as a secondary image so clients that prefer portrait art (and any that
-      // ignore the first candidate) still show the title's own artwork rather
-      // than nothing.
-      image: this.absoluteArtwork(item.backdropPath ?? item.posterPath, baseUrl),
-      posterImage: this.absoluteArtwork(item.posterPath, baseUrl),
+      image: this.absoluteArtwork(item.posterPath ?? item.backdropPath, baseUrl),
       ogType: isFilm ? 'video.movie' : 'video.tv_show',
       redirectTo: `${baseUrl}/media/${item.id}`,
     });
@@ -50,7 +45,6 @@ export class OgService {
       description: SITE_DESCRIPTION,
       canonical: baseUrl,
       image: null,
-      posterImage: null,
       ogType: 'website',
       redirectTo: baseUrl,
     });
@@ -66,8 +60,6 @@ export class OgService {
     description: string;
     canonical: string;
     image: string | null;
-    /** Portrait artwork, emitted after the primary image. */
-    posterImage: string | null;
     ogType: string;
     redirectTo: string;
   }): string {
@@ -87,20 +79,8 @@ export class OgService {
       tags.push(
         `<meta property="og:image" content="${esc(m.image)}" />`,
         `<meta property="og:image:alt" content="${esc(m.title)}" />`,
-        `<meta name="twitter:card" content="summary_large_image" />`,
-        `<meta name="twitter:image" content="${esc(m.image)}" />`,
-      );
-      // Only a genuinely different second image is worth emitting; when a title
-      // has no backdrop the poster is already the primary.
-      if (m.posterImage && m.posterImage !== m.image) {
-        tags.push(`<meta property="og:image" content="${esc(m.posterImage)}" />`);
-      }
-    } else if (m.posterImage) {
-      tags.push(
-        `<meta property="og:image" content="${esc(m.posterImage)}" />`,
-        `<meta property="og:image:alt" content="${esc(m.title)}" />`,
         `<meta name="twitter:card" content="summary" />`,
-        `<meta name="twitter:image" content="${esc(m.posterImage)}" />`,
+        `<meta name="twitter:image" content="${esc(m.image)}" />`,
       );
     } else {
       tags.push(`<meta name="twitter:card" content="summary" />`);

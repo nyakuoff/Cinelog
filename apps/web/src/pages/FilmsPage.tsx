@@ -154,8 +154,9 @@ export function FilmsPage(): JSX.Element {
                   key={`${item.provider}:${item.externalId}`}
                   title={item.title}
                   posterUrl={item.posterUrl}
+                  type={item.type}
                   rating={item.ratingCount > 0 ? item.communityRating : null}
-                  ratingTone="community"
+                  ratingLabel="Average rating on this instance"
                   onClick={() => void open(item)}
                 />
               ))}

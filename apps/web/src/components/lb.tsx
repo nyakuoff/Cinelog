@@ -61,23 +61,26 @@ export function SectionHeader({
  */
 export function Poster({
   title,
+  type,
   posterUrl,
   to,
   onClick,
   rating,
   ratingScale = 'TEN',
-  ratingTone = 'own',
+  ratingLabel,
   liked,
   className,
 }: {
   title: string;
+  type?: MediaType;
   posterUrl?: string | null;
   to?: string;
   onClick?: () => void;
   /** Normalized 0..100 — shown as the shared corner badge. */
   rating?: number | null;
   ratingScale?: RatingScale;
-  ratingTone?: 'own' | 'community';
+  /** Tooltip naming whose rating this is; see PosterMarks. */
+  ratingLabel?: string;
   liked?: boolean;
   className?: string;
 }): JSX.Element {
@@ -98,7 +101,13 @@ export function Poster({
           </span>
         </span>
       )}
-      <RatingBadge value={rating} scale={ratingScale} liked={liked} tone={ratingTone} />
+      <PosterMarks
+        type={type}
+        rating={rating}
+        ratingScale={ratingScale}
+        ratingLabel={ratingLabel}
+        liked={liked}
+      />
     </span>
   );
 
@@ -124,54 +133,64 @@ export function Poster({
 }
 
 /**
- * The rating mark that sits in a poster's top-right corner, and the app's one
- * way of showing "what you gave this". Every poster surface uses it — library,
- * watchlist, watched, search, similar — so the same information never appears
- * in two different costumes.
+ * Every mark that goes on a poster tile: the medium's stock label top-left,
+ * then your like and your rating top-right.
  *
- * The star glyph rides with the number: a bare figure on artwork reads as an
- * arbitrary badge, whereas "★ 4.5" reads as a rating at a glance.
+ * This exists so the two tile components can't drift apart again — they had,
+ * with one growing a type label the other never got. There is exactly one
+ * badge design in the app, and both tiles render it from here.
  */
-export function RatingBadge({
-  value,
-  scale = 'TEN',
+export function PosterMarks({
+  type,
+  rating,
+  ratingScale = 'TEN',
+  ratingLabel,
   liked = false,
-  tone = 'own',
 }: {
+  type?: MediaType;
   /** Normalized 0..100. */
-  value?: number | null;
-  scale?: RatingScale;
-  liked?: boolean;
+  rating?: number | null;
+  ratingScale?: RatingScale;
   /**
-   * `own` is the viewer's own rating, struck in acetate amber. `community` is
-   * the instance average — same badge, same corner, but on label stock, since
-   * presenting an average in the "your mark" ink would claim something untrue.
+   * Names whose rating this is, as a tooltip. Browse surfaces show the
+   * instance average rather than your own score, and the badge looks the same
+   * either way, so the distinction is carried here instead of in the styling.
    */
-  tone?: 'own' | 'community';
-}): JSX.Element | null {
-  const hasRating = value !== null && value !== undefined;
-  if (!hasRating && !liked) return null;
+  ratingLabel?: string;
+  liked?: boolean;
+}): JSX.Element {
+  const hasRating = rating !== null && rating !== undefined;
   return (
-    <div className="absolute right-0 top-0 flex items-stretch">
-      {liked && (
-        <span className="flex items-center bg-bg-2/95 px-1.5 text-[13px] leading-none text-rose">
-          ♥
+    <>
+      {type && (
+        <span className="absolute left-0 top-0 bg-bg-2/90 px-1.5 py-[3px] font-cond text-[11px] font-extrabold uppercase tracking-[0.12em] text-content/90">
+          {TYPE_LABEL_SHORT[type]}
         </span>
       )}
-      {hasRating && (
-        <span
-          className={cn(
-            'flex items-center gap-0.5 px-1.5 py-1 font-data text-[13px] font-bold leading-none',
-            tone === 'own' ? 'bg-gold text-ink' : 'bg-bg-2/95 text-gold',
+      {(hasRating || liked) && (
+        <span className="absolute right-0 top-0 flex items-stretch">
+          {liked && (
+            <span
+              title="You liked this"
+              className="flex items-center bg-bg-2/95 px-1.5 text-[13px] leading-none text-rose"
+            >
+              ♥
+            </span>
           )}
-        >
-          <span aria-hidden="true" className="text-[11px] leading-none">
-            ★
-          </span>
-          {fromNormalized(value, scale)}
+          {hasRating && (
+            <span
+              title={ratingLabel ?? 'Your rating'}
+              className="flex items-center gap-0.5 bg-gold px-1.5 py-1 font-data text-[13px] font-bold leading-none text-ink"
+            >
+              <span aria-hidden="true" className="text-[11px] leading-none">
+                ★
+              </span>
+              {fromNormalized(rating, ratingScale)}
+            </span>
+          )}
         </span>
       )}
-    </div>
+    </>
   );
 }
 
@@ -291,6 +310,17 @@ export function TabBar({
     </div>
   );
 }
+
+/** Abbreviated medium, for the poster corner label where space is tight. */
+export const TYPE_LABEL_SHORT: Record<MediaType, string> = {
+  MOVIE: 'Film',
+  TV: 'Show',
+  ANIME: 'Anime',
+  CARTOON: 'Cartoon',
+  DOCUMENTARY: 'Doc',
+  MINISERIES: 'Mini',
+  SPECIAL: 'Special',
+};
 
 /** Type label shown on browse filters and detail headers. */
 export const TYPE_LABEL: Record<MediaType, string> = {

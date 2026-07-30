@@ -603,6 +603,7 @@ function SimilarSection({
           <Poster
             key={`${r.provider}:${r.externalId}`}
             title={r.title}
+            type={r.type}
             posterUrl={r.posterUrl}
             onClick={() => void open(r)}
           />

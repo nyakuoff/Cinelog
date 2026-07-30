@@ -285,11 +285,10 @@ function Rail({
         <div className="flex gap-3.5">
           {section.items.map((item, i) => (
             <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
-              {/* No type chip here: the section heading above already
-                  states the medium, so per-tile labels would just repeat it. */}
               <PosterCard
                 title={item.title}
                 year={item.year}
+                type={item.type}
                 posterUrl={item.posterUrl}
                 index={i}
                 onClick={() => onOpen(item)}

@@ -244,8 +244,19 @@ export const api = {
   unblockUser: (username: string) =>
     request<void>('DELETE', `/users/${encodeURIComponent(username)}/block`),
   getBlocked: () => request<MemberListResponse>('GET', '/blocked'),
-  getActivity: (scope: 'FOLLOWING' | 'EVERYONE', cursor?: string) =>
-    request<ActivityFeedResponse>('GET', `/activity${toQuery({ scope, cursor })}`),
+  getActivity: (
+    scope: 'FOLLOWING' | 'EVERYONE',
+    opts: { cursor?: string; limit?: number; types?: string[] } = {},
+  ) =>
+    request<ActivityFeedResponse>(
+      'GET',
+      `/activity${toQuery({
+        scope,
+        cursor: opts.cursor,
+        limit: opts.limit,
+        types: opts.types?.join(','),
+      })}`,
+    ),
 
   // -- lists ---------------------------------------------------------------------
   browseLists: (query: Partial<ListBrowseQuery>) =>

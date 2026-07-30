@@ -17,6 +17,14 @@ import type { ProviderSearchResult } from '../metadata/provider.types';
 
 const RAIL_SIZE = 18;
 
+/**
+ * Titles per Films-browse page. The grid is 8-up at its widest, so a multiple
+ * of 8 fills whole rows instead of leaving a ragged one; the provider pages at
+ * 20, so a page here is assembled from more than one of theirs.
+ */
+const BROWSE_PAGE_SIZE = 24;
+const PROVIDER_PAGE_SIZE = 20;
+
 @Injectable()
 export class DiscoveryService {
   constructor(
@@ -62,8 +70,8 @@ export class DiscoveryService {
         decade: query.decade,
         minRating: query.minRating,
         sort: localSort,
-        cursor: query.page > 1 ? String((query.page - 1) * 48) : undefined,
-        limit: 48,
+        cursor: query.page > 1 ? String((query.page - 1) * BROWSE_PAGE_SIZE) : undefined,
+        limit: BROWSE_PAGE_SIZE,
       });
       return {
         items: page.items,
@@ -73,15 +81,35 @@ export class DiscoveryService {
       };
     }
 
-    const { results, hasMore } = await this.registry.browse({
-      type: query.type,
-      genre: query.genre,
-      decade: query.decade,
-      year: query.year,
-      minRating: query.minRating,
-      sort: query.sort,
-      page: query.page,
-    });
+    // A page of BROWSE_PAGE_SIZE spans provider pages of PROVIDER_PAGE_SIZE,
+    // so gather the window that covers it and slice out the exact range.
+    const from = (query.page - 1) * BROWSE_PAGE_SIZE;
+    const firstProviderPage = Math.floor(from / PROVIDER_PAGE_SIZE) + 1;
+    const lastProviderPage =
+      Math.floor((from + BROWSE_PAGE_SIZE - 1) / PROVIDER_PAGE_SIZE) + 1;
+
+    const pages = await Promise.all(
+      Array.from({ length: lastProviderPage - firstProviderPage + 1 }, (_, i) =>
+        this.registry.browse({
+          type: query.type,
+          genre: query.genre,
+          decade: query.decade,
+          year: query.year,
+          minRating: query.minRating,
+          sort: query.sort,
+          page: firstProviderPage + i,
+        }),
+      ),
+    );
+
+    const offset = from - (firstProviderPage - 1) * PROVIDER_PAGE_SIZE;
+    const gathered = pages.flatMap((p) => p.results);
+    const results = gathered.slice(offset, offset + BROWSE_PAGE_SIZE);
+    // More to show if the provider says so, or if this window didn't consume
+    // everything already fetched.
+    const hasMore =
+      pages[pages.length - 1]?.hasMore === true ||
+      gathered.length > offset + BROWSE_PAGE_SIZE;
 
     const keys = results.map((r) => ({ provider: r.provider, externalId: r.externalId }));
     const cached = keys.length

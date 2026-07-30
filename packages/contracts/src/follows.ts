@@ -77,5 +77,13 @@ export const ActivityFeedQuery = z.object({
   scope: z.enum(['FOLLOWING', 'EVERYONE']).optional().default('FOLLOWING'),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(50).optional().default(25),
+  /** Restrict to these event kinds; omit for everything. Accepts a
+   *  comma-separated query param as well as a real array. */
+  types: z
+    .preprocess(
+      (v) => (typeof v === 'string' ? v.split(',').filter(Boolean) : v),
+      z.array(ActivityType),
+    )
+    .optional(),
 });
 export type ActivityFeedQuery = z.infer<typeof ActivityFeedQuery>;

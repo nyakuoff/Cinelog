@@ -5,7 +5,6 @@ import { Select } from './ui';
 export const STATUS_LABELS: Record<TrackingStatus, string> = {
   WATCHING: 'Watching',
   COMPLETED: 'Completed',
-  PLAN_TO_WATCH: 'Plan to Watch',
   ON_HOLD: 'On Hold',
   DROPPED: 'Dropped',
   REWATCHING: 'Rewatching',
@@ -14,7 +13,6 @@ export const STATUS_LABELS: Record<TrackingStatus, string> = {
 const ORDER: TrackingStatus[] = [
   'WATCHING',
   'COMPLETED',
-  'PLAN_TO_WATCH',
   'ON_HOLD',
   'DROPPED',
   'REWATCHING',

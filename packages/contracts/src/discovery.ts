@@ -43,7 +43,7 @@ export const DiscoverFilterQuery = z.object({
   minRating: z.coerce.number().min(0).max(100).optional(),
   sort: DiscoverSortKey.optional().default('POPULARITY'),
   cursor: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(60).optional().default(24),
+  limit: z.coerce.number().int().min(1).max(80).optional().default(24),
 });
 export type DiscoverFilterQuery = z.infer<typeof DiscoverFilterQuery>;
 

@@ -8,7 +8,6 @@ import { EmptyState, Poster, PosterGrid, SectionHeader } from '../components/lb'
 import { Button, Spinner } from '../components/ui';
 
 type BrowseType = 'MOVIE' | 'TV';
-type Source = 'PROVIDER' | 'CINELOG';
 
 const SORTS: { value: BrowseSort; label: string }[] = [
   { value: 'POPULARITY', label: 'Popularity' },
@@ -27,7 +26,6 @@ function decades(): number[] {
 
 interface Filters {
   type: BrowseType;
-  source: Source;
   genre: string;
   decade: number | '';
   minRating: number | '';
@@ -36,7 +34,6 @@ interface Filters {
 
 const DEFAULTS: Filters = {
   type: 'MOVIE',
-  source: 'PROVIDER',
   genre: '',
   decade: '',
   minRating: '',
@@ -54,7 +51,6 @@ export function FilmsPage(): JSX.Element {
     queryFn: () =>
       api.browse({
         type: filters.type,
-        source: filters.source,
         genre: filters.genre || undefined,
         decade: filters.decade || undefined,
         minRating: filters.minRating || undefined,
@@ -92,11 +88,9 @@ export function FilmsPage(): JSX.Element {
 
   const items = data?.items ?? [];
   const heading =
-    filters.source === 'CINELOG'
-      ? `Rated on Cinelog`
-      : filters.sort === 'POPULARITY'
-        ? `Popular ${filters.type === 'TV' ? 'shows' : 'films'}`
-        : `Browse ${filters.type === 'TV' ? 'shows' : 'films'}`;
+    filters.sort === 'POPULARITY'
+      ? `Popular ${filters.type === 'TV' ? 'shows' : 'films'}`
+      : `Browse ${filters.type === 'TV' ? 'shows' : 'films'}`;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
@@ -135,11 +129,7 @@ export function FilmsPage(): JSX.Element {
         ) : items.length === 0 ? (
           <EmptyState
             title="Nothing matches these filters"
-            body={
-              filters.source === 'CINELOG'
-                ? 'No one on this instance has rated a title matching these filters yet.'
-                : 'Try widening the decade, genre, or rating filters.'
-            }
+            body="Try widening the decade, genre, or rating filters." 
             action={
               <Button variant="secondary" onClick={() => update(DEFAULTS)}>
                 Clear filters
@@ -268,20 +258,6 @@ function FilterBar({
         ))}
       </select>
 
-      <button
-        onClick={() =>
-          onChange({ source: filters.source === 'CINELOG' ? 'PROVIDER' : 'CINELOG' })
-        }
-        title="Restrict to titles rated by members of this Cinelog instance"
-        className={cn(
-          'h-9 rounded border px-3 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-          filters.source === 'CINELOG'
-            ? 'border-gold bg-gold/15 text-gold'
-            : 'border-border bg-surface-2 text-muted hover:text-content',
-        )}
-      >
-        Cinelog only
-      </button>
     </div>
   );
 }

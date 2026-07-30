@@ -244,7 +244,11 @@ export function MediaDetailPage(): JSX.Element {
       <div className="mx-auto mt-12 max-w-6xl space-y-12 px-4 sm:px-6">
         {isEpisodic && <EpisodesSection mediaId={id} scale={scale} />}
         <ReviewsSection mediaId={id} scale={scale} />
-        <SimilarSection mediaId={id} onOpenResolved={(mid) => navigate(`/media/${mid}`)} />
+        <SimilarSection
+          mediaId={id}
+          isEpisodic={isEpisodic}
+          onOpenResolved={(mid) => navigate(`/media/${mid}`)}
+        />
       </div>
 
       {editingArtwork && (
@@ -287,7 +291,7 @@ function ActionPanel({
 }): JSX.Element {
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
   return (
-    <div className="rounded-sm border border-border-hi bg-surface">
+    <div className="rounded-sm border border-border-hi bg-surface text-center">
       <p className="border-b border-border px-3 py-1.5 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
         Your record
       </p>
@@ -299,9 +303,22 @@ function ActionPanel({
       </div>
 
       <div className="border-t border-border px-3 py-3">
-        <p className="mb-1.5 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
-          Your rating
-        </p>
+        {/* Clear sits with the label rather than after the stars, where it was
+            being mistaken for part of the rating itself. */}
+        <div className="mb-2 flex items-baseline justify-center gap-2">
+          <p className="font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+            Your rating
+          </p>
+          {state.rating !== null && (
+            <button
+              type="button"
+              onClick={() => onRate(null)}
+              className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-muted-2 hover:text-rose"
+            >
+              Clear
+            </button>
+          )}
+        </div>
         <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
       </div>
 
@@ -376,7 +393,7 @@ function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
         <div className="flex items-end gap-3">
           <div className="shrink-0">
             <p className="font-data text-2xl font-bold leading-none text-gold">
-              {fromNormalized(media.communityRating ?? 0, 'TEN')}
+              {fromNormalized(media.communityRating ?? 0, scaleForMediaType(media.type))}
             </p>
             <p className="mt-1 font-data text-[11px] text-muted-2">
               {media.ratingCount} rating{media.ratingCount === 1 ? '' : 's'}
@@ -559,9 +576,11 @@ function ChipRow({ items, emptyLabel }: { items: string[]; emptyLabel: string })
 
 function SimilarSection({
   mediaId,
+  isEpisodic,
   onOpenResolved,
 }: {
   mediaId: string;
+  isEpisodic: boolean;
   onOpenResolved: (id: string) => void;
 }): JSX.Element | null {
   const [opening, setOpening] = useState(false);
@@ -592,7 +611,7 @@ function SimilarSection({
 
   return (
     <section>
-      <SectionHeader title="Similar films" />
+      <SectionHeader title={isEpisodic ? 'Similar shows' : 'Similar films'} />
       {opening && (
         <div className="flex justify-center py-3">
           <Spinner className="h-4 w-4" />

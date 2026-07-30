@@ -25,7 +25,7 @@ export function WatchlistPage(): JSX.Element {
   const [sort, setSort] = useState<SortKey>('added');
 
   const { data, isLoading } = useQuery({ queryKey: ['library'], queryFn: () => api.getLibrary() });
-  const watchlist = (data?.items ?? []).filter((i) => i.status === 'PLAN_TO_WATCH');
+  const watchlist = (data?.items ?? []).filter((i) => i.isWatchlisted);
   const groupItems = sortLibrary(watchlist.filter((i) => groupOf(i.type) === group), sort);
   const groupCounts: Record<Group, number> = {
     FILMS: watchlist.filter((i) => groupOf(i.type) === 'FILMS').length,

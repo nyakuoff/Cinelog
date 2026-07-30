@@ -262,9 +262,9 @@ export class SocialService {
       actorFilter = { actorId: { in: ids } };
     } else {
       actorFilter = {
-        // Instance-wide, but never surface a private profile's activity or a
-        // blocked member's, and don't echo the viewer's own actions back.
-        actorId: { notIn: [...blocked, viewerId] },
+        // Instance-wide: the viewer is part of the instance, so their own
+        // activity belongs here too. Blocked members never appear.
+        actorId: { notIn: blocked },
         actor: { profileVisibility: { not: 'PRIVATE' } },
       };
     }
@@ -272,7 +272,12 @@ export class SocialService {
     // Over-fetch: grouping collapses rows, so a raw page of `limit` would often
     // render short.
     const raw = await this.prisma.activityEvent.findMany({
-      where: actorFilter,
+      where: {
+        ...actorFilter,
+        // Callers can narrow to the event kinds they actually render; the
+        // discovery sidebar asks for opinions only (rated / reviewed).
+        ...(query.types?.length ? { type: { in: query.types } } : {}),
+      },
       include: { actor: true, media: true },
       orderBy: { createdAt: 'desc' },
       take: query.limit * 3,

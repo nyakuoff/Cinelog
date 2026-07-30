@@ -16,20 +16,17 @@ export function RatingWidget({ value, scale, onChange, readOnly }: WidgetProps):
   if (!cfg.isStars) {
     return <NumericRating value={value} scale={scale} onChange={onChange} readOnly={readOnly} />;
   }
+  // No numeric readout: the filled stars already say the score, and the figure
+  // beside them was reading as a second, competing rating.
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <StarInput value={value} scale={scale} onChange={onChange} readOnly={readOnly} size={cfg.max === 10 ? 19 : 26} />
-      {value !== null && (
-        <span className="font-data text-lg font-bold text-gold">
-          {fromNormalized(value, scale)}
-          <span className="text-xs text-muted-2">/{cfg.max}</span>
-        </span>
-      )}
-      {value !== null && !readOnly && (
-        <button type="button" className="text-xs text-muted hover:text-content" onClick={() => onChange(null)}>
-          Clear
-        </button>
-      )}
+    <div className="flex justify-center">
+      <StarInput
+        value={value}
+        scale={scale}
+        onChange={onChange}
+        readOnly={readOnly}
+        size={cfg.max === 10 ? 22 : 30}
+      />
     </div>
   );
 }
@@ -71,7 +68,7 @@ export function StarInput({ value, scale, onChange, readOnly, size = 24 }: StarI
             key={starIndex}
             type="button"
             disabled={readOnly}
-            className={cn('relative p-px', groupGap && 'ml-1.5', !readOnly && 'cursor-pointer')}
+            className={cn('relative block', groupGap && 'ml-1', !readOnly && 'cursor-pointer')}
             onMouseMove={(e) => !readOnly && setHover(pick(starIndex, e))}
             onClick={(e) => {
               if (readOnly) return;

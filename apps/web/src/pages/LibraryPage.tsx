@@ -58,7 +58,8 @@ export function LibraryPage(): JSX.Element {
 
   // The home library excludes the watchlist — that has its own page.
   const libraryItems = useMemo(
-    () => items.filter((i) => i.status !== 'PLAN_TO_WATCH'),
+    // Watchlisted-but-untracked titles belong to the watchlist, not the library.
+    () => items.filter((i) => i.status !== null || !i.isWatchlisted),
     [items],
   );
 
@@ -270,7 +271,7 @@ function WelcomeHero({ onSearch }: { onSearch: () => void }): JSX.Element {
 
 function StatsStrip({ items }: { items: LibraryItem[] }): JSX.Element {
   const watched = items.filter((i) => i.status === 'COMPLETED').length;
-  const watchlist = items.filter((i) => i.status === 'PLAN_TO_WATCH').length;
+  const watchlist = items.filter((i) => i.isWatchlisted).length;
   const ratedItems = items.filter((i) => i.rating !== null);
   // Ratings live on different scales per type; average in normalized space and
   // show it out of 10 as a common denominator.

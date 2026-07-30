@@ -161,16 +161,20 @@ export function DiscoverPage(): JSX.Element {
               <SectionHeader title="From people you follow" more="/members" moreLabel="Find members" />
               <ActivityFeed
                 scope="FOLLOWING"
+                limit={6}
+                types={['RATED', 'REVIEWED']}
                 emptyTitle="No activity yet"
-                emptyBody="Follow other members and their ratings, reviews, and watches show up here."
+                emptyBody="Follow other members and their ratings and reviews show up here."
               />
             </section>
             <section>
               <SectionHeader title="Recent on Cinelog" />
               <ActivityFeed
                 scope="EVERYONE"
-                emptyTitle="Nothing logged yet"
-                emptyBody="Activity from everyone on this instance appears here."
+                limit={6}
+                types={['RATED', 'REVIEWED']}
+                emptyTitle="Nothing rated yet"
+                emptyBody="Ratings and reviews from everyone on this instance appear here."
               />
             </section>
           </aside>

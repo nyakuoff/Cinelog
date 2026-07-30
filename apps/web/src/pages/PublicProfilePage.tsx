@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { ProfileDiaryEntry, PublicProfile } from '@cinelog/contracts';
-import { fromNormalized } from '@cinelog/contracts';
+import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { useAuth } from '../lib/auth';
 import { api, ApiError } from '../lib/api';
 import { posterGradient } from '../lib/poster';
@@ -299,7 +299,9 @@ function DiaryRow({
         </p>
       </button>
       {entry.rating !== null && (
-        <span className="text-xs font-semibold text-gold">{fromNormalized(entry.rating, 'TEN')}</span>
+        <span className="font-data text-xs font-bold text-gold">
+          {fromNormalized(entry.rating, scaleForMediaType(entry.media.type))}
+        </span>
       )}
       {canEdit && (
         <button
@@ -500,7 +502,7 @@ function ReviewsTab({ username }: { username: string }): JSX.Element {
             </button>
             {r.ratingValue !== null && (
               <span className="ml-2 text-xs font-semibold text-gold">
-                {fromNormalized(r.ratingValue, 'TEN')}
+                {fromNormalized(r.ratingValue, scaleForMediaType(r.media.type))}
               </span>
             )}
             <p className="text-xs text-muted-2">{new Date(r.createdAt).toLocaleDateString()}</p>

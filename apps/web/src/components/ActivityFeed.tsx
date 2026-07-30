@@ -23,14 +23,20 @@ export function ActivityFeed({
   scope,
   emptyTitle,
   emptyBody,
+  limit,
+  types,
 }: {
   scope: 'FOLLOWING' | 'EVERYONE';
   emptyTitle: string;
   emptyBody: string;
+  /** Cap the rows rendered; a sidebar rail wants a short list, not a page. */
+  limit?: number;
+  /** Restrict to these event kinds. */
+  types?: ActivityItem['type'][];
 }): JSX.Element {
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['activity', scope],
-    queryFn: () => api.getActivity(scope),
+    queryKey: ['activity', scope, limit, types?.join(',')],
+    queryFn: () => api.getActivity(scope, { limit, types }),
   });
 
   if (isLoading) {
@@ -60,9 +66,10 @@ export function ActivityFeed({
     return <EmptyState title={emptyTitle} body={emptyBody} />;
   }
 
+  const rows = limit ? data.items.slice(0, limit) : data.items;
   return (
     <ul className="divide-y divide-border">
-      {data.items.map((item) => (
+      {rows.map((item) => (
         <ActivityRow key={item.id} item={item} />
       ))}
     </ul>

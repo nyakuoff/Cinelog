@@ -17,6 +17,7 @@ interface Props {
   posterUrl?: string | null;
   /** Normalized 0..100 personal rating. */
   rating?: number | null;
+  /** Omit to derive it from `type`, which is nearly always what you want. */
   ratingScale?: RatingScale;
   /** Tooltip naming whose rating this is. Defaults to the viewer's own. */
   ratingLabel?: string;
@@ -33,7 +34,7 @@ export function PosterCard({
   type,
   posterUrl,
   rating,
-  ratingScale = 'TEN',
+  ratingScale,
   ratingLabel,
   liked = false,
   onClick,

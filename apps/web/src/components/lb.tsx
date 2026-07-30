@@ -7,7 +7,12 @@
  * from the tokens in index.css; only the grammar lives here.
  */
 import { Link } from 'react-router-dom';
-import { fromNormalized, type MediaType, type RatingScale } from '@cinelog/contracts';
+import {
+  fromNormalized,
+  scaleForMediaType,
+  type MediaType,
+  type RatingScale,
+} from '@cinelog/contracts';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
 
@@ -66,7 +71,7 @@ export function Poster({
   to,
   onClick,
   rating,
-  ratingScale = 'TEN',
+  ratingScale,
   ratingLabel,
   liked,
   className,
@@ -78,6 +83,7 @@ export function Poster({
   onClick?: () => void;
   /** Normalized 0..100 — shown as the shared corner badge. */
   rating?: number | null;
+  /** Omit to derive it from `type`, which is nearly always what you want. */
   ratingScale?: RatingScale;
   /** Tooltip naming whose rating this is; see PosterMarks. */
   ratingLabel?: string;
@@ -143,13 +149,14 @@ export function Poster({
 export function PosterMarks({
   type,
   rating,
-  ratingScale = 'TEN',
+  ratingScale,
   ratingLabel,
   liked = false,
 }: {
   type?: MediaType;
   /** Normalized 0..100. */
   rating?: number | null;
+  /** Omit to derive it from `type`, which is nearly always what you want. */
   ratingScale?: RatingScale;
   /**
    * Names whose rating this is, as a tooltip. Browse surfaces show the
@@ -185,7 +192,7 @@ export function PosterMarks({
               <span aria-hidden="true" className="text-[11px] leading-none">
                 ★
               </span>
-              {fromNormalized(rating, ratingScale)}
+              {fromNormalized(rating, ratingScale ?? scaleForMediaType(type ?? 'MOVIE'))}
             </span>
           )}
         </span>

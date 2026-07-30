@@ -21,7 +21,6 @@ const MENU_LINKS = [
   { to: '/library', label: 'Library' },
   { to: '/watchlist', label: 'Watchlist' },
   { to: '/settings', label: 'Settings' },
-  { to: '/settings?tab=data', label: 'Import & backup' },
 ];
 
 export function Layout(): JSX.Element {
@@ -34,6 +33,16 @@ export function Layout(): JSX.Element {
   const [logging, setLogging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function openMenu(): void {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    setMenuOpen(true);
+  }
+  function closeMenuSoon(): void {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setMenuOpen(false), 180);
+  }
 
   // Click-to-open menu (not hover — hover gaps make the menu unreachable).
   useEffect(() => {
@@ -146,8 +155,18 @@ export function Layout(): JSX.Element {
             + Log
           </button>
 
-          <div className="relative flex shrink-0 items-center gap-1.5" ref={menuRef}>
-            <Link to="/profile" title={user?.username} className="flex items-center gap-2">
+          <div
+            className="relative flex shrink-0 items-center"
+            ref={menuRef}
+            onMouseEnter={openMenu}
+            onMouseLeave={closeMenuSoon}
+          >
+            <Link
+              to="/profile"
+              title={user?.username}
+              onFocus={openMenu}
+              className="flex items-center gap-2"
+            >
               <Avatar user={user} size={32} />
               <span className="hidden max-w-[9rem] truncate font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-muted hover:text-content lg:inline">
                 {user?.username}
@@ -158,9 +177,9 @@ export function Layout(): JSX.Element {
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               aria-label="Account menu"
-              className="grid h-7 w-7 place-items-center rounded text-muted hover:text-content"
+              className="-ml-0.5 grid h-7 w-5 place-items-center rounded text-muted hover:text-content"
             >
-              <span aria-hidden="true" className="text-xs">
+              <span aria-hidden="true" className="text-sm leading-none">
                 ▾
               </span>
             </button>

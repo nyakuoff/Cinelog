@@ -20,7 +20,6 @@ export type ProviderId = z.infer<typeof ProviderId>;
 export const TrackingStatus = z.enum([
   'WATCHING',
   'COMPLETED',
-  'PLAN_TO_WATCH',
   'ON_HOLD',
   'DROPPED',
   'REWATCHING',

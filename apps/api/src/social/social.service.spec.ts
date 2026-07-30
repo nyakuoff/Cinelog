@@ -144,14 +144,16 @@ describe('SocialService activity feed', () => {
     expect(where.actorId.in).toEqual(['ok-user']);
   });
 
-  it('an EVERYONE feed excludes private profiles, blocked members, and the viewer', async () => {
+  it('an EVERYONE feed excludes private profiles and blocked members, but includes the viewer', async () => {
     const prisma = makePrisma();
     (prisma.userBlock.findMany as jest.Mock).mockResolvedValue([
       { blockerId: 'viewer-1', blockedId: 'blocked-user' },
     ]);
     await makeService(prisma).getFeed('viewer-1', { scope: 'EVERYONE', limit: 25 } as never);
     const where = (prisma.activityEvent.findMany as jest.Mock).mock.calls[0][0].where;
-    expect(where.actorId.notIn).toEqual(['blocked-user', 'viewer-1']);
+    // The viewer is part of the instance, so their own activity belongs in
+    // the instance-wide feed.
+    expect(where.actorId.notIn).toEqual(['blocked-user']);
     expect(where.actor).toEqual({ profileVisibility: { not: 'PRIVATE' } });
   });
 

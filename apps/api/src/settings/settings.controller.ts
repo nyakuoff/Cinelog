@@ -11,16 +11,20 @@ import { UpdateIntegrationSettingsDto } from './settings.dto';
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
 
-  /** Readable by any signed-in member: the web app needs the URLs to build
-   *  "where to watch" links. No credentials are stored here. */
+  /**
+   * Admin-only, both directions. Members never need these values: everything
+   * the UI shows is assembled by /media/:id/availability, so URLs and key
+   * presence stay inside the admin panel.
+   */
   @Get('integrations')
+  @Roles('ADMIN')
   get(): Promise<IntegrationSettings> {
-    return this.settings.getIntegrations();
+    return this.settings.getPublic();
   }
 
   @Put('integrations')
   @Roles('ADMIN')
   update(@Body() dto: UpdateIntegrationSettingsDto): Promise<IntegrationSettings> {
-    return this.settings.setIntegrations(dto);
+    return this.settings.update(dto);
   }
 }

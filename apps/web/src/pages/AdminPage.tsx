@@ -31,9 +31,12 @@ export function AdminPage(): JSX.Element {
 // -------------------------------------------------------------------------
 
 /**
- * Deep-link targets for services this instance's owner also runs. Cinelog only
- * ever builds URLs from these — it holds no API key and never calls them — so
- * a wrong value produces a broken link and nothing worse.
+ * Points Cinelog at the other services the instance owner runs.
+ *
+ * API keys are write-only: the server never returns them, so these fields show
+ * whether one is stored rather than its value. Leaving a key field blank keeps
+ * the stored key; typing a space and saving clears it. Every call that uses a
+ * key is made by the API, so no key reaches a browser.
  */
 function IntegrationsCard(): JSX.Element {
   const queryClient = useQueryClient();
@@ -41,21 +44,35 @@ function IntegrationsCard(): JSX.Element {
     queryKey: ['integrations'],
     queryFn: () => api.getIntegrations(),
   });
-  const [jellyfinUrl, setJellyfinUrl] = useState<string | null>(null);
-  const [seerrUrl, setSeerrUrl] = useState<string | null>(null);
+
+  const [form, setForm] = useState<{
+    jellyfinUrl?: string;
+    jellyfinApiKey?: string;
+    seerrUrl?: string;
+    seerrApiKey?: string;
+    watchRegion?: string;
+  }>({});
   const [saved, setSaved] = useState(false);
 
-  // Uncontrolled until loaded, then the fetched value seeds the fields.
-  const jf = jellyfinUrl ?? data?.jellyfinUrl ?? '';
-  const sr = seerrUrl ?? data?.seerrUrl ?? '';
+  const field = (k: 'jellyfinUrl' | 'seerrUrl' | 'watchRegion'): string =>
+    form[k] ?? data?.[k] ?? '';
 
   const mut = useMutation({
-    mutationFn: () => api.updateIntegrations({ jellyfinUrl: jf, seerrUrl: sr }),
-    onSuccess: (next) => {
+    mutationFn: () =>
+      api.updateIntegrations({
+        jellyfinUrl: field('jellyfinUrl'),
+        seerrUrl: field('seerrUrl'),
+        watchRegion: field('watchRegion'),
+        // Only send a key when one was typed, so saving a URL change doesn't
+        // wipe a key this form was never shown.
+        ...(form.jellyfinApiKey !== undefined ? { jellyfinApiKey: form.jellyfinApiKey } : {}),
+        ...(form.seerrApiKey !== undefined ? { seerrApiKey: form.seerrApiKey } : {}),
+      }),
+    onSuccess: () => {
       setSaved(true);
-      setJellyfinUrl(next.jellyfinUrl ?? '');
-      setSeerrUrl(next.seerrUrl ?? '');
+      setForm({});
       void queryClient.invalidateQueries({ queryKey: ['integrations'] });
+      void queryClient.invalidateQueries({ queryKey: ['availability'] });
       setTimeout(() => setSaved(false), 2500);
     },
   });
@@ -65,39 +82,93 @@ function IntegrationsCard(): JSX.Element {
       <h2 className="mb-1 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
         Integrations
       </h2>
-      <p className="mb-4 text-sm leading-relaxed text-muted">
-        Set either one and a &ldquo;Where to watch&rdquo; box appears under the poster on every
-        title. Leave a field empty to hide its link. Cinelog only links out &mdash; it stores no
-        API key and can&rsquo;t tell whether a title is actually on your server, so the Jellyfin
-        link opens a search.
+      <p className="mb-5 text-sm leading-relaxed text-muted">
+        Streaming availability comes from TMDB and needs nothing configured here. Add a Jellyfin
+        server to link straight to your own copy, and a Jellyseerr instance to request what you
+        don&rsquo;t have. API keys are stored server-side and never sent to the browser.
       </p>
 
       {isLoading ? (
         <Spinner />
       ) : (
         <form
-          className="space-y-4"
+          className="space-y-5"
           onSubmit={(e: FormEvent) => {
             e.preventDefault();
             mut.mutate();
           }}
         >
-          <Field label="Jellyfin URL">
-            <Input
-              value={jf}
-              onChange={(e) => setJellyfinUrl(e.target.value)}
-              placeholder="https://jellyfin.example.com"
-              inputMode="url"
-            />
-          </Field>
-          <Field label="Jellyseerr / Overseerr URL">
-            <Input
-              value={sr}
-              onChange={(e) => setSeerrUrl(e.target.value)}
-              placeholder="https://requests.example.com"
-              inputMode="url"
-            />
-          </Field>
+          <div className="space-y-3">
+            <p className="font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+              Jellyfin
+            </p>
+            <Field label="Server URL">
+              <Input
+                value={field('jellyfinUrl')}
+                onChange={(e) => setForm((f) => ({ ...f, jellyfinUrl: e.target.value }))}
+                placeholder="https://jellyfin.example.com"
+                inputMode="url"
+              />
+            </Field>
+            <Field label={data?.hasJellyfinApiKey ? 'API key (stored)' : 'API key'}>
+              <Input
+                type="password"
+                value={form.jellyfinApiKey ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, jellyfinApiKey: e.target.value }))}
+                placeholder={
+                  data?.hasJellyfinApiKey ? 'Leave blank to keep the stored key' : 'Optional'
+                }
+                autoComplete="off"
+              />
+            </Field>
+            <p className="text-xs leading-relaxed text-muted-2">
+              With a key, Cinelog checks whether the title is actually on your server (matching
+              its TMDB id) and links straight to it. Without one, it can only offer a search.
+            </p>
+          </div>
+
+          <div className="space-y-3 border-t border-border pt-5">
+            <p className="font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+              Jellyseerr / Overseerr
+            </p>
+            <Field label="Server URL">
+              <Input
+                value={field('seerrUrl')}
+                onChange={(e) => setForm((f) => ({ ...f, seerrUrl: e.target.value }))}
+                placeholder="https://requests.example.com"
+                inputMode="url"
+              />
+            </Field>
+            <Field label={data?.hasSeerrApiKey ? 'API key (stored)' : 'API key'}>
+              <Input
+                type="password"
+                value={form.seerrApiKey ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, seerrApiKey: e.target.value }))}
+                placeholder={data?.hasSeerrApiKey ? 'Leave blank to keep the stored key' : 'Required'}
+                autoComplete="off"
+              />
+            </Field>
+            <p className="text-xs leading-relaxed text-muted-2">
+              A key is required here &mdash; it&rsquo;s what lets Cinelog see whether a title has
+              already been requested and submit new ones. Without it, no request button appears.
+            </p>
+          </div>
+
+          <div className="space-y-3 border-t border-border pt-5">
+            <Field label="Streaming region">
+              <Input
+                value={field('watchRegion')}
+                onChange={(e) => setForm((f) => ({ ...f, watchRegion: e.target.value }))}
+                placeholder="US"
+                maxLength={2}
+                className="w-24"
+              />
+            </Field>
+            <p className="text-xs leading-relaxed text-muted-2">
+              Two-letter country code. Streaming rights differ by country, so this decides which
+              services are listed. Defaults to US.
+            </p>
+          </div>
 
           {mut.isError && (
             <p className="rounded-sm border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">

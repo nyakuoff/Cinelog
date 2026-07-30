@@ -8,6 +8,7 @@ import {
   type ProviderBrowseResult,
   type ProviderMediaDetails,
   type ProviderSearchResult,
+  type ProviderWatchProviders,
 } from './provider.types';
 
 /**
@@ -87,6 +88,22 @@ export class ProviderRegistry {
 
   /** Similar titles for a film/show page. Absent or failing providers yield an
    *  empty list so the section is simply omitted rather than breaking the page. */
+  /** Streaming availability, or null when the provider can't say. */
+  async getWatchProviders(
+    provider: string,
+    externalId: string,
+    region: string,
+  ): Promise<ProviderWatchProviders | null> {
+    const impl = this.providers.find((p) => p.id === provider);
+    if (!impl?.getWatchProviders) return null;
+    try {
+      return await impl.getWatchProviders(externalId, region);
+    } catch (err) {
+      this.logger.warn(`Provider '${provider}' getWatchProviders failed: ${err}`);
+      return null;
+    }
+  }
+
   async getSimilar(
     provider: ProviderId,
     externalId: string,

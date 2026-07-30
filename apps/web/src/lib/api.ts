@@ -33,6 +33,9 @@ import type {
   EpisodesResponse,
   ImportSummary,
   IntegrationSettings,
+  MediaAvailability,
+  RequestMediaResponse,
+  UpdateIntegrationSettingsRequest,
   LetterboxdImportRequest,
   LibraryResponse,
   LoginRequest,
@@ -262,8 +265,12 @@ export const api = {
 
   // -- instance settings ---------------------------------------------------------
   getIntegrations: () => request<IntegrationSettings>('GET', '/settings/integrations'),
-  updateIntegrations: (dto: IntegrationSettings) =>
+  updateIntegrations: (dto: UpdateIntegrationSettingsRequest) =>
     request<IntegrationSettings>('PUT', '/settings/integrations', dto),
+  getAvailability: (mediaId: string) =>
+    request<MediaAvailability>('GET', `/media/${mediaId}/availability`),
+  requestMedia: (mediaId: string) =>
+    request<RequestMediaResponse>('POST', `/media/${mediaId}/request`),
 
   // -- lists ---------------------------------------------------------------------
   browseLists: (query: Partial<ListBrowseQuery>) =>

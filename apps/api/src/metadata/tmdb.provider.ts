@@ -12,6 +12,7 @@ import type {
   ProviderMediaDetails,
   ProviderSearchResult,
   ProviderSeason,
+  ProviderWatchProviders,
 } from './provider.types';
 
 /** TMDB genre ids are stable published constants, so they're mapped inline
@@ -288,6 +289,38 @@ export class TmdbProvider implements MetadataProvider {
     };
   }
 
+  /**
+   * Streaming availability for a region. TMDB serves JustWatch's data here, so
+   * the shape is per-region and split into subscription / rent / buy — the same
+   * split Letterboxd shows. Logos are TMDB-hosted, which the artwork proxy
+   * already allows, so they cache locally like any other image.
+   */
+  async getWatchProviders(
+    externalId: string,
+    region: string,
+  ): Promise<ProviderWatchProviders | null> {
+    const { kind, id } = decodeExternalId(externalId);
+    const body = await this.request<TmdbWatchProviders>(
+      `/${kind}/${id}/watch/providers`,
+      {},
+    );
+    const forRegion = body.results?.[region.toUpperCase()];
+    if (!forRegion) return null;
+
+    const map = (list?: TmdbWatchProviderEntry[]): { name: string; logoUrl: string | null }[] =>
+      (list ?? []).map((p) => ({
+        name: p.provider_name,
+        logoUrl: p.logo_path ? `${IMG_BASE}/original${p.logo_path}` : null,
+      }));
+
+    return {
+      flatrate: map(forRegion.flatrate),
+      rent: map(forRegion.rent),
+      buy: map(forRegion.buy),
+      link: forRegion.link ?? null,
+    };
+  }
+
   // -- http ------------------------------------------------------------------
 
   private async request<T>(path: string, params: Record<string, string>): Promise<T> {
@@ -314,6 +347,23 @@ export class TmdbProvider implements MetadataProvider {
 }
 
 // -- minimal TMDB response shapes (only the fields we read) ------------------
+
+interface TmdbWatchProviderEntry {
+  provider_name: string;
+  logo_path?: string | null;
+}
+
+interface TmdbWatchProviders {
+  results?: Record<
+    string,
+    {
+      link?: string | null;
+      flatrate?: TmdbWatchProviderEntry[];
+      rent?: TmdbWatchProviderEntry[];
+      buy?: TmdbWatchProviderEntry[];
+    }
+  >;
+}
 
 interface TmdbSearchItem {
   id: number;

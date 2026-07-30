@@ -91,6 +91,15 @@ export interface MetadataProvider {
   browse?(params: ProviderBrowseParams): Promise<ProviderBrowseResult>;
   /** "Similar films" for a title, where the provider offers such a relation. */
   getSimilar?(externalId: string, type: MediaType): Promise<ProviderSearchResult[]>;
+
+  /**
+   * Where a title can be streamed, rented, or bought in a region. Optional:
+   * providers without licensing data simply don't implement it.
+   */
+  getWatchProviders?(
+    externalId: string,
+    region: string,
+  ): Promise<ProviderWatchProviders | null>;
 }
 
 export type DiscoverListKind = 'TRENDING' | 'POPULAR' | 'UPCOMING';
@@ -114,3 +123,19 @@ export interface ProviderBrowseResult {
 
 /** DI token for the array of registered providers. */
 export const METADATA_PROVIDERS = Symbol('METADATA_PROVIDERS');
+
+/** One service carrying a title, with its own brand logo. */
+export interface ProviderWatchProviderEntry {
+  name: string;
+  /** Absolute logo URL, ready for the artwork proxy. */
+  logoUrl: string | null;
+}
+
+/** Availability for one region, split by how you'd pay for it. */
+export interface ProviderWatchProviders {
+  flatrate: ProviderWatchProviderEntry[];
+  rent: ProviderWatchProviderEntry[];
+  buy: ProviderWatchProviderEntry[];
+  /** The provider's own availability page for this title, if it has one. */
+  link: string | null;
+}

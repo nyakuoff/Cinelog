@@ -97,6 +97,17 @@ export class AvailabilityService {
     }
 
     const isFilm = item.type === 'MOVIE' || item.type === 'SPECIAL';
+
+    // Enforced here, not just hidden in the UI: an already-satisfied title must
+    // not be re-queued by a stale page or a direct call.
+    const current = await this.seerrStatus(cfg, tmdbId, isFilm).catch(() => 'NONE' as const);
+    if (current === 'AVAILABLE') {
+      throw new BadRequestException('That title is already available');
+    }
+    if (current === 'PENDING' || current === 'PROCESSING') {
+      throw new BadRequestException('That title has already been requested');
+    }
+
     const res = await this.fetchJson<unknown>(
       `${cfg.seerrUrl}/api/v1/request`,
       { 'X-Api-Key': cfg.seerrApiKey, 'Content-Type': 'application/json' },
@@ -124,10 +135,17 @@ export class AvailabilityService {
   // -- sources ---------------------------------------------------------------
 
   /**
-   * Ask Jellyfin whether it holds this title, matching on the TMDB id it stores
-   * alongside its own items. Falls back to a name search only when there's no
-   * TMDB id to match on, since a name match across a large library is far more
-   * likely to be wrong.
+   * Ask Jellyfin whether it holds this title.
+   *
+   * Jellyfin silently ignores query parameters it doesn't support, and an
+   * ignored filter on /Items doesn't error — it just returns the whole library.
+   * Combined with Limit=1 that yields the first item on the shelf for every
+   * lookup, which is why this used to link every title to the same wrong one.
+   *
+   * So nothing here trusts that a filter was applied: each candidate is
+   * verified against the title we actually asked for, and anything unverified
+   * is treated as "not in the library". A missing link is correct; a link to
+   * the wrong show is not.
    */
   private async findOnJellyfin(
     cfg: IntegrationSecrets,
@@ -141,20 +159,53 @@ export class AvailabilityService {
       return `${cfg.jellyfinUrl}/web/#/search.html?query=${encodeURIComponent(title)}`;
     }
 
+    const link = (id: string): string =>
+      `${cfg.jellyfinUrl}/web/#/details?id=${encodeURIComponent(id)}`;
+
+    // First choice: the provider-id filter, when the server honours it.
+    if (tmdbId) {
+      const byId = await this.jellyfinItems(cfg, {
+        AnyProviderIdEquals: `tmdb.${tmdbId}`,
+        Limit: '5',
+      });
+      const match = byId.find((i) => providerTmdbId(i) === tmdbId);
+      if (match?.Id) return link(match.Id);
+      // A non-empty, non-matching result means the filter was ignored, so fall
+      // through to searching by name rather than trusting any of those items.
+    }
+
+    // Fallback: search by name, then verify. A TMDB id match is conclusive; an
+    // exact title match is accepted only when the item carries no TMDB id to
+    // contradict it (libraries matched against TVDB, for instance).
+    const byName = await this.jellyfinItems(cfg, { searchTerm: title, Limit: '10' });
+    const wanted = normalizeTitle(title);
+    const idMatch = tmdbId ? byName.find((i) => providerTmdbId(i) === tmdbId) : undefined;
+    if (idMatch?.Id) return link(idMatch.Id);
+
+    const titleMatch = byName.find(
+      (i) => normalizeTitle(i.Name ?? '') === wanted && providerTmdbId(i) === null,
+    );
+    return titleMatch?.Id ? link(titleMatch.Id) : null;
+  }
+
+  /** One /Items query, always asking for the ids needed to verify a match. */
+  private async jellyfinItems(
+    cfg: IntegrationSecrets,
+    extra: Record<string, string>,
+  ): Promise<JellyfinItem[]> {
     const params = new URLSearchParams({
       Recursive: 'true',
       IncludeItemTypes: 'Movie,Series',
-      Limit: '1',
+      // Without this the response carries no ProviderIds and nothing can be
+      // verified, which is exactly how the wrong-link bug slipped through.
+      Fields: 'ProviderIds',
+      ...extra,
     });
-    if (tmdbId) params.set('AnyProviderIdEquals', `tmdb.${tmdbId}`);
-    else params.set('searchTerm', title);
-
-    const body = await this.fetchJson<{ Items?: { Id?: string }[] }>(
+    const body = await this.fetchJson<{ Items?: JellyfinItem[] }>(
       `${cfg.jellyfinUrl}/Items?${params.toString()}`,
-      { 'X-Emby-Token': cfg.jellyfinApiKey },
+      { 'X-Emby-Token': cfg.jellyfinApiKey as string },
     );
-    const id = body?.Items?.[0]?.Id;
-    return id ? `${cfg.jellyfinUrl}/web/#/details?id=${encodeURIComponent(id)}` : null;
+    return body?.Items ?? [];
   }
 
   /** Streaming availability for a region, with each service's own logo. */
@@ -224,6 +275,26 @@ export class AvailabilityService {
       return null;
     }
   }
+}
+
+/** Only the Jellyfin fields needed to identify and verify an item. */
+interface JellyfinItem {
+  Id?: string;
+  Name?: string;
+  ProviderIds?: Record<string, string | undefined>;
+}
+
+/** Jellyfin capitalises provider keys inconsistently across versions. */
+function providerTmdbId(item: JellyfinItem): string | null {
+  const ids = item.ProviderIds ?? {};
+  for (const [k, v] of Object.entries(ids)) {
+    if (k.toLowerCase() === 'tmdb' && v) return String(v);
+  }
+  return null;
+}
+
+function normalizeTitle(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /** TMDB external ids are stored as `movie:123` / `tv:456`. */

@@ -32,6 +32,8 @@ export function WhereToWatch({ media }: { media: MediaDetail }): JSX.Element | n
   if (isLoading || !data) return null;
 
   const hasStreaming = data.streaming.length > 0 || data.rent.length > 0 || data.buy.length > 0;
+  // Nothing to request once a title is already there — no button, and no row
+  // restating what the Jellyfin link above it already says.
   const showRequest = data.requestSupported && data.requestStatus !== 'AVAILABLE';
   if (!data.jellyfinUrl && !hasStreaming && !showRequest) return null;
 
@@ -159,9 +161,11 @@ function RequestControl({
   error: unknown;
   onRequest: () => void;
 }): JSX.Element {
+  // Both in-flight stages read simply as "Requested". Which queue a title sits
+  // in is Jellyseerr's business, not something to report on a film page.
   const already: Partial<Record<RequestStatus, { label: string; tone: string }>> = {
-    PENDING: { label: 'Requested · awaiting approval', tone: 'text-gold' },
-    PROCESSING: { label: 'Requested · downloading', tone: 'text-cyan' },
+    PENDING: { label: 'Requested', tone: 'text-gold' },
+    PROCESSING: { label: 'Requested', tone: 'text-gold' },
     PARTIALLY_AVAILABLE: { label: 'Partly available', tone: 'text-cyan' },
   };
   const existing = already[status];

@@ -60,6 +60,22 @@ body,
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Kills double-tap-to-zoom, which is what makes a touch UI feel like a
+     zoomed website rather than an app: every tap on a poster, stamp, or tab
+     was a candidate first half of a zoom gesture, so a quick second tap
+     anywhere magnified the page. `manipulation` keeps panning and pinch-zoom
+     (so this is not `user-scalable=no` — the page remains zoomable by hand);
+     it only drops the double-tap and long-press gestures the browser was
+     reserving. Set on the root because the permitted set is intersected
+     across ancestors, so one declaration covers the document. */
+  touch-action: manipulation;
+}
+
+/* The default iOS/Android tap flash is a blue-grey rectangle that ignores the
+   cut corners of every label in here. Interactive elements carry their own
+   hover/active treatment; this just stops the OS drawing over it. */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -74,12 +90,21 @@ body {
    16px, which is what actually "breaks the UI" on zoom — the viewport jumps
    and doesn't reliably return. Every input/select/textarea gets bumped to the
    safe minimum below the point phones start auto-zooming; desktop sizing is
-   controlled separately per component and is unaffected above that breakpoint. */
-@media (max-width: 640px) {
-  input,
+   controlled separately per component and is unaffected above that breakpoint.
+   `!important` is load-bearing, not laziness: these are element selectors, and
+   nearly every field in the app also carries a Tailwind `text-sm`/`text-[13px]`
+   class, which outranks them on specificity regardless of source order. Without
+   it this rule silently did nothing and every field still zoomed on focus.
+   Checkboxes, radios and file inputs are excluded — font-size doesn't change
+   the box for the first two and does resize the file picker's button. */
+/* 639.98px, not 640px: Tailwind's `sm:` is min-width 640px, so a plain
+   max-width 640px query overlaps it by one pixel and a 640px-wide viewport
+   would get both the mobile type size and the desktop control heights. */
+@media (max-width: 639.98px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='file']),
   select,
   textarea {
-    font-size: 16px;
+    font-size: 16px !important;
   }
 }
 

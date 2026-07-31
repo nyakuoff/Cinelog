@@ -89,7 +89,10 @@ export function Layout(): JSX.Element {
   return (
     <div className="min-h-full pl-safe pr-safe">
       <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2 pt-safe">
-        <div className="mx-auto flex h-16 max-w-6xl items-center gap-5 px-4 sm:h-20 sm:px-6">
+        {/* gap-5 between every item overflows a 360px phone once the hamburger,
+            wordmark, search and avatar are all present; the row then shunts the
+            avatar off-screen. Narrower until there's room for it. */}
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:h-20 sm:gap-5 sm:px-6">
           <button
             onClick={() => setNavOpen((v) => !v)}
             aria-expanded={navOpen}
@@ -279,7 +282,9 @@ export function Layout(): JSX.Element {
         )}
       </header>
 
-      <main>
+      {/* Bottom clearance for the phone-only log button, which is fixed and
+          would otherwise sit on top of the last row of whatever page this is. */}
+      <main className="pb-24 sm:pb-0">
         <Outlet />
       </main>
 

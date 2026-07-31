@@ -104,8 +104,10 @@ export function DiscoverPage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <h1 className="mb-6 font-cond text-3xl font-extrabold uppercase tracking-[0.04em]">Discover</h1>
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <h1 className="mb-5 font-cond text-2xl font-extrabold uppercase tracking-[0.04em] sm:mb-6 sm:text-3xl">
+        Discover
+      </h1>
 
       <FilterBar filters={filters} onChange={setFilters} />
 
@@ -148,7 +150,16 @@ export function DiscoverPage(): JSX.Element {
       ) : (sections.data?.sections.length ?? 0) === 0 ? (
         <p className="py-10 text-center text-muted">Nothing to discover yet.</p>
       ) : (
-        <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
+        // The `minmax(0,…)` is load-bearing on BOTH tracks, not just the pair at
+        // `lg`. Below `lg` there was no template at all, so the rails landed in an
+        // implicit `auto` track, and an auto track is floored by its item's
+        // `min-width: auto` — i.e. by the full un-scrolled width of the widest
+        // rail. The track blew out to ~2600px, dragging the section heads and the
+        // activity feed out with it while the header and filter bar stayed at the
+        // real viewport width. `body{overflow-x:hidden}` hid the scrollbar, so it
+        // surfaced only as a page that was mysteriously too wide. Naming the
+        // single column is what re-arms the rails' own scrolling on phones.
+        <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-10">
             {sections.data?.sections.map((s) => (
               <Rail key={s.key} section={s} onOpen={open} />
@@ -191,10 +202,14 @@ function FilterBar({
   filters: Filters;
   onChange: (f: Filters) => void;
 }): JSX.Element {
+  // Five controls set in condensed caps wrap into three ragged rows on a phone
+  // and each sits under the 44px touch minimum. On mobile they become a plain
+  // two-up card of full-width fields — an index card of filters — and only
+  // above `sm` do they collapse back to the inline row the desktop wants.
   const selectClass =
-    'h-9 rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold';
+    'h-11 w-full rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold sm:h-9 sm:w-auto';
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-5">
+    <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 sm:flex sm:flex-wrap">
       <select
         value={filters.type}
         onChange={(e) => onChange({ ...filters, type: e.target.value as Filters['type'] })}
@@ -243,7 +258,9 @@ function FilterBar({
       <select
         value={filters.sort}
         onChange={(e) => onChange({ ...filters, sort: e.target.value as DiscoverSortKey })}
-        className={selectClass}
+        /* "Sort: Number of ratings" is far the longest label — give it the
+           full width on mobile rather than truncating it in a half column. */
+        className={cn(selectClass, 'col-span-2 sm:col-span-1')}
       >
         {SORTS.map((s) => (
           <option key={s.value} value={s.value}>
@@ -254,7 +271,7 @@ function FilterBar({
       {isActive(filters) && (
         <button
           onClick={() => onChange(DEFAULT_FILTERS)}
-          className="h-9 rounded-lg px-2.5 text-[13px] text-muted hover:text-content"
+          className="col-span-2 h-11 rounded-lg px-2.5 text-[13px] text-muted hover:text-content sm:col-span-1 sm:h-9"
         >
           Clear
         </button>
@@ -350,7 +367,11 @@ function ScrollRail({ children }: { children: React.ReactNode }): JSX.Element {
       <div
         ref={ref}
         onScroll={measure}
-        className="rail-mask -mx-2 overflow-x-auto px-1 pb-2 pt-2 scrollbar-none"
+        /* Bleed past the page gutter on phones. Inset, a rail wastes 32px of a
+           390px screen and the edge fade lands on a poster's face instead of
+           at the screen edge, so the strip reads as clipped rather than as
+           continuing. Above `sm` the gutter is wide enough to keep. */
+        className="rail-mask -mx-4 overflow-x-auto px-4 pb-2 pt-2 scrollbar-none sm:-mx-2 sm:px-1"
       >
         <div className="flex gap-3.5">{children}</div>
       </div>

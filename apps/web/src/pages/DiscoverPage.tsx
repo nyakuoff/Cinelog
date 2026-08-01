@@ -54,10 +54,22 @@ interface Filters {
   sort: DiscoverSortKey;
 }
 
-const DEFAULT_FILTERS: Filters = { type: '', genre: '', decade: '', minRating: '', sort: 'POPULARITY' };
+const DEFAULT_FILTERS: Filters = {
+  type: '',
+  genre: '',
+  decade: '',
+  minRating: '',
+  sort: 'POPULARITY',
+};
 
 function isActive(f: Filters): boolean {
-  return f.type !== '' || f.genre !== '' || f.decade !== '' || f.minRating !== '' || f.sort !== 'POPULARITY';
+  return (
+    f.type !== '' ||
+    f.genre !== '' ||
+    f.decade !== '' ||
+    f.minRating !== '' ||
+    f.sort !== 'POPULARITY'
+  );
 }
 
 export function DiscoverPage(): JSX.Element {
@@ -104,8 +116,9 @@ export function DiscoverPage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="mb-5 font-cond text-2xl font-extrabold uppercase tracking-[0.04em] sm:mb-6 sm:text-3xl">
+    <div className="mx-auto max-w-6xl px-4 py-6 app:py-4 sm:px-6 sm:py-8">
+      {/* The installed app's title bar already names the screen. */}
+      <h1 className="mb-5 font-cond text-2xl font-extrabold uppercase tracking-[0.04em] app:hidden sm:mb-6 sm:text-3xl">
         Discover
       </h1>
 
@@ -166,10 +179,16 @@ export function DiscoverPage(): JSX.Element {
             ))}
           </div>
 
-          {/* Friend activity rail — what a signed-in member sees first. */}
-          <aside className="space-y-8">
+          {/* Friend activity rail — what a signed-in member sees first. In the
+              installed app this is a tab of its own, so the rail would be the
+              same feed twice; Discover there stays purely about the shelves. */}
+          <aside className="space-y-8 app:hidden">
             <section>
-              <SectionHeader title="From people you follow" more="/members" moreLabel="Find members" />
+              <SectionHeader
+                title="From people you follow"
+                more="/members"
+                moreLabel="Find members"
+              />
               <ActivityFeed
                 scope="FOLLOWING"
                 limit={6}
@@ -179,7 +198,7 @@ export function DiscoverPage(): JSX.Element {
               />
             </section>
             <section>
-              <SectionHeader title="Recent on Cinelog" />
+              <SectionHeader title="Recent on Cinelog" more="/activity" moreLabel="All activity" />
               <ActivityFeed
                 scope="EVERYONE"
                 limit={6}
@@ -233,7 +252,9 @@ function FilterBar({
       </select>
       <select
         value={filters.decade}
-        onChange={(e) => onChange({ ...filters, decade: e.target.value ? Number(e.target.value) : '' })}
+        onChange={(e) =>
+          onChange({ ...filters, decade: e.target.value ? Number(e.target.value) : '' })
+        }
         className={selectClass}
       >
         <option value="">All decades</option>
@@ -304,7 +325,10 @@ function Rail({
       />
       <ScrollRail>
         {section.items.map((item, i) => (
-          <div key={`${item.provider}:${item.externalId}`} className="w-[130px] shrink-0 sm:w-[150px]">
+          <div
+            key={`${item.provider}:${item.externalId}`}
+            className="w-[130px] shrink-0 sm:w-[150px]"
+          >
             <PosterCard
               title={item.title}
               year={item.year}

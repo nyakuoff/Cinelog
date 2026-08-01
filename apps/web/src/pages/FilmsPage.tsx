@@ -93,12 +93,10 @@ export function FilmsPage(): JSX.Element {
       : `Browse ${filters.type === 'TV' ? 'shows' : 'films'}`;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
       <SectionHeader
         title={heading}
-        right={
-          isFetching ? <Spinner className="h-4 w-4" /> : undefined
-        }
+        right={isFetching ? <Spinner className="h-4 w-4" /> : undefined}
       />
 
       <FilterBar filters={filters} onChange={update} />
@@ -113,7 +111,10 @@ export function FilmsPage(): JSX.Element {
         {isLoading ? (
           <PosterGrid>
             {Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="aspect-[2/3] w-full animate-pulse rounded-[3px] bg-surface-2" />
+              <div
+                key={i}
+                className="aspect-[2/3] w-full animate-pulse rounded-[3px] bg-surface-2"
+              />
             ))}
           </PosterGrid>
         ) : isError ? (
@@ -129,7 +130,7 @@ export function FilmsPage(): JSX.Element {
         ) : items.length === 0 ? (
           <EmptyState
             title="Nothing matches these filters"
-            body="Try widening the decade, genre, or rating filters." 
+            body="Try widening the decade, genre, or rating filters."
             action={
               <Button variant="secondary" onClick={() => update(DEFAULTS)}>
                 Clear filters
@@ -257,7 +258,6 @@ function FilterBar({
           </option>
         ))}
       </select>
-
     </div>
   );
 }

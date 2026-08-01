@@ -70,7 +70,7 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
   const credits = active === 'acting' ? data.acting : data.crew;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <div className="h-28 w-28 shrink-0 overflow-hidden rounded-sm bg-surface-2 ring-1 ring-border-hi/60 sm:h-36 sm:w-36">
           {data.profileUrl && (
@@ -82,9 +82,7 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
             {data.name}
           </h1>
           <p className="mt-2 font-data text-[11px] text-muted-2">{lifeLine(data)}</p>
-          {data.biography && (
-            <Biography text={data.biography} />
-          )}
+          {data.biography && <Biography text={data.biography} />}
         </div>
       </header>
 
@@ -97,7 +95,7 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
       <div className="mt-8">
         <TabBar
           tabs={
-            (crewFirst
+            crewFirst
               ? [
                   { key: 'crew', label: 'Crew', count: data.crew.length || undefined },
                   { key: 'acting', label: 'Acting', count: data.acting.length || undefined },
@@ -105,7 +103,7 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
               : [
                   { key: 'acting', label: 'Acting', count: data.acting.length || undefined },
                   { key: 'crew', label: 'Crew', count: data.crew.length || undefined },
-                ])
+                ]
           }
           active={active}
           onChange={(k) => setTab(k as 'acting' | 'crew')}
@@ -117,7 +115,10 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
           <p className="py-10 text-center text-muted">Nothing recorded under this credit.</p>
         ) : (
           <>
-            <SectionHeader title={active === 'acting' ? 'Appeared in' : 'Worked on'} count={credits.length} />
+            <SectionHeader
+              title={active === 'acting' ? 'Appeared in' : 'Worked on'}
+              count={credits.length}
+            />
             <div className="grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {credits.map((c, i) => (
                 <div key={`${c.provider}:${c.externalId}`}>
@@ -132,7 +133,10 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
                   {/* The part played is the reason this list differs from any
                       other poster grid, so it's captioned rather than hidden. */}
                   {(c.character ?? c.job) && (
-                    <p className="mt-1.5 truncate text-xs text-muted-2" title={c.character ?? c.job ?? ''}>
+                    <p
+                      className="mt-1.5 truncate text-xs text-muted-2"
+                      title={c.character ?? c.job ?? ''}
+                    >
                       {c.character ?? c.job}
                     </p>
                   )}

@@ -14,7 +14,7 @@ export function AdminPage(): JSX.Element {
   if (user && user.role !== 'ADMIN') return <Navigate to="/" replace />;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-4xl px-4 py-10 app:py-4 sm:px-6">
       <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">Admin</p>
       <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Instance</h1>
       <p className="mt-1 text-sm text-muted">
@@ -122,8 +122,8 @@ function IntegrationsCard(): JSX.Element {
               />
             </Field>
             <p className="text-xs leading-relaxed text-muted-2">
-              With a key, Cinelog checks whether the title is actually on your server (matching
-              its TMDB id) and links straight to it. Without one, it can only offer a search.
+              With a key, Cinelog checks whether the title is actually on your server (matching its
+              TMDB id) and links straight to it. Without one, it can only offer a search.
             </p>
           </div>
 
@@ -144,7 +144,9 @@ function IntegrationsCard(): JSX.Element {
                 type="password"
                 value={form.seerrApiKey ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, seerrApiKey: e.target.value }))}
-                placeholder={data?.hasSeerrApiKey ? 'Leave blank to keep the stored key' : 'Required'}
+                placeholder={
+                  data?.hasSeerrApiKey ? 'Leave blank to keep the stored key' : 'Required'
+                }
                 autoComplete="off"
               />
             </Field>
@@ -228,7 +230,11 @@ function CreateUserCard(): JSX.Element {
       </h2>
       <form onSubmit={onSubmit} className="grid gap-4 sm:grid-cols-2">
         <Field label="Username">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} placeholder="jane.doe" />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="jane.doe"
+          />
         </Field>
         <Field label="Email" hint="optional">
           <Input
@@ -250,7 +256,11 @@ function CreateUserCard(): JSX.Element {
           <RolePicker value={role} onChange={setRole} />
         </Field>
         <div className="sm:col-span-2 flex items-center gap-3">
-          <Button type="submit" variant="primary" disabled={createMut.isPending || !username.trim() || !password}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={createMut.isPending || !username.trim() || !password}
+          >
             {createMut.isPending ? 'Creating…' : 'Create user'}
           </Button>
           {createMut.isError && (
@@ -397,7 +407,12 @@ function RolePicker({
 }): JSX.Element {
   const roles: UserRole[] = ['USER', 'ADMIN'];
   return (
-    <div className={cn('flex gap-1 rounded-xl border border-border bg-surface-2 p-1', compact ? '' : 'w-fit')}>
+    <div
+      className={cn(
+        'flex gap-1 rounded-xl border border-border bg-surface-2 p-1',
+        compact ? '' : 'w-fit',
+      )}
+    >
       {roles.map((r) => (
         <button
           key={r}

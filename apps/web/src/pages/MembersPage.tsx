@@ -26,7 +26,7 @@ export function MembersPage(): JSX.Element {
   const members = data?.members ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-4xl px-4 py-8 app:py-4 sm:px-6">
       <SectionHeader
         title="Members"
         right={isFetching ? <Spinner className="h-4 w-4" /> : undefined}

@@ -26,7 +26,13 @@ export function PublicProfilePage(): JSX.Element {
   const [editingFavorites, setEditingFavorites] = useState(false);
   const [tab, setTab] = useState<Tab>('overview');
 
-  const { data: profile, isLoading, isError, error, refetch } = useQuery({
+  const {
+    data: profile,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
     queryKey: ['profile', username],
     queryFn: () => api.getPublicProfile(username as string),
     enabled: !!username,
@@ -77,7 +83,7 @@ export function PublicProfilePage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 app:py-4 sm:px-6">
       <ProfileHeader
         profile={profile}
         onEditFavorites={() => setEditingFavorites(true)}
@@ -129,7 +135,11 @@ export function PublicProfilePage(): JSX.Element {
                     year={f.media.year}
                     type={f.media.type}
                     posterUrl={f.media.posterUrl}
-                    onClick={() => navigate(`/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`)}
+                    onClick={() =>
+                      navigate(
+                        `/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`,
+                      )
+                    }
                   />
                 ))}
               </div>
@@ -152,7 +162,11 @@ export function PublicProfilePage(): JSX.Element {
                       year={f.media.year}
                       type={f.media.type}
                       posterUrl={f.media.posterUrl}
-                      onClick={() => navigate(`/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`)}
+                      onClick={() =>
+                        navigate(
+                          `/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`,
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -187,13 +201,17 @@ export function PublicProfilePage(): JSX.Element {
         </div>
       )}
 
-      {tab === 'diary' && <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />}
+      {tab === 'diary' && (
+        <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
+      )}
       {tab === 'reviews' && <ReviewsTab username={profile.username} />}
       {tab === 'watched' && <WatchedTab username={profile.username} />}
       {tab === 'lists' && (
         <ListsTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
       )}
-      {tab === 'watchlist' && profile.canViewWatchlist && <WatchlistTab username={profile.username} />}
+      {tab === 'watchlist' && profile.canViewWatchlist && (
+        <WatchlistTab username={profile.username} />
+      )}
       {tab === 'network' && <NetworkTab username={profile.username} />}
 
       {editingFavorites && (
@@ -230,7 +248,13 @@ function TabButton({
   );
 }
 
-function DiaryTab({ username, isOwnProfile }: { username: string; isOwnProfile: boolean }): JSX.Element {
+function DiaryTab({
+  username,
+  isOwnProfile,
+}: {
+  username: string;
+  isOwnProfile: boolean;
+}): JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
@@ -284,14 +308,22 @@ function DiaryRow({
     <div className="flex items-center gap-3 py-3">
       <button onClick={onOpen} className="h-16 w-11 shrink-0 overflow-hidden rounded bg-surface-2">
         {entry.media.posterUrl ? (
-          <img src={entry.media.posterUrl} alt={entry.media.title} className="h-full w-full object-cover" />
+          <img
+            src={entry.media.posterUrl}
+            alt={entry.media.title}
+            className="h-full w-full object-cover"
+          />
         ) : (
-          <div className="h-full w-full" style={{ background: posterGradient(entry.media.title) }} />
+          <div
+            className="h-full w-full"
+            style={{ background: posterGradient(entry.media.title) }}
+          />
         )}
       </button>
       <button onClick={onOpen} className="min-w-0 flex-1 text-left">
         <p className="truncate text-sm font-medium text-content">
-          {entry.media.title} {entry.media.year && <span className="text-muted-2">({entry.media.year})</span>}
+          {entry.media.title}{' '}
+          {entry.media.year && <span className="text-muted-2">({entry.media.year})</span>}
         </p>
         <p className="text-xs text-muted-2">
           {new Date(entry.watchedAt).toLocaleDateString()}
@@ -416,8 +448,7 @@ function NetworkTab({ username }: { username: string }): JSX.Element {
   const [side, setSide] = useState<'followers' | 'following'>('followers');
   const { data, isLoading } = useQuery({
     queryKey: ['network', username, side],
-    queryFn: () =>
-      side === 'followers' ? api.getFollowers(username) : api.getFollowing(username),
+    queryFn: () => (side === 'followers' ? api.getFollowers(username) : api.getFollowing(username)),
   });
 
   return (
@@ -489,15 +520,23 @@ function ReviewsTab({ username }: { username: string }): JSX.Element {
             className="h-20 w-14 shrink-0 overflow-hidden rounded bg-surface-2"
           >
             {r.media.posterUrl ? (
-              <img src={r.media.posterUrl} alt={r.media.title} className="h-full w-full object-cover" />
+              <img
+                src={r.media.posterUrl}
+                alt={r.media.title}
+                className="h-full w-full object-cover"
+              />
             ) : (
-              <div className="h-full w-full" style={{ background: posterGradient(r.media.title) }} />
+              <div
+                className="h-full w-full"
+                style={{ background: posterGradient(r.media.title) }}
+              />
             )}
           </button>
           <div className="min-w-0 flex-1">
             <button onClick={() => navigate(`/media/${r.media.id}`)} className="text-left">
               <span className="text-sm font-medium text-content hover:text-gold">
-                {r.media.title} {r.media.year && <span className="text-muted-2">({r.media.year})</span>}
+                {r.media.title}{' '}
+                {r.media.year && <span className="text-muted-2">({r.media.year})</span>}
               </span>
             </button>
             {r.ratingValue !== null && (
@@ -585,7 +624,9 @@ function EmptyFavorites({
   return (
     <Card className="p-6 text-center">
       <p className="text-sm text-muted">
-        {isOwnProfile ? `Pick up to 4 ${label} to feature on your profile.` : `No favorite ${label} yet.`}
+        {isOwnProfile
+          ? `Pick up to 4 ${label} to feature on your profile.`
+          : `No favorite ${label} yet.`}
       </p>
       {isOwnProfile && (
         <Button variant="secondary" className="mt-3" onClick={onEdit}>
@@ -596,7 +637,11 @@ function EmptyFavorites({
   );
 }
 
-function RatingHistogram({ buckets }: { buckets: { bucket: number; count: number }[] }): JSX.Element {
+function RatingHistogram({
+  buckets,
+}: {
+  buckets: { bucket: number; count: number }[];
+}): JSX.Element {
   const max = Math.max(1, ...buckets.map((b) => b.count));
   const total = buckets.reduce((s, b) => s + b.count, 0);
   if (total === 0) return <p className="text-sm text-muted-2">No ratings yet.</p>;
@@ -645,18 +690,27 @@ function ProfileHeader({
                     {f.media.posterUrl ? (
                       <img src={f.media.posterUrl} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="h-full w-full" style={{ background: posterGradient(f.media.title) }} />
+                      <div
+                        className="h-full w-full"
+                        style={{ background: posterGradient(f.media.title) }}
+                      />
                     )}
                   </div>
                 ))}
                 {Array.from({ length: 4 - banner.length }).map((_, i) => (
-                  <div key={`fill-${i}`} style={{ background: posterGradient(profile.username + i) }} />
+                  <div
+                    key={`fill-${i}`}
+                    style={{ background: posterGradient(profile.username + i) }}
+                  />
                 ))}
               </div>
             ) : null;
           })()}
           {[...profile.favoriteFilms, ...profile.favoriteShows].length === 0 && (
-            <div className="h-full w-full" style={{ background: posterGradient(profile.username) }} />
+            <div
+              className="h-full w-full"
+              style={{ background: posterGradient(profile.username) }}
+            />
           )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
         </div>

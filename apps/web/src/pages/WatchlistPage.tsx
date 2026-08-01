@@ -29,7 +29,10 @@ export function WatchlistPage(): JSX.Element {
 
   const { data, isLoading } = useQuery({ queryKey: ['library'], queryFn: () => api.getLibrary() });
   const watchlist = (data?.items ?? []).filter((i) => i.isWatchlisted);
-  const groupItems = sortLibrary(watchlist.filter((i) => groupOf(i.type) === group), sort);
+  const groupItems = sortLibrary(
+    watchlist.filter((i) => groupOf(i.type) === group),
+    sort,
+  );
   const groupCounts: Record<Group, number> = {
     FILMS: watchlist.filter((i) => groupOf(i.type) === 'FILMS').length,
     SHOWS: watchlist.filter((i) => groupOf(i.type) === 'SHOWS').length,
@@ -44,8 +47,8 @@ export function WatchlistPage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
+    <div className="mx-auto max-w-6xl px-4 py-10 app:py-4 sm:px-6">
+      <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold app:hidden">
         Watchlist
       </p>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">

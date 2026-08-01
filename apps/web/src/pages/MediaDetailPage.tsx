@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import type { CreditPerson, MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
 import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useAppShell, useScreenHeader } from '../lib/appShell';
 import { cn } from '../lib/cn';
+import { posterGradient } from '../lib/poster';
+import { IconChevronLeft } from '../components/app/Icons';
 import { Button, Spinner } from '../components/ui';
 import { StatusPicker } from '../components/StatusPicker';
 import { RatingWidget } from '../components/RatingWidget';
@@ -35,6 +38,12 @@ export function MediaDetailPage(): JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [params] = useSearchParams();
+  const appShell = useAppShell();
+
+  /* A film's own artwork is the header on a phone — it runs under the status
+     bar, so the shell's title bar would only be in its way. This screen draws
+     its own back control over the backdrop instead. */
+  useScreenHeader({ hidden: true });
 
   /**
    * Artwork choices belong to a library, so they're only shown — and only
@@ -106,179 +115,199 @@ export function MediaDetailPage(): JSX.Element {
   ];
 
   return (
-    <div className="pb-20">
-      {/* Full-bleed backdrop fading into the page — the film's own image is the
-          header, with the poster overlapping its lower edge. */}
-      <div className="relative">
-        {m.backdropUrl && (
-          <div className="absolute inset-x-0 top-0 h-[300px] overflow-hidden sm:h-[440px]">
-            <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
-            {/* One gradient, weighted to the bottom, so the image stays legible
+    <div className={appShell ? 'pb-actionbar' : 'pb-20'}>
+      {appShell ? (
+        <AppFilmScreen
+          media={m}
+          scale={scale}
+          directors={directors}
+          canEditArtwork={canEditArtwork}
+          isAdmin={user?.role === 'ADMIN'}
+          onWatch={() => watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))}
+          onLike={() => favoriteMut.mutate(!state.isFavorite)}
+          onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
+          onRate={(v) => ratingMut.mutate(v)}
+          onStatus={(s) => statusMut.mutate(s)}
+          onLog={() => setLogging(true)}
+          onEditArtwork={() => setEditingArtwork(true)}
+          onFixMismatch={() => setFixingMismatch(true)}
+          onEditCast={() => setEditingCast(true)}
+        />
+      ) : (
+        /* Full-bleed backdrop fading into the page — the film's own image is the
+         header, with the poster overlapping its lower edge. */
+        <div className="relative">
+          {m.backdropUrl && (
+            <div className="absolute inset-x-0 top-0 h-[300px] overflow-hidden sm:h-[440px]">
+              <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
+              {/* One gradient, weighted to the bottom, so the image stays legible
                 at the top and only fades where text begins. */}
-            <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-transparent to-bg" />
-            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" />
-          </div>
-        )}
-
-        <div
-          className={cn(
-            'relative mx-auto max-w-6xl px-4 sm:px-6',
-            m.backdropUrl ? 'pt-40 sm:pt-64' : 'pt-10',
+              <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-transparent to-bg" />
+              <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-bg to-transparent" />
+            </div>
           )}
-        >
-          <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
-            {/* Poster + action panel */}
-            <div className="flex gap-5 lg:block">
-              <div className="group relative w-28 shrink-0 sm:w-40 lg:w-full">
-                <div className="aspect-[2/3] overflow-hidden rounded ring-1 ring-border-hi/60 shadow-soft">
-                  {m.posterUrl && (
-                    <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+
+          <div
+            className={cn(
+              'relative mx-auto max-w-6xl px-4 sm:px-6',
+              m.backdropUrl ? 'pt-40 sm:pt-64' : 'pt-10',
+            )}
+          >
+            <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
+              {/* Poster + action panel */}
+              <div className="flex gap-5 lg:block">
+                <div className="group relative w-28 shrink-0 sm:w-40 lg:w-full">
+                  <div className="aspect-[2/3] overflow-hidden rounded ring-1 ring-border-hi/60 shadow-soft">
+                    {m.posterUrl && (
+                      <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                  {canEditArtwork && (
+                    <button
+                      onClick={() => setEditingArtwork(true)}
+                      title="Change artwork in your library"
+                      className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-sm border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                    >
+                      ✎
+                    </button>
                   )}
                 </div>
-                {canEditArtwork && (
-                  <button
-                    onClick={() => setEditingArtwork(true)}
-                    title="Change artwork in your library"
-                    className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-sm border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-                  >
-                    ✎
-                  </button>
-                )}
-              </div>
 
-              {/* Under the poster sits where-to-watch; the record card moved to
+                {/* Under the poster sits where-to-watch; the record card moved to
                   the right rail, above the community ratings it belongs beside. */}
-              {/* Where to watch, and the trailer directly beneath it: both
+                {/* Where to watch, and the trailer directly beneath it: both
                   answer "can I see this now", so they belong together rather
                   than with the catalogue coordinates. */}
-              <div className="min-w-0 flex-1 space-y-2 lg:mt-4">
-                <WhereToWatch media={m} />
-                {m.trailerUrl && (
-                  <a
-                    href={m.trailerUrl}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="flex items-center justify-between gap-2 rounded-sm border border-border-hi bg-surface px-3 py-2.5 hover:bg-surface-2"
-                  >
-                    <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content">
-                      Trailer
-                    </span>
-                    <span className="font-data text-[11px] text-muted-2">▶ watch</span>
-                  </a>
-                )}
-              </div>
-            </div>
-
-            {/* Main column */}
-            <div className="min-w-0">
-              {directors.length > 0 && (
-                <p className="font-cond text-[13px] font-bold uppercase tracking-[0.16em] text-muted-2">
-                  Directed by
-                </p>
-              )}
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h1 className="font-cond text-4xl font-extrabold uppercase leading-[0.95] tracking-tight sm:text-5xl">
-                  {m.title}
-                </h1>
-                {m.releaseDate && (
-                  <span className="font-cond text-2xl font-bold tabular-nums text-muted">
-                    {m.releaseDate.slice(0, 4)}
-                  </span>
-                )}
-              </div>
-              {directors.length > 0 && (
-                <p className="mt-1 text-sm text-content/90">
-                  {directors.map((d, i) => (
-                    <span key={d.id}>
-                      {i > 0 && ', '}
-                      <Link to={personPath(d)} className="hover:text-gold hover:underline">
-                        {d.name}
-                      </Link>
-                    </span>
-                  ))}
-                </p>
-              )}
-
-              {/* Accession line — the catalogue coordinates for this record,
-                  and genuinely the id you'd search the provider for. */}
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                <Accession
-                  provider={m.provider}
-                  externalId={m.externalId}
-                  runtime={m.runtime}
-                />
-                <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
-                  {TYPE_LABEL[m.type]}
-                </span>
-                <button
-                  onClick={() => setFixingMismatch(true)}
-                  className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
-                >
-                  Wrong title?
-                </button>
-              </div>
-
-              {m.tagline && (
-                <p className="mt-5 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-gold">
-                  {m.tagline}
-                </p>
-              )}
-              {m.overview && (
-                <p className="mt-2 max-w-[62ch] leading-relaxed text-content/90">{m.overview}</p>
-              )}
-
-              <div className="mt-7">
-                <TabBar
-                  tabs={infoTabs}
-                  active={infoTab}
-                  onChange={(k) => setInfoTab(k as InfoTab)}
-                />
-                <div className="pt-4">
-                  {infoTab === 'cast' && (
-                    <CastGrid
-                      people={m.cast}
-                      emptyLabel="No cast recorded for this title."
-                      canEdit={user?.role === 'ADMIN'}
-                      onEdit={() => setEditingCast(true)}
-                    />
-                  )}
-                  {infoTab === 'crew' && (
-                    <CastGrid people={m.crew} emptyLabel="No crew recorded for this title." />
-                  )}
-                  {infoTab === 'details' && <DetailsList media={m} />}
-                  {infoTab === 'genres' && (
-                    <ChipRow
-                      items={m.genres.map((g) => g.name)}
-                      emptyLabel="No genres recorded."
-                    />
+                <div className="min-w-0 flex-1 space-y-2 lg:mt-4">
+                  <WhereToWatch media={m} />
+                  {m.trailerUrl && (
+                    <a
+                      href={m.trailerUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="flex items-center justify-between gap-2 rounded-sm border border-border-hi bg-surface px-3 py-2.5 hover:bg-surface-2"
+                    >
+                      <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content">
+                        Trailer
+                      </span>
+                      <span className="font-data text-[11px] text-muted-2">▶ watch</span>
+                    </a>
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Right rail: community ratings + stats */}
-            <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
-              <ActionPanel
-                state={state}
-                scale={scale}
-                onWatch={() =>
-                  watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
-                }
-                onLike={() => favoriteMut.mutate(!state.isFavorite)}
-                onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
-                onRate={(v) => ratingMut.mutate(v)}
-                onStatus={(s) => statusMut.mutate(s)}
-                onLog={() => setLogging(true)}
-              />
-              <RatingsPanel media={m} />
-              <FriendRatingsPanel mediaId={id} />
-              <StatsPanel media={m} />
-            </aside>
+              {/* Main column */}
+              <div className="min-w-0">
+                {directors.length > 0 && (
+                  <p className="font-cond text-[13px] font-bold uppercase tracking-[0.16em] text-muted-2">
+                    Directed by
+                  </p>
+                )}
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h1 className="font-cond text-4xl font-extrabold uppercase leading-[0.95] tracking-tight sm:text-5xl">
+                    {m.title}
+                  </h1>
+                  {m.releaseDate && (
+                    <span className="font-cond text-2xl font-bold tabular-nums text-muted">
+                      {m.releaseDate.slice(0, 4)}
+                    </span>
+                  )}
+                </div>
+                {directors.length > 0 && (
+                  <p className="mt-1 text-sm text-content/90">
+                    {directors.map((d, i) => (
+                      <span key={d.id}>
+                        {i > 0 && ', '}
+                        <Link to={personPath(d)} className="hover:text-gold hover:underline">
+                          {d.name}
+                        </Link>
+                      </span>
+                    ))}
+                  </p>
+                )}
+
+                {/* Accession line — the catalogue coordinates for this record,
+                  and genuinely the id you'd search the provider for. */}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  <Accession provider={m.provider} externalId={m.externalId} runtime={m.runtime} />
+                  <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
+                    {TYPE_LABEL[m.type]}
+                  </span>
+                  <button
+                    onClick={() => setFixingMismatch(true)}
+                    className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
+                  >
+                    Wrong title?
+                  </button>
+                </div>
+
+                {m.tagline && (
+                  <p className="mt-5 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-gold">
+                    {m.tagline}
+                  </p>
+                )}
+                {m.overview && (
+                  <p className="mt-2 max-w-[62ch] leading-relaxed text-content/90">{m.overview}</p>
+                )}
+
+                <div className="mt-7">
+                  <TabBar
+                    tabs={infoTabs}
+                    active={infoTab}
+                    onChange={(k) => setInfoTab(k as InfoTab)}
+                  />
+                  <div className="pt-4">
+                    {infoTab === 'cast' && (
+                      <CastGrid
+                        people={m.cast}
+                        emptyLabel="No cast recorded for this title."
+                        canEdit={user?.role === 'ADMIN'}
+                        onEdit={() => setEditingCast(true)}
+                      />
+                    )}
+                    {infoTab === 'crew' && (
+                      <CastGrid people={m.crew} emptyLabel="No crew recorded for this title." />
+                    )}
+                    {infoTab === 'details' && <DetailsList media={m} />}
+                    {infoTab === 'genres' && (
+                      <ChipRow
+                        items={m.genres.map((g) => g.name)}
+                        emptyLabel="No genres recorded."
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right rail: community ratings + stats */}
+              <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
+                <ActionPanel
+                  state={state}
+                  scale={scale}
+                  onWatch={() =>
+                    watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
+                  }
+                  onLike={() => favoriteMut.mutate(!state.isFavorite)}
+                  onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
+                  onRate={(v) => ratingMut.mutate(v)}
+                  onStatus={(s) => statusMut.mutate(s)}
+                  onLog={() => setLogging(true)}
+                />
+                <RatingsPanel media={m} />
+                <FriendRatingsPanel mediaId={id} />
+                <StatsPanel media={m} />
+              </aside>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="mx-auto mt-12 max-w-6xl space-y-12 px-4 sm:px-6">
+      <div
+        className={cn(
+          'mx-auto mt-12 max-w-6xl space-y-12 px-4 sm:px-6',
+          appShell && 'mt-8 space-y-8',
+        )}
+      >
         {isEpisodic && <EpisodesSection mediaId={id} scale={scale} />}
         <ReviewsSection mediaId={id} scale={scale} />
         <SimilarSection
@@ -292,12 +321,339 @@ export function MediaDetailPage(): JSX.Element {
         <ArtworkPickerModal mediaId={id} onClose={() => setEditingArtwork(false)} />
       )}
       {fixingMismatch && (
-        <RematchModal mediaId={id} currentTitle={m.title} onClose={() => setFixingMismatch(false)} />
+        <RematchModal
+          mediaId={id}
+          currentTitle={m.title}
+          onClose={() => setFixingMismatch(false)}
+        />
       )}
       {editingCast && (
         <EditCastModal mediaId={id} cast={m.cast} onClose={() => setEditingCast(false)} />
       )}
       {logging && <LogModal media={m} onClose={() => setLogging(false)} />}
+    </div>
+  );
+}
+
+/**
+ * The film screen as the installed app draws it.
+ *
+ * Same record, one column. The backdrop runs to the top edge and under the
+ * status bar with the title struck over its fade; the poster sits beside the
+ * title rather than above the fold on its own; and the three states you set
+ * most often — watched, liked, watchlisted — are pinned to the foot of the
+ * screen so they're reachable with a thumb from anywhere in a long page,
+ * instead of being a scroll away in a sidebar that a phone has no room for.
+ */
+function AppFilmScreen({
+  media: m,
+  scale,
+  directors,
+  canEditArtwork,
+  isAdmin,
+  onWatch,
+  onLike,
+  onWatchlist,
+  onRate,
+  onStatus,
+  onLog,
+  onEditArtwork,
+  onFixMismatch,
+  onEditCast,
+}: {
+  media: MediaDetail;
+  scale: ReturnType<typeof scaleForMediaType>;
+  directors: CreditPerson[];
+  canEditArtwork: boolean;
+  isAdmin: boolean;
+  onWatch: () => void;
+  onLike: () => void;
+  onWatchlist: () => void;
+  onRate: (value: number | null) => void;
+  onStatus: (status: TrackingStatus | null) => void;
+  onLog: () => void;
+  onEditArtwork: () => void;
+  onFixMismatch: () => void;
+  onEditCast: () => void;
+}): JSX.Element {
+  const navigate = useNavigate();
+  const state = m.userState;
+  const [infoTab, setInfoTab] = useState<InfoTab>('cast');
+  const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
+
+  return (
+    <>
+      {/* ---- Hero ---------------------------------------------------- */}
+      <div className="relative">
+        <div className="h-[38vh] min-h-[230px] w-full overflow-hidden">
+          {m.backdropUrl ? (
+            <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
+          ) : (
+            <div className="h-full w-full" style={{ background: posterGradient(m.title) }} />
+          )}
+        </div>
+        {/* Weighted to the foot: the image stays readable up top and only
+            dissolves where the title lands on it. */}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-bg/55 via-bg/10 to-bg" />
+
+        {/* Screen controls, over the art. They scroll away with it rather than
+            floating — nothing in this world hovers. */}
+        <div className="absolute inset-x-0 top-0 flex items-center justify-between px-2 pt-safe">
+          <button
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+            className="grid h-10 w-10 place-items-center rounded-sm bg-bg-2/70 text-content backdrop-blur-sm"
+          >
+            <IconChevronLeft />
+          </button>
+          <RecordMenu
+            canEditArtwork={canEditArtwork}
+            isAdmin={isAdmin}
+            onEditArtwork={onEditArtwork}
+            onFixMismatch={onFixMismatch}
+            onEditCast={onEditCast}
+          />
+        </div>
+      </div>
+
+      {/* ---- Title block, overlapping the fade ----------------------- */}
+      <div className="relative -mt-16 px-4">
+        <div className="flex items-end gap-3.5">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-cond text-[27px] font-extrabold uppercase leading-[0.94] tracking-tight">
+              {m.title}
+            </h1>
+            <p className="mt-1.5 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-muted">
+              {m.releaseDate && <span className="tabular-nums">{m.releaseDate.slice(0, 4)}</span>}
+              {m.releaseDate && directors.length > 0 && <span className="px-1.5">·</span>}
+              {directors.length > 0 && (
+                <>
+                  <span className="text-muted-2">Directed by </span>
+                  {directors.map((d, i) => (
+                    <span key={d.id}>
+                      {i > 0 && ', '}
+                      <Link to={personPath(d)} className="text-content">
+                        {d.name}
+                      </Link>
+                    </span>
+                  ))}
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="w-[88px] shrink-0 overflow-hidden rounded-sm bg-card shadow-lift ring-1 ring-border-hi/60">
+            <div className="aspect-[2/3]">
+              {m.posterUrl ? (
+                <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+              ) : (
+                <div className="h-full w-full" style={{ background: posterGradient(m.title) }} />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Trailer and length, the two "can I watch this now" facts, on one rule. */}
+        <div className="mt-4 flex items-center gap-2.5 border-y border-border py-2.5">
+          {m.trailerUrl && (
+            <a
+              href={m.trailerUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="flex items-center gap-1.5 rounded-sm border border-border-hi px-2.5 py-1.5 font-cond text-[12px] font-bold uppercase tracking-[0.1em] text-content"
+            >
+              <span aria-hidden="true">▶</span> Trailer
+            </a>
+          )}
+          {m.runtime && (
+            <span className="font-data text-[12px] text-muted">{formatRuntime(m.runtime)}</span>
+          )}
+          <span className="ml-auto font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
+            {TYPE_LABEL[m.type]}
+          </span>
+        </div>
+
+        {m.tagline && (
+          <p className="mt-4 font-cond text-[12px] font-bold uppercase tracking-[0.14em] text-gold">
+            {m.tagline}
+          </p>
+        )}
+        {m.overview && <Synopsis text={m.overview} />}
+
+        <Accession provider={m.provider} externalId={m.externalId} className="mt-4" />
+      </div>
+
+      {/* ---- Record, ratings, credits -------------------------------- */}
+      <div className="mt-7 space-y-7 px-4">
+        <div>
+          <SectionHeader title="Your rating" />
+          <div className="flex items-center justify-between gap-3">
+            <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
+            {state.rating !== null && (
+              <button
+                type="button"
+                onClick={() => onRate(null)}
+                className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-muted-2"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="mt-3">
+            <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
+          </div>
+        </div>
+
+        <WhereToWatch media={m} />
+        <RatingsPanel media={m} />
+        <FriendRatingsPanel mediaId={m.id} />
+        <StatsPanel media={m} />
+
+        <div>
+          <TabBar
+            tabs={[
+              { key: 'cast', label: 'Cast', count: m.cast.length || undefined },
+              { key: 'crew', label: 'Crew', count: m.crew.length || undefined },
+              { key: 'details', label: 'Details' },
+              { key: 'genres', label: 'Genres' },
+            ]}
+            active={infoTab}
+            onChange={(k) => setInfoTab(k as InfoTab)}
+          />
+          <div className="pt-4">
+            {infoTab === 'cast' && (
+              <CastGrid
+                people={m.cast}
+                emptyLabel="No cast recorded for this title."
+                canEdit={isAdmin}
+                onEdit={onEditCast}
+              />
+            )}
+            {infoTab === 'crew' && (
+              <CastGrid people={m.crew} emptyLabel="No crew recorded for this title." />
+            )}
+            {infoTab === 'details' && <DetailsList media={m} />}
+            {infoTab === 'genres' && (
+              <ChipRow items={m.genres.map((g) => g.name)} emptyLabel="No genres recorded." />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ---- Pinned record bar --------------------------------------- */}
+      <div className="fixed inset-x-0 bottom-tabbar z-30 border-t-2 border-border-hi bg-bg-2 pl-safe pr-safe">
+        <div className="mx-auto flex h-[3.25rem] max-w-md items-stretch gap-1 px-2">
+          <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} />
+          <PanelAction label="Liked" active={state.isFavorite} tone="rose" onClick={onLike} />
+          <PanelAction
+            label="Watchlist"
+            active={state.isWatchlisted}
+            tone="gold"
+            onClick={onWatchlist}
+          />
+          <button
+            onClick={onLog}
+            className="my-2 shrink-0 rounded-sm bg-accent px-3 font-cond text-[12px] font-extrabold uppercase tracking-[0.1em] text-ink"
+          >
+            Log
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * A synopsis that opens. Full plot text is four or five paragraphs of a phone
+ * screen and it sits between the title and everything you came to do, so it
+ * starts folded and unfolds on request rather than being truncated for good.
+ */
+function Synopsis({ text }: { text: string }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <p className={cn('text-[15px] leading-relaxed text-content/90', !open && 'line-clamp-4')}>
+        {text}
+      </p>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="mt-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-gold"
+      >
+        {open ? 'Less' : 'More'}
+      </button>
+    </div>
+  );
+}
+
+/** The screen's own overflow menu — the record edits that used to be scattered
+ *  through a desktop page's margins, gathered where a phone can reach them. */
+function RecordMenu({
+  canEditArtwork,
+  isAdmin,
+  onEditArtwork,
+  onFixMismatch,
+  onEditCast,
+}: {
+  canEditArtwork: boolean;
+  isAdmin: boolean;
+  onEditArtwork: () => void;
+  onFixMismatch: () => void;
+  onEditCast: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent | TouchEvent): void {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('touchstart', onDown);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [open]);
+
+  const items: { label: string; run: () => void }[] = [
+    { label: 'Wrong title?', run: onFixMismatch },
+    ...(canEditArtwork ? [{ label: 'Change artwork', run: onEditArtwork }] : []),
+    ...(isAdmin ? [{ label: 'Edit cast', run: onEditCast }] : []),
+  ];
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-label="More actions"
+        aria-expanded={open}
+        className="grid h-10 w-10 place-items-center rounded-sm bg-bg-2/70 text-content backdrop-blur-sm"
+      >
+        <span aria-hidden="true" className="text-lg leading-none">
+          •••
+        </span>
+      </button>
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-1 w-48 rounded-sm border border-border-hi bg-surface p-1 shadow-lift"
+        >
+          {items.map((i) => (
+            <button
+              key={i.label}
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                i.run();
+              }}
+              className="block w-full rounded-sm px-2.5 py-2 text-left text-sm text-muted"
+            >
+              {i.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -336,7 +692,12 @@ function ActionPanel({
       <div className="flex items-stretch gap-1 p-2">
         <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} />
         <PanelAction label="Liked" active={state.isFavorite} tone="rose" onClick={onLike} />
-        <PanelAction label="Watchlist" active={state.isWatchlisted} tone="gold" onClick={onWatchlist} />
+        <PanelAction
+          label="Watchlist"
+          active={state.isWatchlisted}
+          tone="gold"
+          onClick={onWatchlist}
+        />
       </div>
 
       <div className="border-t border-border px-3 py-3">
@@ -424,7 +785,8 @@ function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
       <SectionHeader title="Ratings" />
       {media.ratingCount === 0 ? (
         <p className="text-sm text-muted-2">
-          No ratings yet{media.providerRating !== null && ` · ${(media.providerRating / 10).toFixed(1)} on TMDB`}
+          No ratings yet
+          {media.providerRating !== null && ` · ${(media.providerRating / 10).toFixed(1)} on TMDB`}
         </p>
       ) : (
         <div className="flex items-end gap-3">
@@ -502,14 +864,20 @@ function StatsPanel({ media }: { media: MediaDetail }): JSX.Element {
         {rows.map((r) => (
           <div key={r.label} className="flex items-baseline gap-2">
             <dt className="text-muted">{r.label}</dt>
-            <span aria-hidden="true" className="min-w-4 flex-1 border-b border-dotted border-border" />
+            <span
+              aria-hidden="true"
+              className="min-w-4 flex-1 border-b border-dotted border-border"
+            />
             <dd className="font-data text-[13px] font-bold text-content">{r.value}</dd>
           </div>
         ))}
         {media.providerRating !== null && (
           <div className="flex items-baseline gap-2 border-t border-border pt-1.5">
             <dt className="text-muted">TMDB</dt>
-            <span aria-hidden="true" className="min-w-4 flex-1 border-b border-dotted border-border" />
+            <span
+              aria-hidden="true"
+              className="min-w-4 flex-1 border-b border-dotted border-border"
+            />
             <dd className="font-data text-[13px] font-bold text-content">
               {(media.providerRating / 10).toFixed(1)}
             </dd>
@@ -555,7 +923,12 @@ function CastGrid({
           >
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface-2 ring-1 ring-transparent transition-colors group-hover:ring-gold">
               {c.profileUrl && (
-                <img src={c.profileUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                <img
+                  src={c.profileUrl}
+                  alt=""
+                  loading="lazy"
+                  className="h-full w-full object-cover"
+                />
               )}
             </div>
             <div className="min-w-0">

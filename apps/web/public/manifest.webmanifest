@@ -5,7 +5,14 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
+  "categories": ["entertainment", "lifestyle"],
+  "shortcuts": [
+    { "name": "Log a film", "short_name": "Log", "url": "/?log=1" },
+    { "name": "Search", "short_name": "Search", "url": "/search" },
+    { "name": "Watchlist", "short_name": "Watchlist", "url": "/watchlist" }
+  ],
   "background_color": "#1a2025",
   "theme_color": "#1a2025",
   "icons": [

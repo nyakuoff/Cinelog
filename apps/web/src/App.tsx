@@ -1,9 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './lib/auth';
+import { useAppShell } from './lib/appShell';
 import { api } from './lib/api';
 import { Layout } from './components/Layout';
+import { AppShell } from './components/app/AppShell';
 import { Spinner } from './components/ui';
+import { ActivityPage } from './pages/ActivityPage';
 import { DiscoverPage } from './pages/DiscoverPage';
 import { FilmsPage } from './pages/FilmsPage';
 import { LibraryPage } from './pages/LibraryPage';
@@ -22,13 +25,15 @@ import { SetupPage } from './pages/SetupPage';
 
 export function App(): JSX.Element {
   const { user, initializing } = useAuth();
+  // Same routes, same pages — a different shell around them. See lib/appShell.
+  const appShell = useAppShell();
 
   if (initializing) return <FullScreenSpinner />;
   if (!user) return <UnauthedApp />;
 
   return (
     <Routes>
-      <Route element={<Layout />}>
+      <Route element={appShell ? <AppShell /> : <Layout />}>
         <Route path="/" element={<DiscoverPage />} />
         <Route path="/films" element={<FilmsPage />} />
         <Route path="/members" element={<MembersPage />} />
@@ -37,6 +42,7 @@ export function App(): JSX.Element {
         <Route path="/library" element={<LibraryPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/activity" element={<ActivityPage />} />
         <Route path="/media/:id" element={<MediaDetailPage />} />
         {/* Person ids are numeric, so the static "name" segment can't collide. */}
         <Route path="/person/name/:name" element={<PersonPage byName />} />

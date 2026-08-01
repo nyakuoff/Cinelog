@@ -34,11 +34,13 @@ export function SettingsPage(): JSX.Element {
   if (!user) return <></>;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+    <div className="mx-auto max-w-2xl px-4 py-10 app:py-4 sm:px-6">
       <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
         Your account
       </p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Settings</h1>
+      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight app:hidden">
+        Settings
+      </h1>
 
       <div className="mt-6">
         <TabBar
@@ -70,10 +72,22 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
   const bannerRef = useRef<HTMLInputElement>(null);
   const avatarRef = useRef<HTMLInputElement>(null);
 
-  const bannerMut = useMutation({ mutationFn: (file: File) => api.uploadBanner(file), onSuccess: updateUser });
-  const removeBannerMut = useMutation({ mutationFn: () => api.removeBanner(), onSuccess: updateUser });
-  const avatarMut = useMutation({ mutationFn: (file: File) => api.uploadAvatar(file), onSuccess: updateUser });
-  const removeAvatarMut = useMutation({ mutationFn: () => api.removeAvatar(), onSuccess: updateUser });
+  const bannerMut = useMutation({
+    mutationFn: (file: File) => api.uploadBanner(file),
+    onSuccess: updateUser,
+  });
+  const removeBannerMut = useMutation({
+    mutationFn: () => api.removeBanner(),
+    onSuccess: updateUser,
+  });
+  const avatarMut = useMutation({
+    mutationFn: (file: File) => api.uploadAvatar(file),
+    onSuccess: updateUser,
+  });
+  const removeAvatarMut = useMutation({
+    mutationFn: () => api.removeAvatar(),
+    onSuccess: updateUser,
+  });
 
   const bannerBusy = bannerMut.isPending || removeBannerMut.isPending;
   const avatarBusy = avatarMut.isPending || removeAvatarMut.isPending;

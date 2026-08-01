@@ -13,7 +13,11 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <!-- `black-translucent`, not `black`: the installed app draws a film's own
+         backdrop to the very top edge, under the clock and battery, the way a
+         native media app does. Every screen's chrome pads itself out of the
+         notch with env(safe-area-inset-top) — see the `*-safe` utilities. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Cinelog" />
     <!-- iOS splash screens (current-gen device sizes only) — avoids the
          white-flash-before-paint launching a dark-themed standalone app. -->

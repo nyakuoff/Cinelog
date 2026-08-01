@@ -182,6 +182,46 @@ button {
   .pr-safe {
     padding-right: env(safe-area-inset-right);
   }
+
+  /* Clearance for, and alignment to, the installed app's fixed tab bar. A
+     screen's last row and any pinned action bar both have to sit clear of it,
+     and both need the same number. */
+  .pb-tabbar {
+    padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 1rem);
+  }
+  .bottom-tabbar {
+    bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  }
+  /* Extra clearance on top of `.pb-tabbar` (which the shell already applies to
+     every screen) for a screen that pins its own action bar above the tab bar. */
+  .pb-actionbar {
+    padding-bottom: calc(var(--actionbar-h) + 0.5rem);
+  }
+  /* Sticky offset for anything that has to sit directly under the app's title
+     bar. The bar is 3rem of content plus whatever the notch takes. */
+  .top-appbar {
+    top: calc(3rem + env(safe-area-inset-top));
+  }
+}
+
+/* ---- Installed app -----------------------------------------------
+   `html.app-shell` is set by AppShellProvider when the app is running
+   standalone on a phone. It is also the base of the Tailwind `app:`
+   variant, so screens can drop their website-only furniture without
+   branching in JS. */
+:root {
+  --tabbar-h: 3.5rem;
+  --actionbar-h: 3.25rem;
+}
+
+html.app-shell {
+  /* A home-screen app doesn't rubber-band its whole document off the top or
+     trigger the browser's pull-to-refresh; only the content scrolls. */
+  overscroll-behavior-y: none;
+}
+
+html.app-shell body {
+  overscroll-behavior-y: none;
 }
 
 /* ---- Rubber stamp ------------------------------------------------

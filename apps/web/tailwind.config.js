@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -57,5 +59,15 @@ export default {
       // single authored motion is the stamp strike, defined in index.css.
     },
   },
-  plugins: [],
+  plugins: [
+    // `app:` — styles that apply only when running as the installed phone app.
+    // The website and the app share every page component, and most of what
+    // differs between them is furniture (page headings the app's title bar
+    // already carries, gutters the app doesn't want), which is a styling
+    // question. Making it a variant keeps that out of the components' logic.
+    plugin(({ addVariant }) => {
+      addVariant('app', 'html.app-shell &');
+      addVariant('not-app', 'html:not(.app-shell) &');
+    }),
+  ],
 };

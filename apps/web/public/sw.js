@@ -4,7 +4,7 @@
  * - Hashed static assets are cache-first (their URL changes on each deploy).
  * - API requests are never intercepted — data/auth always go to the network.
  */
-const CACHE = 'cinelog-shell-v1';
+const CACHE = 'cinelog-shell-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.add('/')).then(() => self.skipWaiting()));

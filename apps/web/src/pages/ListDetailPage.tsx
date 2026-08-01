@@ -16,7 +16,12 @@ export function ListDetailPage(): JSX.Element {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  const { data: list, isLoading, isError, error } = useQuery({
+  const {
+    data: list,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ['list', id],
     queryFn: () => api.getList(id),
     enabled: id.length > 0,
@@ -65,14 +70,17 @@ export function ListDetailPage(): JSX.Element {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-5xl px-4 py-8 app:py-4 sm:px-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="font-cond text-3xl font-extrabold uppercase leading-tight tracking-tight">
             {list.title}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
-            <Link to={`/u/${list.owner.username}`} className="flex items-center gap-1.5 hover:text-gold">
+            <Link
+              to={`/u/${list.owner.username}`}
+              className="flex items-center gap-1.5 hover:text-gold"
+            >
               <Avatar
                 user={{ username: list.owner.username, avatarUrl: list.owner.avatarUrl }}
                 size={20}
@@ -146,8 +154,12 @@ export function ListDetailPage(): JSX.Element {
         <ListComments listId={list.id} />
       </div>
 
-      {adding && <AddFilmsModal listId={list.id} onClose={() => setAdding(false)} onAdded={invalidate} />}
-      {editing && <EditListModal list={list} onClose={() => setEditing(false)} onSaved={invalidate} />}
+      {adding && (
+        <AddFilmsModal listId={list.id} onClose={() => setAdding(false)} onAdded={invalidate} />
+      )}
+      {editing && (
+        <EditListModal list={list} onClose={() => setEditing(false)} onSaved={invalidate} />
+      )}
     </div>
   );
 }
@@ -370,11 +382,15 @@ function AddFilmsModal({
   const addMut = useMutation({
     mutationFn: async (result: SearchResult) => {
       // Provider hits aren't cached locally yet, so resolve before adding.
-      const mediaId = result.id ?? (await api.resolveMedia({
-        provider: result.provider,
-        externalId: result.externalId,
-        type: result.type,
-      })).id;
+      const mediaId =
+        result.id ??
+        (
+          await api.resolveMedia({
+            provider: result.provider,
+            externalId: result.externalId,
+            type: result.type,
+          })
+        ).id;
       return api.addListItem(listId, { mediaId });
     },
     onSuccess: (_res, result) => {
@@ -433,7 +449,12 @@ function AddFilmsModal({
                 <li key={`${r.provider}:${r.externalId}`} className="flex items-center gap-3">
                   <div className="h-14 w-10 shrink-0 overflow-hidden rounded-[2px] bg-surface-2">
                     {r.posterUrl ? (
-                      <img src={r.posterUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+                      <img
+                        src={r.posterUrl}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
                       <span
                         className="block h-full w-full"
@@ -578,10 +599,16 @@ function ListComments({ listId }: { listId: string }): JSX.Element {
         <ul className="space-y-3">
           {data?.comments.map((c) => (
             <li key={c.id} className="flex items-start gap-2.5">
-              <Avatar user={{ username: c.author.username, avatarUrl: c.author.avatarUrl }} size={28} />
+              <Avatar
+                user={{ username: c.author.username, avatarUrl: c.author.avatarUrl }}
+                size={28}
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-xs">
-                  <Link to={`/u/${c.author.username}`} className="font-semibold text-content hover:text-gold">
+                  <Link
+                    to={`/u/${c.author.username}`}
+                    className="font-semibold text-content hover:text-gold"
+                  >
                     {c.author.displayName || c.author.username}
                   </Link>{' '}
                   <span className="text-muted-2">{new Date(c.createdAt).toLocaleDateString()}</span>

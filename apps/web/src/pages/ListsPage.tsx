@@ -28,7 +28,7 @@ export function ListsPage(): JSX.Element {
   const lists = data?.lists ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
       <SectionHeader
         title="Lists"
         right={isFetching ? <Spinner className="h-4 w-4" /> : undefined}
@@ -91,8 +91,7 @@ export function CreateListModal({ onClose }: { onClose: () => void }): JSX.Eleme
   const [isPublic, setIsPublic] = useState(true);
 
   const mut = useMutation({
-    mutationFn: () =>
-      api.createList({ title, description: description || null, isPublic }),
+    mutationFn: () => api.createList({ title, description: description || null, isPublic }),
     onSuccess: (list) => {
       void queryClient.invalidateQueries({ queryKey: ['lists'] });
       onClose();
@@ -112,9 +111,7 @@ export function CreateListModal({ onClose }: { onClose: () => void }): JSX.Eleme
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-5 shadow-soft"
       >
-        <h2 className="mb-4 font-cond text-lg font-extrabold uppercase tracking-tight">
-          New list
-        </h2>
+        <h2 className="mb-4 font-cond text-lg font-extrabold uppercase tracking-tight">New list</h2>
         <div className="space-y-4">
           <Field label="Title">
             <Input

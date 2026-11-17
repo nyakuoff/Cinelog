@@ -1,13 +1,47 @@
 /* Cinelog service worker — minimal, dependency-free.
- * - App shell (navigations) is network-first with an offline cache fallback so
- *   updates always propagate when online but the app still opens offline.
- * - Hashed static assets are cache-first (their URL changes on each deploy).
- * - API requests are never intercepted — data/auth always go to the network.
+ * - Navigations: network-first, offline fallback to the cached shell ('/').
+ * - /assets/* (content-hashed): cache-first, precached on install from the shell HTML.
+ * - Other same-origin static files (manifest, icons, splash): stale-while-revalidate.
+ * - API requests are never intercepted.
+ * __BUILD_ID__ is replaced at build time (vite.config.ts), so every deploy gets a new cache.
  */
-const CACHE = 'cinelog-shell-v2';
+const CACHE = 'cinelog-__BUILD_ID__';
+
+// Only cache real files: ok and not the SPA fallback HTML.
+const cacheable = (res) => res.ok && !(res.headers.get('content-type') || '').includes('text/html');
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.add('/')).then(() => self.skipWaiting()));
+  // No skipWaiting here: the page asks for it (SKIP_WAITING message) so a reload is user-approved.
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const res = await fetch('/', { cache: 'no-store' });
+      if (!res.ok) throw new Error('shell fetch failed');
+      await cache.put('/', res.clone());
+      const html = await res.text();
+      const urls = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+      await Promise.all(
+        urls.map((u) =>
+          fetch(u).then((r) => (cacheable(r) ? cache.put(u, r) : undefined)).catch(() => {}),
+        ),
+      );
+      // Fonts are referenced from the CSS, not the HTML: pull url(...) targets too.
+      const css = urls.filter((u) => u.endsWith('.css'));
+      for (const u of css) {
+        const text = await (await cache.match(u))?.text();
+        const fonts = [...(text || '').matchAll(/url\((\/assets\/[^)"']+)\)/g)].map((m) => m[1]);
+        await Promise.all(
+          fonts.map((f) =>
+            fetch(f).then((r) => (cacheable(r) ? cache.put(f, r) : undefined)).catch(() => {}),
+          ),
+        );
+      }
+    })(),
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
@@ -24,35 +58,41 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // leave cross-origin alone
-  if (url.pathname.startsWith('/api/')) return; // never cache API/artwork/auth
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
-    // SPA shell: try the network, fall back to the cached index on failure.
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put('/', copy));
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('/', copy));
+          }
           return res;
         })
-        .catch(() => caches.match('/').then((r) => r || caches.match(request))),
+        .catch(() => caches.match('/').then((r) => r || Response.error())),
     );
     return;
   }
 
-  // Static assets: serve from cache, populate on first fetch.
+  const hashed = url.pathname.startsWith('/assets/');
   event.respondWith(
-    caches.match(request).then(
-      (cached) =>
-        cached ||
-        fetch(request).then((res) => {
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(request, copy));
-          }
-          return res;
-        }),
-    ),
+    caches.match(request).then((cached) => {
+      if (cached && hashed) return cached;
+      const network = fetch(request).then((res) => {
+        if (cacheable(res)) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(request, copy));
+        }
+        return res;
+      });
+      // Non-hashed: serve stale immediately, refresh in the background.
+      if (cached) {
+        network.catch(() => {});
+        return cached;
+      }
+      return network;
+    }),
   );
 });

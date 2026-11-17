@@ -49,7 +49,7 @@ function chunk(type, data) {
  *  centered, cluster sized relative to the smaller dimension so it sits
  *  inside the maskable safe zone on square icons and stays modestly
  *  proportioned on tall splash canvases. */
-function renderCanvas(W, H) {
+function renderCanvas(W, H, scale = 1) {
   const px = Buffer.alloc(W * H * 3);
   for (let i = 0; i < W * H; i++) {
     px[i * 3] = BG[0];
@@ -57,7 +57,7 @@ function renderCanvas(W, H) {
     px[i * 3 + 2] = BG[2];
   }
   const base = Math.min(W, H);
-  const extent = 0.6 * base; // total cluster width (safe for maskable)
+  const extent = 0.6 * base * scale; // total cluster width (safe for maskable)
   const r = 0.26 * extent;
   const cx = W / 2;
   const cy = H / 2;
@@ -126,7 +126,18 @@ for (const [name, size] of targets) {
 // iPhone/iPad sizes only, not an exhaustive device matrix. Each entry is
 // [cssWidth, cssHeight, dpr] as used in the matching index.html media query;
 // the PNG itself is rendered at the physical (css * dpr) pixel size.
+fs.writeFileSync(path.join(outDir, 'icon-maskable-512.png'), renderCanvas(512, 512, 0.8)); // inside the 80% safe zone with margin
 const splashTargets = [
+  [375, 812, 3], // iPhone X/XS/11 Pro/12-13 mini
+  [414, 896, 2], // iPhone XR/11
+  [414, 896, 3], // iPhone XS Max/11 Pro Max
+  [428, 926, 3], // iPhone 12-14 Pro Max / 14 Plus
+  [402, 874, 3], // iPhone 16 Pro
+  [440, 956, 3], // iPhone 16 Pro Max
+  [360, 780, 3], // iPhone 12/13 mini (Display Zoom)
+  [820, 1180, 2], // iPad Air / 10.9"
+  [768, 1024, 2], // iPad 9.7"
+  [744, 1133, 2], // iPad mini 6
   [393, 852, 3], // iPhone 15/16/14 Pro
   [430, 932, 3], // iPhone 15/16 Plus / Pro Max
   [390, 844, 3], // iPhone 12/13/14

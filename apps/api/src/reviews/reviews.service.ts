@@ -20,11 +20,15 @@ import type {
   UserReviewListResponse,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
+import { mediaSummarySelect, type MediaSummaryRow } from '../common/media-select';
 import { MediaService } from '../media/media.service';
 import { ArtworkService } from '../artwork/artwork.service';
 import { ActivityService } from '../social/activity.service';
+import { canSeeUser, notBlockedWhere, visibleUserWhere } from '../common/visibility';
+import { parseWatchDate } from '../common/dates';
 
 type ReviewWithAuthor = ReviewRow & { user: User };
+export type ReviewWithAuthorAndMedia = ReviewWithAuthor & { media: MediaSummaryRow };
 type CommentWithAuthor = CommentRow & { user: User };
 
 @Injectable()
@@ -53,8 +57,9 @@ export class ReviewsService {
         mediaItemId,
         targetType,
         body: dto.body,
-        ratingValue: dto.ratingValue ?? null,
-        watchedDate: dto.watchedDate ? new Date(dto.watchedDate) : null,
+        ratingValue:
+          dto.ratingValue !== undefined ? dto.ratingValue : await this.currentRating(userId, mediaItemId),
+        watchedDate: parseWatchDate(dto.watchedDate),
         isSpoiler: dto.isSpoiler ?? false,
       },
       include: { user: true },
@@ -70,13 +75,20 @@ export class ReviewsService {
 
   async update(userId: string, reviewId: string, dto: UpdateReviewRequest): Promise<Review> {
     const row = await this.requireOwnedReview(userId, reviewId);
+    // An edit that doesn't say otherwise re-snapshots the author's current
+    // rating, so the review shows the score they hold now. With no rating on
+    // file the previous snapshot is kept.
+    const ratingValue =
+      dto.ratingValue !== undefined
+        ? dto.ratingValue
+        : ((await this.currentRating(userId, row.mediaItemId)) ?? row.ratingValue);
     const updated = await this.prisma.review.update({
       where: { id: row.id },
       data: {
         ...(dto.body !== undefined ? { body: dto.body } : {}),
-        ...(dto.ratingValue !== undefined ? { ratingValue: dto.ratingValue } : {}),
+        ratingValue,
         ...(dto.watchedDate !== undefined
-          ? { watchedDate: dto.watchedDate ? new Date(dto.watchedDate) : null }
+          ? { watchedDate: parseWatchDate(dto.watchedDate) }
           : {}),
         ...(dto.isSpoiler !== undefined ? { isSpoiler: dto.isSpoiler } : {}),
         editedAt: new Date(),
@@ -95,14 +107,17 @@ export class ReviewsService {
     });
   }
 
-  async getById(reviewId: string, viewerId: string | undefined): Promise<Review> {
+  /** The review permalink: the review plus the title it's for. */
+  async getById(reviewId: string, viewerId: string | undefined): Promise<UserReview> {
     const row = await this.prisma.review.findUnique({
       where: { id: reviewId },
-      include: { user: true },
+      include: { user: true, media: { select: mediaSummarySelect } },
     });
-    if (!row) throw new NotFoundException('Review not found');
+    if (!row || !(await canSeeUser(this.prisma, row.userId, viewerId))) {
+      throw new NotFoundException('Review not found');
+    }
     const liked = viewerId ? await this.isLikedBy(reviewId, viewerId) : false;
-    return this.toReview(row, viewerId, { reveal: true, liked });
+    return { ...this.toReview(row, viewerId, { reveal: true, liked }), media: this.toMediaSummary(row.media) };
   }
 
   async list(
@@ -113,7 +128,11 @@ export class ReviewsService {
     const take = query.limit;
     const skip = query.cursor ? Number(query.cursor) : 0;
 
-    const where: Record<string, unknown> = { mediaItemId: mediaId, targetType: 'MEDIA' };
+    const where: Record<string, unknown> = {
+      mediaItemId: mediaId,
+      targetType: 'MEDIA',
+      user: visibleUserWhere(viewerId),
+    };
     if (query.sort === 'FOLLOWING') {
       if (!viewerId) return { reviews: [], nextCursor: null };
       const following = await this.prisma.follow.findMany({
@@ -161,21 +180,50 @@ export class ReviewsService {
     const skip = cursor ? Number(cursor) : 0;
     const rows = await this.prisma.review.findMany({
       where: { userId: authorId, targetType: 'MEDIA' },
-      include: { user: true, media: true },
+      include: { user: true, media: { select: mediaSummarySelect } },
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip,
     });
+    return {
+      reviews: await this.toUserReviews(rows, viewerId),
+      nextCursor: rows.length >= limit ? String(skip + limit) : null,
+    };
+  }
+
+  /** Reviews `likerId` has liked, newest like first, limited to authors the
+   *  viewer may see. Caller checks the liker's own profile visibility. */
+  async listLikedBy(
+    likerId: string,
+    viewerId: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<UserReviewListResponse> {
+    const skip = cursor ? Number(cursor) : 0;
+    const likes = await this.prisma.reviewLike.findMany({
+      where: { userId: likerId, review: { targetType: 'MEDIA', user: visibleUserWhere(viewerId) } },
+      include: { review: { include: { user: true, media: { select: mediaSummarySelect } } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
+    });
+    return {
+      reviews: await this.toUserReviews(likes.map((l) => l.review), viewerId),
+      nextCursor: likes.length >= limit ? String(skip + limit) : null,
+    };
+  }
+
+  /** List-view mapping (spoilers concealed) with the viewer's like state. */
+  async toUserReviews(rows: ReviewWithAuthorAndMedia[], viewerId: string | undefined): Promise<UserReview[]> {
     const likedIds = viewerId ? await this.likedReviewIds(rows.map((r) => r.id), viewerId) : new Set<string>();
-    const reviews: UserReview[] = rows.map((r) => ({
+    return rows.map((r) => ({
       ...this.toReview(r, viewerId, { liked: likedIds.has(r.id) }),
       media: this.toMediaSummary(r.media),
     }));
-    return { reviews, nextCursor: rows.length >= limit ? String(skip + limit) : null };
   }
 
   async like(userId: string, reviewId: string): Promise<void> {
-    await this.requireReview(reviewId);
+    await this.requireVisibleReview(reviewId, userId);
     try {
       await this.prisma.$transaction([
         this.prisma.reviewLike.create({ data: { userId, reviewId } }),
@@ -200,9 +248,12 @@ export class ReviewsService {
   }
 
   async listComments(reviewId: string, viewerId: string | undefined, cursor?: string, limit = 30): Promise<ReviewCommentListResponse> {
+    await this.requireVisibleReview(reviewId, viewerId);
     const skip = cursor ? Number(cursor) : 0;
     const rows = await this.prisma.reviewComment.findMany({
-      where: { reviewId },
+      // Commenting on a visible review is a public act, so commenters' own
+      // privacy doesn't hide their comment — but blocks still do, both ways.
+      where: { reviewId, user: notBlockedWhere(viewerId) },
       include: { user: true },
       orderBy: { createdAt: 'asc' },
       take: limit,
@@ -215,7 +266,7 @@ export class ReviewsService {
   }
 
   async addComment(userId: string, reviewId: string, dto: CreateReviewCommentRequest): Promise<ReviewComment> {
-    await this.requireReview(reviewId);
+    await this.requireVisibleReview(reviewId, userId);
     const [row] = await this.prisma.$transaction([
       this.prisma.reviewComment.create({
         data: { reviewId, userId, body: dto.body },
@@ -261,6 +312,24 @@ export class ReviewsService {
     const row = await this.prisma.review.findUnique({ where: { id: reviewId } });
     if (!row) throw new NotFoundException('Review not found');
     return row;
+  }
+
+  /** A review the viewer may see — 404 (not 403) otherwise, so a hidden
+   *  review's existence isn't confirmed. */
+  private async requireVisibleReview(reviewId: string, viewerId: string | undefined): Promise<ReviewRow> {
+    const row = await this.requireReview(reviewId);
+    if (!(await canSeeUser(this.prisma, row.userId, viewerId))) {
+      throw new NotFoundException('Review not found');
+    }
+    return row;
+  }
+
+  private async currentRating(userId: string, mediaItemId: string): Promise<number | null> {
+    const rating = await this.prisma.rating.findUnique({
+      where: { userId_mediaItemId: { userId, mediaItemId } },
+      select: { value: true },
+    });
+    return rating?.value ?? null;
   }
 
   private async requireOwnedReview(userId: string, reviewId: string): Promise<ReviewRow> {
@@ -323,7 +392,7 @@ export class ReviewsService {
     };
   }
 
-  private toMediaSummary(media: MediaItem): UserReview['media'] {
+  private toMediaSummary(media: MediaSummaryRow): UserReview['media'] {
     return {
       id: media.id,
       type: MediaType.catch('MOVIE').parse(media.type),

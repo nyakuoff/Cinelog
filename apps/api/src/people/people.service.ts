@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ArtworkService } from '../artwork/artwork.service';
 import { ProviderRegistry } from '../metadata/provider-registry.service';
 import type { ProviderPersonCredit } from '../metadata/provider.types';
+import { watchedMediaWhere } from '../common/media-select';
 
 /**
  * People — a director's or an actor's filmography.
@@ -21,22 +22,31 @@ export class PeopleService {
     private readonly artwork: ArtworkService,
   ) {}
 
-  async getPerson(provider: ProviderId, personId: string): Promise<PersonDetail> {
+  async getPerson(
+    provider: ProviderId,
+    personId: string,
+    viewerId?: string,
+  ): Promise<PersonDetail> {
     const person = await this.registry.getPerson(provider, personId);
     const idByKey = await this.cachedIds([...person.acting, ...person.crew]);
-    const map = (c: ProviderPersonCredit): PersonCredit => ({
-      id: idByKey.get(`${c.provider}:${c.externalId}`) ?? null,
-      provider: c.provider,
-      externalId: c.externalId,
-      type: c.type,
-      title: c.title,
-      originalTitle: c.originalTitle,
-      year: c.year,
-      overview: c.overview,
-      posterUrl: this.artwork.toProxyUrl(c.posterUrl),
-      character: c.character,
-      job: c.job,
-    });
+    const viewerState = await this.viewerState([...new Set(idByKey.values())], viewerId);
+    const map = (c: ProviderPersonCredit): PersonCredit => {
+      const id = idByKey.get(`${c.provider}:${c.externalId}`) ?? null;
+      return {
+        id,
+        provider: c.provider,
+        externalId: c.externalId,
+        type: c.type,
+        title: c.title,
+        originalTitle: c.originalTitle,
+        year: c.year,
+        overview: c.overview,
+        posterUrl: this.artwork.toProxyUrl(c.posterUrl),
+        character: c.character,
+        job: c.job,
+        ...(id && viewerState ? viewerState(id) : {}),
+      };
+    };
 
     return {
       id: person.id,
@@ -57,10 +67,35 @@ export class PeopleService {
    * carry only a name, and those names should still lead somewhere rather than
    * being silently dead links.
    */
-  async getPersonByName(provider: ProviderId, name: string): Promise<PersonDetail> {
+  async getPersonByName(
+    provider: ProviderId,
+    name: string,
+    viewerId?: string,
+  ): Promise<PersonDetail> {
     const id = await this.registry.findPerson(provider, name.trim());
     if (!id) throw new NotFoundException(`No person found named '${name}'`);
-    return this.getPerson(provider, id);
+    return this.getPerson(provider, id, viewerId);
+  }
+
+  /** The viewer's watched flag + rating for cached titles, as a lookup. */
+  private async viewerState(
+    mediaIds: string[],
+    viewerId: string | undefined,
+  ): Promise<((id: string) => { watched: boolean; rating: number | null }) | null> {
+    if (!viewerId || mediaIds.length === 0) return null;
+    const [watched, ratings] = await Promise.all([
+      this.prisma.mediaItem.findMany({
+        where: { AND: [{ id: { in: mediaIds } }, watchedMediaWhere(viewerId)] },
+        select: { id: true },
+      }),
+      this.prisma.rating.findMany({
+        where: { userId: viewerId, mediaItemId: { in: mediaIds } },
+        select: { mediaItemId: true, value: true },
+      }),
+    ]);
+    const watchedSet = new Set(watched.map((m) => m.id));
+    const ratingById = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
+    return (id) => ({ watched: watchedSet.has(id), rating: ratingById.get(id) ?? null });
   }
 
   /** Which of these titles Cinelog already holds, so they open without a resolve. */

@@ -19,6 +19,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProviderRegistry } from '../metadata/provider-registry.service';
 import type { ProviderMediaDetails } from '../metadata/provider.types';
 import { ArtworkService } from '../artwork/artwork.service';
+import { EpisodesService } from '../episodes/episodes.service';
+import { visibleUserWhere } from '../common/visibility';
 
 @Injectable()
 export class MediaService {
@@ -26,6 +28,7 @@ export class MediaService {
     private readonly prisma: PrismaService,
     private readonly registry: ProviderRegistry,
     private readonly artwork: ArtworkService,
+    private readonly episodes: EpisodesService,
   ) {}
 
   /** Global search. Marks results already cached locally with their Cinelog id. */
@@ -123,9 +126,10 @@ export class MediaService {
 
   /** Re-point a mismatched cached title at the correct provider match. The
    *  Cinelog id — and every user's tracking/ratings/history hanging off it —
-   *  is preserved; only the cached metadata (and derived season/episode/
-   *  artwork-override data, which would otherwise describe the wrong title)
-   *  is replaced. */
+   *  is preserved; only the cached metadata and artwork overrides (picked
+   *  from the old title's image set) are replaced. Seasons/episodes are
+   *  re-synced by (season, episode) number rather than deleted, so members'
+   *  episode ratings carry over to the corrected match. */
   async rematch(
     userId: string,
     mediaId: string,
@@ -146,7 +150,9 @@ export class MediaService {
     const details = await this.registry.getDetails(provider, externalId, type);
 
     await this.prisma.$transaction([
-      this.prisma.season.deleteMany({ where: { mediaItemId: mediaId } }),
+      // Mark the season cache stale so a failed re-sync below is retried on
+      // the next episodes view instead of serving the old title's episodes.
+      this.prisma.season.updateMany({ where: { mediaItemId: mediaId }, data: { cachedAt: new Date(0) } }),
       // Rematching swaps which title this record actually is, so any poster
       // override picked from the old title's image set no longer applies.
       this.prisma.userPosterOverride.deleteMany({ where: { mediaItemId: mediaId } }),
@@ -165,6 +171,7 @@ export class MediaService {
         },
       }),
     ]);
+    await this.episodes.resync(mediaId).catch(() => undefined);
 
     return this.getDetail(userId, mediaId);
   }
@@ -181,33 +188,29 @@ export class MediaService {
      */
     asLibraryOf?: string | null,
   ): Promise<MediaDetail> {
-    const item = await this.prisma.mediaItem.findUnique({
-      where: { id: mediaId },
-      include: { genres: true },
-    });
-    if (!item) throw new NotFoundException('Media not found');
-
     // asLibraryOf is a username (that's what the URL carries); overrides are
     // keyed by user id. An unknown name simply yields no override rather than
     // an error, so a stale link degrades to the default artwork.
-    const libraryOwnerId = asLibraryOf
-      ? (
-          await this.prisma.user.findUnique({
-            where: { username: asLibraryOf },
-            select: { id: true },
-          })
-        )?.id ?? null
-      : null;
+    const [item, libraryOwner] = await Promise.all([
+      this.prisma.mediaItem.findUnique({ where: { id: mediaId }, include: { genres: true } }),
+      asLibraryOf
+        ? this.prisma.user.findUnique({ where: { username: asLibraryOf }, select: { id: true } })
+        : null,
+    ]);
+    if (!item) throw new NotFoundException('Media not found');
+    const libraryOwnerId = libraryOwner?.id ?? null;
 
     const raw = this.parseRaw(item.rawMetadata);
     const [
       status,
       rating,
-      allRatings,
+      ratingGroups,
       libraryArtwork,
       watchedCount,
       likedCount,
       reviewCount,
+      ownReview,
+      diary,
     ] = await Promise.all([
       this.prisma.userMediaStatus.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
@@ -215,27 +218,45 @@ export class MediaService {
       this.prisma.rating.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId: mediaId } },
       }),
-      this.prisma.rating.findMany({ where: { mediaItemId: mediaId }, select: { value: true } }),
+      this.prisma.rating.groupBy({ by: ['value'], where: { mediaItemId: mediaId }, _count: { _all: true } }),
       libraryOwnerId
         ? this.prisma.userPosterOverride.findUnique({
             where: { userId_mediaItemId: { userId: libraryOwnerId, mediaItemId: mediaId } },
           })
         : Promise.resolve(null),
-      // Distinct members, not raw watch events — a rewatch shouldn't inflate this.
-      this.prisma.watchHistory
-        .findMany({ where: { mediaItemId: mediaId }, distinct: ['userId'], select: { userId: true } })
-        .then((rows) => rows.length),
+      // Distinct members who've watched it by any signal — a diary entry, a
+      // COMPLETED status, or a rating (unioned with the ratings below) — the
+      // same test as a profile's Watched tab. A rewatch doesn't inflate this.
+      // Counted in SQL: UNION dedupes members across the three signals.
+      this.prisma
+        .$queryRaw<{ n: bigint | number }[]>`SELECT COUNT(*) AS n FROM (
+          SELECT userId FROM watch_history WHERE mediaItemId = ${mediaId}
+          UNION SELECT userId FROM user_media_status WHERE mediaItemId = ${mediaId} AND status = 'COMPLETED'
+          UNION SELECT userId FROM ratings WHERE mediaItemId = ${mediaId})`
+        .then((r) => Number(r[0]?.n ?? 0)),
       this.prisma.userMediaStatus.count({ where: { mediaItemId: mediaId, isFavorite: true } }),
-      this.prisma.review.count({ where: { mediaItemId: mediaId } }),
+      // Only reviews this viewer could actually open.
+      this.prisma.review.count({
+        where: { mediaItemId: mediaId, targetType: 'MEDIA', user: visibleUserWhere(userId) },
+      }),
+      this.prisma.review.findUnique({
+        where: { userId_mediaItemId_targetType: { userId, mediaItemId: mediaId, targetType: 'MEDIA' } },
+        select: { id: true, body: true, isSpoiler: true, ratingValue: true },
+      }),
+      this.prisma.watchHistory.aggregate({
+        where: { userId, mediaItemId: mediaId },
+        _count: { _all: true },
+        _max: { watchedAt: true },
+      }),
     ]);
-    const ratingCount = allRatings.length;
+    const ratingCount = ratingGroups.reduce((n, g) => n + g._count._all, 0);
     const communityRating = ratingCount
-      ? allRatings.reduce((sum, r) => sum + r.value, 0) / ratingCount
+      ? ratingGroups.reduce((sum, g) => sum + g.value * g._count._all, 0) / ratingCount
       : null;
     const buckets = new Map<number, number>();
-    for (const r of allRatings) {
-      const bucket = Math.min(10, Math.max(1, Math.ceil(r.value / 10)));
-      buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1);
+    for (const g of ratingGroups) {
+      const bucket = Math.min(10, Math.max(1, Math.ceil(g.value / 10)));
+      buckets.set(bucket, (buckets.get(bucket) ?? 0) + g._count._all);
     }
     const ratingDistribution = Array.from({ length: 10 }, (_, i) => ({
       bucket: i + 1,
@@ -249,6 +270,8 @@ export class MediaService {
       rating: rating?.value ?? null,
       startedAt: status?.startedAt?.toISOString() ?? null,
       completedAt: status?.completedAt?.toISOString() ?? null,
+      watchCount: diary._count._all,
+      lastWatchedAt: diary._max.watchedAt?.toISOString() ?? null,
     };
 
     return {
@@ -298,6 +321,7 @@ export class MediaService {
       likedCount,
       reviewCount,
       userState,
+      ownReview,
     };
   }
 
@@ -340,13 +364,13 @@ export class MediaService {
   /** Ratings from people the viewer follows, for the "Ratings from people you
    *  follow" panel on the film page — mirrors Letterboxd's friends panel. */
   async getFriendRatings(viewerId: string, mediaId: string): Promise<FriendRatingsResponse> {
-    const followingIds = (
-      await this.prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } })
-    ).map((f) => f.followingId);
-    if (followingIds.length === 0) return { ratings: [] };
-
     const ratings = await this.prisma.rating.findMany({
-      where: { mediaItemId: mediaId, userId: { in: followingIds } },
+      where: {
+        mediaItemId: mediaId,
+        // Followed, AND visible: a PRIVATE profile's ratings stay private to
+        // followers too, and a block (either way) hides them.
+        user: { AND: [{ followedBy: { some: { followerId: viewerId } } }, visibleUserWhere(viewerId)] },
+      },
       include: { user: { select: { username: true, displayName: true, avatarUrl: true } } },
       orderBy: { updatedAt: 'desc' },
     });
@@ -457,7 +481,7 @@ export class MediaService {
       seen.add(a.url);
       choices.push({
         sourceUrl: a.url,
-        previewUrl: this.artwork.toProxyUrl(a.url)!,
+        previewUrl: this.artwork.toProxyUrl(this.thumb(a.url, kind))!,
         width: a.width,
         height: a.height,
         language: a.language,
@@ -466,13 +490,18 @@ export class MediaService {
     if (defaultUrl && !seen.has(defaultUrl)) {
       choices.unshift({
         sourceUrl: defaultUrl,
-        previewUrl: this.artwork.toProxyUrl(defaultUrl)!,
+        previewUrl: this.artwork.toProxyUrl(this.thumb(defaultUrl, kind))!,
         width: null,
         height: null,
         language: null,
       });
     }
     return choices;
+  }
+
+  /** Picker grid previews use TMDB thumbnails; sourceUrl stays the original. */
+  private thumb(url: string, kind: ArtworkKind): string {
+    return url.replace('/t/p/original/', `/t/p/${kind === 'POSTER' ? 'w342' : 'w780'}/`);
   }
 
   private parseRaw(json: string): ProviderMediaDetails | null {

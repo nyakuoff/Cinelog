@@ -1,7 +1,6 @@
 import { Controller, Get, NotFoundException, Param, Res } from '@nestjs/common';
 import { ApiExcludeEndpoint } from '@nestjs/swagger';
 import type { Response } from 'express';
-import { existsSync } from 'node:fs';
 import { Public } from '../common/decorators';
 import { UploadsService, type UploadKind } from './uploads.service';
 
@@ -25,8 +24,9 @@ export class UploadsController {
       throw new NotFoundException();
     }
     const path = this.uploads.resolvePath(kind as UploadKind, filename);
-    if (!existsSync(path)) throw new NotFoundException();
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.sendFile(path);
+    res.sendFile(path, (err) => {
+      if (err && !res.headersSent) res.status(404).end();
+    });
   }
 }

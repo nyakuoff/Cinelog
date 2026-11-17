@@ -15,6 +15,9 @@ export const PersonCredit = SearchResult.extend({
   character: z.string().nullable(),
   /** The job done, for crew credits (Director, Writer, …). */
   job: z.string().nullable(),
+  /** The viewer's own state, present only when the title is cached locally. */
+  watched: z.boolean().optional(),
+  rating: z.number().min(0).max(100).nullable().optional(),
 });
 export type PersonCredit = z.infer<typeof PersonCredit>;
 

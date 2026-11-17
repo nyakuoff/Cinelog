@@ -6,6 +6,7 @@ import {
   type ActivityFeedQuery,
   type ActivityFeedResponse,
   type ActivityItem,
+  type ProfileActivityQuery,
   type FollowStateResponse,
   type MediaSummary,
   type MemberListQuery,
@@ -13,8 +14,10 @@ import {
   type MemberSummary,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
+import { mediaSummarySelect, type MediaSummaryRow } from '../common/media-select';
 import { ArtworkService } from '../artwork/artwork.service';
 import { ActivityService } from './activity.service';
+import { canSeeUser, isBlockedBetween, notBlockedWhere, visibleUserWhere } from '../common/visibility';
 
 /** Events by the same actor, of the same type, within this window collapse into
  *  one feed row so a batch import or a rating spree doesn't flood the feed. */
@@ -80,10 +83,11 @@ export class SocialService {
     cursor?: string,
     limit = 30,
   ): Promise<MemberListResponse> {
-    const target = await this.findUserOrThrow(username);
+    const target = await this.findVisibleTarget(username, viewerId);
+    if (!target) return { members: [], nextCursor: null };
     const skip = cursor ? Number(cursor) : 0;
     const rows = await this.prisma.follow.findMany({
-      where: { followingId: target.id, follower: await this.notBlockedFilter(viewerId) },
+      where: { followingId: target.id, follower: notBlockedWhere(viewerId) },
       include: { follower: true },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -101,10 +105,11 @@ export class SocialService {
     cursor?: string,
     limit = 30,
   ): Promise<MemberListResponse> {
-    const target = await this.findUserOrThrow(username);
+    const target = await this.findVisibleTarget(username, viewerId);
+    if (!target) return { members: [], nextCursor: null };
     const skip = cursor ? Number(cursor) : 0;
     const rows = await this.prisma.follow.findMany({
-      where: { followerId: target.id, following: await this.notBlockedFilter(viewerId) },
+      where: { followerId: target.id, following: notBlockedWhere(viewerId) },
       include: { following: true },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -131,8 +136,9 @@ export class SocialService {
       ...(viewerId
         ? { OR: [{ profileVisibility: { not: 'PRIVATE' } }, { id: viewerId }] }
         : { profileVisibility: { not: 'PRIVATE' } }),
+      // SQLite LIKE: case-insensitive for ASCII.
       ...(query.q
-        ? { username: { contains: query.q } }
+        ? { AND: [{ OR: [{ username: { contains: query.q } }, { displayName: { contains: query.q } }] }] }
         : {}),
     };
 
@@ -235,11 +241,15 @@ export class SocialService {
     return !!row;
   }
 
-  private async notBlockedFilter(
-    viewerId: string | undefined,
-  ): Promise<{ id?: { notIn: string[] } }> {
-    const blocked = await this.blockedIds(viewerId);
-    return blocked.length ? { id: { notIn: blocked } } : {};
+  /** A member's follower/following lists are profile content: 404 across a
+   *  block (like the profile itself), and empty when their profile is hidden
+   *  from the viewer. Returns null for the empty case. */
+  private async findVisibleTarget(username: string, viewerId: string | undefined): Promise<User | null> {
+    const target = await this.findUserOrThrow(username);
+    if (await isBlockedBetween(this.prisma, target.id, viewerId)) {
+      throw new NotFoundException('User not found');
+    }
+    return (await canSeeUser(this.prisma, target.id, viewerId)) ? target : null;
   }
 
   // -- activity feed -----------------------------------------------------------
@@ -248,26 +258,50 @@ export class SocialService {
     viewerId: string,
     query: ActivityFeedQuery,
   ): Promise<ActivityFeedResponse> {
-    const skip = query.cursor ? Number(query.cursor) : 0;
+    const followingP =
+      query.scope === 'FOLLOWING'
+        ? this.prisma.follow.findMany({ where: { followerId: viewerId }, select: { followingId: true } })
+        : null;
     const blocked = await this.blockedIds(viewerId);
-
-    let actorFilter: Record<string, unknown>;
+    let actorIds: string[] | undefined;
     if (query.scope === 'FOLLOWING') {
-      const following = await this.prisma.follow.findMany({
-        where: { followerId: viewerId },
-        select: { followingId: true },
-      });
-      const ids = following.map((f) => f.followingId).filter((id) => !blocked.includes(id));
-      if (ids.length === 0) return { items: [], nextCursor: null };
-      actorFilter = { actorId: { in: ids } };
-    } else {
-      actorFilter = {
-        // Instance-wide: the viewer is part of the instance, so their own
-        // activity belongs here too. Blocked members never appear.
-        actorId: { notIn: blocked },
-        actor: { profileVisibility: { not: 'PRIVATE' } },
-      };
+      const following = (await followingP)!;
+      actorIds = following.map((f) => f.followingId).filter((id) => !blocked.includes(id));
+      if (actorIds.length === 0) return { items: [], nextCursor: null };
     }
+    return this.queryFeed(viewerId, blocked, actorIds, query);
+  }
+
+  /** One member's own activity (their profile's Activity tab). 404 across a
+   *  block, empty when their profile is hidden from the viewer — same rules
+   *  as their other profile tabs; the feed's own filters still apply. */
+  async getUserActivity(
+    username: string,
+    viewerId: string | undefined,
+    query: ProfileActivityQuery,
+  ): Promise<ActivityFeedResponse> {
+    const target = await this.findVisibleTarget(username, viewerId);
+    if (!target) return { items: [], nextCursor: null };
+    return this.queryFeed(viewerId, await this.blockedIds(viewerId), [target.id], query);
+  }
+
+  /** The feed query shared by the main feed and a profile's activity tab.
+   *  `actorIds` narrows to those actors; omitted = instance-wide. */
+  private async queryFeed(
+    viewerId: string | undefined,
+    blocked: string[],
+    actorIds: string[] | undefined,
+    query: { cursor?: string; limit: number; types?: ActivityType[] },
+  ): Promise<ActivityFeedResponse> {
+    const skip = query.cursor ? Number(query.cursor) : 0;
+    // Only actors whose profile the viewer may see: PUBLIC, FOLLOWERS-only
+    // when the viewer follows them, never PRIVATE (following someone doesn't
+    // unlock a private profile), never across a block. The viewer's own
+    // activity is always visible to them.
+    const actorFilter: Record<string, unknown> = {
+      actor: visibleUserWhere(viewerId),
+      ...(actorIds ? { actorId: { in: actorIds } } : {}),
+    };
 
     // Over-fetch: grouping collapses rows, so a raw page of `limit` would often
     // render short.
@@ -277,32 +311,63 @@ export class SocialService {
         // Callers can narrow to the event kinds they actually render; the
         // discovery sidebar asks for opinions only (rated / reviewed).
         ...(query.types?.length ? { type: { in: query.types } } : {}),
+        // "X followed Y" stays hidden when Y and the viewer are blocked either way.
+        ...(blocked.length
+          ? { OR: [{ targetUserId: null }, { targetUserId: { notIn: blocked } }] }
+          : {}),
       },
-      include: { actor: true, media: true },
+      // select, not include: the actor row carries passwordHash/email.
+      include: {
+        actor: { select: { id: true, username: true, displayName: true, avatarUrl: true } },
+        media: { select: mediaSummarySelect },
+      },
       orderBy: { createdAt: 'desc' },
       take: query.limit * 3,
       skip,
     });
 
     const targetUserIds = [...new Set(raw.map((e) => e.targetUserId).filter((v): v is string => !!v))];
-    const targetUsers = targetUserIds.length
-      ? await this.prisma.user.findMany({
-          where: { id: { in: targetUserIds } },
-          select: { id: true, username: true, displayName: true },
-        })
-      : [];
-    const targetById = new Map(targetUsers.map((u) => [u.id, u]));
-
+    const listIds = [...new Set(raw.map((e) => e.listId).filter((v): v is string => !!v))];
     // Attach the actor's rating for rating/review events so the feed can show stars.
-    const ratingKeys = raw
-      .filter((e) => e.mediaItemId && (e.type === 'RATED' || e.type === 'REVIEWED'))
-      .map((e) => ({ userId: e.actorId, mediaItemId: e.mediaItemId as string }));
-    const ratings = ratingKeys.length
-      ? await this.prisma.rating.findMany({ where: { OR: ratingKeys } })
-      : [];
-    const ratingByKey = new Map(ratings.map((r) => [`${r.userId}:${r.mediaItemId}`, r.value]));
+    const ratingKeys = new Set(
+      raw
+        .filter((e) => e.mediaItemId && (e.type === 'RATED' || e.type === 'REVIEWED'))
+        .map((e) => `${e.actorId}:${e.mediaItemId}`),
+    );
+    const ratingActors = [...new Set([...ratingKeys].map((k) => k.split(':')[0]!))];
+    const ratingMedia = [...new Set([...ratingKeys].map((k) => k.split(':')[1]!))];
+
+    const [targetUsers, lists, ratings] = await Promise.all([
+      targetUserIds.length
+        ? this.prisma.user.findMany({
+            where: { id: { in: targetUserIds } },
+            select: { id: true, username: true, displayName: true },
+          })
+        : [],
+      listIds.length
+        ? this.prisma.list.findMany({ where: { id: { in: listIds } }, select: { id: true, title: true } })
+        : [],
+      // userId IN + mediaItemId IN (a superset), then narrowed to the exact pairs in JS —
+      // far cheaper than a giant OR of pairs. Page-bounded: at most limit*3 ids each.
+      ratingKeys.size
+        ? this.prisma.rating.findMany({
+            where: { userId: { in: ratingActors }, mediaItemId: { in: ratingMedia } },
+            select: { userId: true, mediaItemId: true, value: true },
+          })
+        : [],
+    ]);
+    const targetById = new Map(targetUsers.map((u) => [u.id, u]));
+    const listTitleById = new Map(lists.map((l) => [l.id, l.title]));
+    const ratingByKey = new Map(
+      ratings.filter((r) => ratingKeys.has(`${r.userId}:${r.mediaItemId}`)).map((r) => [`${r.userId}:${r.mediaItemId}`, r.value]),
+    );
 
     const items: ActivityItem[] = [];
+    // Raw rows folded or emitted so far; the next page starts right after
+    // them, so nothing between the last emitted row and the end of the
+    // over-fetched window is skipped.
+    let consumed = 0;
+    let truncated = false;
     for (const event of raw) {
       const prev = items[items.length - 1];
       const media = event.media ? this.toSummary(event.media) : null;
@@ -318,10 +383,15 @@ export class SocialService {
         new Date(prev.createdAt).getTime() - event.createdAt.getTime() < GROUP_WINDOW_MS
       ) {
         prev.groupedMedia.push(media);
+        consumed++;
         continue;
       }
 
-      if (items.length >= query.limit) break;
+      if (items.length >= query.limit) {
+        truncated = true;
+        break;
+      }
+      consumed++;
 
       const target = event.targetUserId ? targetById.get(event.targetUserId) : undefined;
       items.push({
@@ -339,6 +409,7 @@ export class SocialService {
           : null,
         reviewId: event.reviewId,
         listId: event.listId,
+        listTitle: event.listId ? (listTitleById.get(event.listId) ?? null) : null,
         targetUser: target
           ? { id: target.id, username: target.username, displayName: target.displayName }
           : null,
@@ -349,7 +420,8 @@ export class SocialService {
 
     return {
       items,
-      nextCursor: raw.length >= query.limit * 3 ? String(skip + raw.length) : null,
+      nextCursor:
+        truncated || raw.length >= query.limit * 3 ? String(skip + consumed) : null,
     };
   }
 
@@ -361,7 +433,7 @@ export class SocialService {
     return user;
   }
 
-  private toSummary(media: MediaItem): MediaSummary {
+  private toSummary(media: MediaSummaryRow): MediaSummary {
     return {
       id: media.id,
       type: MediaType.catch('MOVIE').parse(media.type),

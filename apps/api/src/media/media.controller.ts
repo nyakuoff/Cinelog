@@ -85,9 +85,10 @@ export class MediaController {
     await this.media.setArtwork(userId, id, dto.kind, dto.sourceUrl);
   }
 
-  /** Fix a mismatched title: re-point this cached entry at the correct
+  /** Admin-only — it changes the title for every member. Fix a mismatched title: re-point this cached entry at the correct
    *  provider match without losing anyone's tracking/ratings/history. */
   @Put('media/:id/rematch')
+  @Roles('ADMIN')
   rematch(
     @CurrentUser('sub') userId: string,
     @Param('id') id: string,

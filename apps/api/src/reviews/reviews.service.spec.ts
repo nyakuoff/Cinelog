@@ -1,9 +1,10 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { MediaService } from '../media/media.service';
 import type { ArtworkService } from '../artwork/artwork.service';
 import type { ActivityService } from '../social/activity.service';
+import { visibleUserWhere } from '../common/visibility';
 
 function makeUser(id: string) {
   return { id, username: `user-${id}`, displayName: null, avatarUrl: null };
@@ -25,6 +26,7 @@ function makeReviewRow(overrides: Partial<Record<string, unknown>> = {}) {
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     editedAt: null,
     user: makeUser('author-1'),
+    media: { id: 'media-1', type: 'MOVIE', title: 'Film', releaseDate: '2001-01-01', posterPath: null },
     ...overrides,
   };
 }
@@ -52,6 +54,9 @@ function makePrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findMany: jest.fn().mockResolvedValue([]),
     },
     follow: { findMany: jest.fn().mockResolvedValue([]) },
+    // canSeeUser: 1 = the author passes visibleUserWhere for this viewer.
+    user: { count: jest.fn().mockResolvedValue(1) },
+    rating: { findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(async (ops: unknown[] | ((tx: unknown) => unknown)) => {
       if (Array.isArray(ops)) return Promise.all(ops as Promise<unknown>[]);
       return (ops as (tx: unknown) => unknown)(undefined);
@@ -124,6 +129,64 @@ describe('ReviewsService', () => {
     await expect(svc.like('viewer-1', 'review-1')).resolves.toBeUndefined();
   });
 
+  it('list only returns reviews by authors the viewer may see (visibility + blocks)', async () => {
+    const prisma = makePrisma();
+    const svc = makeService(prisma);
+    await svc.list('media-1', 'viewer-1', { sort: 'RECENT', limit: 20 } as never);
+    await svc.list('media-1', undefined, { sort: 'RECENT', limit: 20 } as never);
+    const [signedIn, anon] = (prisma.review.findMany as jest.Mock).mock.calls.map((c) => c[0].where);
+    expect(signedIn.user).toEqual(visibleUserWhere('viewer-1'));
+    expect(anon.user).toEqual({ profileVisibility: 'PUBLIC' });
+  });
+
+  it('a review by a hidden or blocked author is not found — read, like, comment, or comments list', async () => {
+    const prisma = makePrisma();
+    (prisma.review.findUnique as jest.Mock).mockResolvedValue(makeReviewRow());
+    (prisma.user.count as jest.Mock).mockResolvedValue(0);
+    const svc = makeService(prisma);
+
+    await expect(svc.getById('review-1', 'viewer-1')).rejects.toThrow(NotFoundException);
+    await expect(svc.like('viewer-1', 'review-1')).rejects.toThrow(NotFoundException);
+    await expect(svc.addComment('viewer-1', 'review-1', { body: 'hi' })).rejects.toThrow(NotFoundException);
+    await expect(svc.listComments('review-1', 'viewer-1')).rejects.toThrow(NotFoundException);
+    expect(prisma.reviewLike.create).not.toHaveBeenCalled();
+    expect(prisma.reviewComment.create).not.toHaveBeenCalled();
+  });
+
+  it('the author always sees their own review, whatever their visibility', async () => {
+    const prisma = makePrisma();
+    (prisma.review.findUnique as jest.Mock).mockResolvedValue(makeReviewRow());
+    (prisma.user.count as jest.Mock).mockResolvedValue(0);
+    await expect(makeService(prisma).getById('review-1', 'author-1')).resolves.toMatchObject({
+      id: 'review-1',
+    });
+  });
+
+  it('comments from members blocked either way are filtered out', async () => {
+    const prisma = makePrisma();
+    (prisma.review.findUnique as jest.Mock).mockResolvedValue(makeReviewRow());
+    await makeService(prisma).listComments('review-1', 'viewer-1');
+    const where = (prisma.reviewComment.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where.user).toEqual({
+      blocking: { none: { blockedId: 'viewer-1' } },
+      blockedBy: { none: { blockerId: 'viewer-1' } },
+    });
+  });
+
+  it('a review written without a rating snapshots the author\'s current rating', async () => {
+    const prisma = makePrisma();
+    const media = { resolveRef: jest.fn().mockResolvedValue({ id: 'media-1' }) } as unknown as MediaService;
+    (prisma.review.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.rating.findUnique as jest.Mock).mockResolvedValue({ value: 70 });
+    (prisma.review.create as jest.Mock).mockResolvedValue(makeReviewRow({ ratingValue: 70 }));
+    await new ReviewsService(prisma, media, fakeArtwork, fakeActivity).create('author-1', 'media-1', {
+      targetType: 'MEDIA',
+      body: 'Good',
+      isSpoiler: false,
+    });
+    expect((prisma.review.create as jest.Mock).mock.calls[0][0].data.ratingValue).toBe(70);
+  });
+
   it('only the comment author can edit or delete their comment', async () => {
     const prisma = makePrisma();
     (prisma.reviewComment.findUnique as jest.Mock).mockResolvedValue({
@@ -138,5 +201,22 @@ describe('ReviewsService', () => {
       ForbiddenException,
     );
     await expect(svc.deleteComment('someone-else', 'comment-1')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('liked reviews only include authors the viewer may see', async () => {
+    const prisma = makePrisma();
+    await makeService(prisma).listLikedBy('liker-1', 'viewer-1', undefined, 30);
+    const where = (prisma.reviewLike.findMany as jest.Mock).mock.calls[0][0].where;
+    expect(where).toEqual({
+      userId: 'liker-1',
+      review: { targetType: 'MEDIA', user: visibleUserWhere('viewer-1') },
+    });
+  });
+
+  it('the permalink carries the title it reviews', async () => {
+    const prisma = makePrisma();
+    (prisma.review.findUnique as jest.Mock).mockResolvedValue(makeReviewRow());
+    const r = await makeService(prisma).getById('review-1', 'viewer-1');
+    expect(r.media).toMatchObject({ id: 'media-1', title: 'Film', year: 2001 });
   });
 });

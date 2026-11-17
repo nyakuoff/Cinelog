@@ -15,6 +15,7 @@ import type {
   ReviewComment,
   ReviewCommentListResponse,
   ReviewListResponse,
+  UserReview,
 } from '@cinelog/contracts';
 import { CurrentUser } from '../common/decorators';
 import { ReviewsService } from './reviews.service';
@@ -51,7 +52,7 @@ export class ReviewsController {
   }
 
   @Get('reviews/:id')
-  getById(@CurrentUser('sub') userId: string, @Param('id') id: string): Promise<Review> {
+  getById(@CurrentUser('sub') userId: string, @Param('id') id: string): Promise<UserReview> {
     return this.reviews.getById(id, userId);
   }
 

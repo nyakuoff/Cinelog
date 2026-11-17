@@ -225,7 +225,7 @@ export class TmdbProvider implements MetadataProvider {
       originalTitle: item.original_title ?? item.original_name ?? null,
       year: date ? Number(date.slice(0, 4)) || null : null,
       overview: item.overview || null,
-      posterUrl: img(item.poster_path, 'w500'),
+      posterUrl: img(item.poster_path, 'w342'),
     };
   }
 
@@ -314,7 +314,7 @@ export class TmdbProvider implements MetadataProvider {
     const map = (list?: TmdbWatchProviderEntry[]): { name: string; logoUrl: string | null }[] =>
       (list ?? []).map((p) => ({
         name: p.provider_name,
-        logoUrl: p.logo_path ? `${IMG_BASE}/original${p.logo_path}` : null,
+        logoUrl: img(p.logo_path, 'w92'),
       }));
 
     return {
@@ -348,7 +348,7 @@ export class TmdbProvider implements MetadataProvider {
         originalTitle: c.original_title ?? c.original_name ?? null,
         year: date ? Number(date.slice(0, 4)) || null : null,
         overview: c.overview || null,
-        posterUrl: img(c.poster_path, 'w500'),
+        posterUrl: img(c.poster_path, 'w342'),
         character: c.character || null,
         job: c.job || null,
       };
@@ -395,7 +395,30 @@ export class TmdbProvider implements MetadataProvider {
 
   // -- http ------------------------------------------------------------------
 
-  private async request<T>(path: string, params: Record<string, string>): Promise<T> {
+  // ponytail: per-process cache (lost on restart, not shared across instances); swap for redis if we scale out.
+  private readonly cache = new Map<string, { at: number; value: Promise<unknown> }>();
+
+  private ttlFor(path: string): number {
+    const min = 60_000;
+    if (path.startsWith('/search')) return 5 * min;
+    if (/^\/(movie|tv)\/\d+$/.test(path)) return 10 * min;
+    return 30 * min; // discover/trending/popular/similar/watch-providers/person/seasons
+  }
+
+  private request<T>(path: string, params: Record<string, string>): Promise<T> {
+    const key = path + '?' + Object.entries(params).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${k}=${v}`).join('&');
+    const hit = this.cache.get(key);
+    if (hit && Date.now() - hit.at < this.ttlFor(path)) return hit.value as Promise<T>;
+    const value = this.fetchTmdb<T>(path, params);
+    this.cache.set(key, { at: Date.now(), value });
+    if (this.cache.size > 500) this.cache.delete(this.cache.keys().next().value!); // oldest-inserted
+    value.catch(() => {
+      if (this.cache.get(key)?.value === value) this.cache.delete(key); // never cache errors
+    });
+    return value;
+  }
+
+  private async fetchTmdb<T>(path: string, params: Record<string, string>): Promise<T> {
     const { apiKey, accessToken } = this.config.getOrThrow<AppConfig['tmdb']>('tmdb');
     if (!apiKey && !accessToken) {
       throw new ServiceUnavailableException(

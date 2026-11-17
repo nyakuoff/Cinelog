@@ -8,8 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { AppConfig } from '../config/configuration';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,10 +28,15 @@ const EXT_BY_TYPE: Record<string, string> = {
   'image/gif': '.gif',
 };
 
+const exists = (p: string): Promise<boolean> => access(p).then(() => true, () => false);
+
 @Injectable()
 export class ArtworkService implements OnModuleInit {
   private readonly logger = new Logger(ArtworkService.name);
   private artworkDir!: string;
+  // Hot path: sourceUrl -> file, so a proxied image costs no DB lookup.
+  private readonly known = new Map<string, { path: string; contentType: string }>();
+  private readonly inflight = new Map<string, Promise<{ path: string; contentType: string }>>();
 
   constructor(
     private readonly config: ConfigService,
@@ -81,12 +85,31 @@ export class ArtworkService implements OnModuleInit {
       throw new BadRequestException('Artwork host is not allowed');
     }
 
-    const cached = await this.prisma.artworkCache.findUnique({ where: { sourceUrl } });
-    if (cached && existsSync(cached.localPath)) {
-      return { path: cached.localPath, contentType: cached.contentType ?? 'image/jpeg' };
-    }
+    const hot = this.known.get(sourceUrl);
+    if (hot) return hot;
+    const pending = this.inflight.get(sourceUrl);
+    if (pending) return pending;
 
-    return this.fetchAndStore(sourceUrl);
+    const p = this.lookupOrFetch(sourceUrl).finally(() => this.inflight.delete(sourceUrl));
+    this.inflight.set(sourceUrl, p);
+    return p;
+  }
+
+  /** Called by the controller when a remembered file turned out to be gone. */
+  forget(sourceUrl: string): void {
+    this.known.delete(sourceUrl);
+  }
+
+  private async lookupOrFetch(sourceUrl: string): Promise<{ path: string; contentType: string }> {
+    const cached = await this.prisma.artworkCache.findUnique({ where: { sourceUrl } });
+    if (cached && (await exists(cached.localPath))) {
+      const hit = { path: cached.localPath, contentType: cached.contentType ?? 'image/jpeg' };
+      this.known.set(sourceUrl, hit);
+      return hit;
+    }
+    const stored = await this.fetchAndStore(sourceUrl);
+    this.known.set(sourceUrl, stored);
+    return stored;
   }
 
   private async fetchAndStore(
@@ -107,7 +130,7 @@ export class ArtworkService implements OnModuleInit {
     const ext = EXT_BY_TYPE[contentType] ?? '.img';
     const localPath = join(this.artworkDir, `${hash}${ext}`);
 
-    if (!existsSync(localPath)) await writeFile(localPath, buffer);
+    if (!(await exists(localPath))) await writeFile(localPath, buffer);
 
     await this.prisma.artworkCache.upsert({
       where: { sourceUrl },

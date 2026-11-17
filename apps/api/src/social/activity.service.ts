@@ -50,8 +50,13 @@ export class ActivityService {
   }
 
   /**
-   * Replace a prior same-kind event for the same actor+media instead of stacking
-   * duplicates — re-rating a title should move it up the feed, not appear twice.
+   * Replace a prior same-kind event for the same actor+subject instead of
+   * stacking duplicates — re-rating a title should move it up the feed, not
+   * appear twice. The subject is the media item or the list: list events have
+   * no media, so keying on media alone made editing list B delete list A's
+   * LIST_UPDATED event. reviewId isn't part of the key because a member has at
+   * most one review per title, so (actor, REVIEWED, media) already pins it —
+   * and that also replaces legacy imported REVIEWED rows that lack a reviewId.
    */
   async recordReplacing(input: RecordActivityInput): Promise<void> {
     try {
@@ -60,6 +65,7 @@ export class ActivityService {
           actorId: input.actorId,
           type: input.type,
           mediaItemId: input.mediaItemId ?? null,
+          listId: input.listId ?? null,
         },
       });
     } catch (err) {

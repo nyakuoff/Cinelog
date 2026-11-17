@@ -92,6 +92,10 @@ export const UserMediaState = z.object({
   rating: z.number().min(0).max(100).nullable(),
   startedAt: z.string().datetime().nullable(),
   completedAt: z.string().datetime().nullable(),
+  /** How many diary entries the member has for this title. */
+  watchCount: z.number().int().optional(),
+  /** Date of the most recent diary entry, or null. */
+  lastWatchedAt: z.string().datetime().nullable().optional(),
 });
 export type UserMediaState = z.infer<typeof UserMediaState>;
 
@@ -121,11 +125,21 @@ export const MediaDetail = z.object({
   communityRating: z.number().min(0).max(100).nullable(),
   ratingCount: z.number().int(),
   ratingDistribution: z.array(RatingDistributionBucket),
-  /** How many members here have logged a watch of this title. */
+  /** How many members here have watched this title (diary, COMPLETED, or rated). */
   watchedCount: z.number().int(),
   /** How many members here have liked it. */
   likedCount: z.number().int(),
+  /** Reviews on this title the viewer can see (author visibility + blocks). */
   reviewCount: z.number().int(),
   userState: UserMediaState,
+  /** The signed-in member's own review of this title, or null. */
+  ownReview: z
+    .object({
+      id: z.string(),
+      body: z.string(),
+      isSpoiler: z.boolean(),
+      ratingValue: z.number().min(0).max(100).nullable(),
+    })
+    .nullable(),
 });
 export type MediaDetail = z.infer<typeof MediaDetail>;

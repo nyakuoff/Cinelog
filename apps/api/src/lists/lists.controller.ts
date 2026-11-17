@@ -28,6 +28,7 @@ import {
   UpdateListDto,
   UpdateListItemDto,
 } from './lists.dto';
+import { CommunitySearchQueryDto } from '../social/social.dto';
 
 @ApiTags('lists')
 @Controller()
@@ -43,13 +44,38 @@ export class ListsController {
     return this.lists.browse(viewerId, query);
   }
 
+  /** List search: title/description substring over the same public,
+   *  visibility-filtered set as browse. Most-liked first. */
+  @Public()
+  @Get('search/lists')
+  search(
+    @CurrentUser('sub') viewerId: string | undefined,
+    @Query() query: CommunitySearchQueryDto,
+  ): Promise<ListListResponse> {
+    return this.lists.browse(viewerId, { sort: 'POPULAR', cursor: query.cursor, limit: query.limit }, undefined, {
+      q: query.q,
+    });
+  }
+
+  /** Public lists (visibility + blocks respected) that include this title. */
+  @Public()
+  @Get('media/:id/lists')
+  containing(
+    @Param('id') mediaId: string,
+    @CurrentUser('sub') viewerId: string | undefined,
+    @Query() query: ListBrowseQueryDto,
+  ): Promise<ListListResponse> {
+    return this.lists.browse(viewerId, query, mediaId);
+  }
+
   @Public()
   @Get('users/:username/lists')
   byOwner(
     @Param('username') username: string,
     @CurrentUser('sub') viewerId: string | undefined,
+    @Query('containsMediaId') containsMediaId?: string,
   ): Promise<ListListResponse> {
-    return this.lists.listByOwner(username, viewerId);
+    return this.lists.listByOwner(username, viewerId, containsMediaId);
   }
 
   @Public()

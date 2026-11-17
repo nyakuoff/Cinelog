@@ -11,6 +11,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService } from '../media/media.service';
 import { EpisodesService } from '../episodes/episodes.service';
+import { parseWatchDate } from '../common/dates';
 
 function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
   const map = new Map<K, T[]>();
@@ -208,7 +209,7 @@ export class BackupService {
           const reviewData = {
             body: item.review.body,
             ratingValue: item.review.ratingValue,
-            watchedDate: item.review.watchedDate ? new Date(item.review.watchedDate) : null,
+            watchedDate: parseWatchDate(item.review.watchedDate),
             isSpoiler: item.review.isSpoiler,
           };
           await this.prisma.review.upsert({
@@ -227,11 +228,12 @@ export class BackupService {
           });
           const seen = new Set(existing.map((e) => `${e.watchedAt.getTime()}:${e.isRewatch}`));
           for (const w of item.watchHistory) {
-            const key = `${new Date(w.watchedAt).getTime()}:${w.isRewatch}`;
+            const watchedAt = parseWatchDate(w.watchedAt) ?? new Date();
+            const key = `${watchedAt.getTime()}:${w.isRewatch}`;
             if (seen.has(key)) continue;
             seen.add(key);
             await this.prisma.watchHistory.create({
-              data: { userId, mediaItemId, watchedAt: new Date(w.watchedAt), isRewatch: w.isRewatch },
+              data: { userId, mediaItemId, watchedAt, isRewatch: w.isRewatch },
             });
             result.watchEventsImported++;
           }

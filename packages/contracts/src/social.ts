@@ -77,13 +77,32 @@ export const ProfileDiaryEntry = z.object({
   watchedAt: z.string().datetime(),
   isRewatch: z.boolean(),
   rating: z.number().min(0).max(100).nullable(),
+  /** The owner's like (heart) on this title. Media type is `media.type`.
+   *  Diary entries are title-level: there is no season/episode context. */
+  liked: z.boolean().optional(),
+  /** The owner's review of this title, if any (visible whenever the diary is). */
+  reviewId: z.string().nullable().optional(),
 });
 export type ProfileDiaryEntry = z.infer<typeof ProfileDiaryEntry>;
 
 export const ProfileDiaryResponse = z.object({
   entries: z.array(ProfileDiaryEntry),
+  nextCursor: z.string().nullable().optional(),
 });
 export type ProfileDiaryResponse = z.infer<typeof ProfileDiaryResponse>;
+
+/** `?a=true` / `?a=false` query flags. */
+const queryBool = z.enum(['true', 'false']).transform((v) => v === 'true');
+
+/** GET /users/:username/diary — newest first, keyset-paginated. `year`/`month`
+ *  narrow to a calendar month/year of the watch date (UTC). */
+export const ProfileDiaryQuery = z.object({
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional().default(100),
+  year: z.coerce.number().int().min(1870).max(3000).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+});
+export type ProfileDiaryQuery = z.infer<typeof ProfileDiaryQuery>;
 
 export const ProfileWatchlistResponse = z.object({
   items: z.array(MediaSummary),
@@ -99,13 +118,43 @@ export const ProfileWatchedEntry = z.object({
   media: MediaSummary,
   rating: z.number().min(0).max(100).nullable(),
   watchedAt: z.string().datetime(),
+  /** The owner's like (heart) on this title. */
+  liked: z.boolean().optional(),
 });
 export type ProfileWatchedEntry = z.infer<typeof ProfileWatchedEntry>;
 
 export const ProfileWatchedResponse = z.object({
   entries: z.array(ProfileWatchedEntry),
+  nextCursor: z.string().nullable().optional(),
 });
 export type ProfileWatchedResponse = z.infer<typeof ProfileWatchedResponse>;
+
+export const ProfileWatchedSort = z.enum([
+  'WATCHED_DESC',
+  'RATING_DESC',
+  'RATING_ASC',
+  'RELEASE_DESC',
+  'RELEASE_ASC',
+  'TITLE',
+  /** Most recently rated first; unrated titles last. */
+  'RATED_DESC',
+]);
+export type ProfileWatchedSort = z.infer<typeof ProfileWatchedSort>;
+
+/** GET /users/:username/watched. `type=films` is MOVIE + DOCUMENTARY, `shows`
+ *  everything episodic. `decade` is the first year, e.g. 1990. Omitting
+ *  `limit` returns every entry (the original, unpaginated behaviour). */
+export const ProfileWatchedQuery = z.object({
+  sort: ProfileWatchedSort.optional().default('WATCHED_DESC'),
+  type: z.enum(['films', 'shows', 'all']).optional().default('all'),
+  decade: z.coerce.number().int().optional(),
+  genre: z.string().optional(),
+  liked: queryBool.optional(),
+  rated: queryBool.optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+export type ProfileWatchedQuery = z.infer<typeof ProfileWatchedQuery>;
 
 /** A single rating from someone the viewer follows, for the "Ratings from
  *  people you follow" panel on a film's page. */

@@ -116,6 +116,8 @@ model MediaItem {
 
   @@unique([provider, externalId])
   @@index([type])
+  @@index([cachedAt])
+  @@index([releaseDate])
   @@map("media_items")
 }
 
@@ -235,7 +237,7 @@ model UserMediaStatus {
   @@unique([userId, mediaItemId])
   @@unique([userId, favoritePosition])
   @@unique([userId, favoriteShowPosition])
-  @@index([userId])
+  @@index([userId, updatedAt])
   @@map("user_media_status")
 }
 
@@ -249,7 +251,7 @@ model WatchHistory {
   user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   media MediaItem @relation(fields: [mediaItemId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([userId, watchedAt])
   @@index([mediaItemId])
   @@map("watch_history")
 }
@@ -297,8 +299,8 @@ model Review {
   comments ReviewComment[]
 
   @@unique([userId, mediaItemId, targetType])
-  @@index([mediaItemId])
-  @@index([userId])
+  @@index([mediaItemId, createdAt])
+  @@index([userId, createdAt])
   @@map("reviews")
 }
 
@@ -346,7 +348,7 @@ model Follow {
 
   @@unique([followerId, followingId])
   @@index([followerId])
-  @@index([followingId])
+  @@index([followingId, createdAt])
   @@map("follows")
 }
 
@@ -375,6 +377,7 @@ model List {
   title       String
   description String?
   isPublic    Boolean  @default(true)
+  isRanked    Boolean  @default(true) // ranked lists show position numbers
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -450,6 +453,7 @@ model ActivityEvent {
   media MediaItem? @relation(fields: [mediaItemId], references: [id], onDelete: SetNull)
 
   @@index([actorId, createdAt])
+  @@index([createdAt])
   @@map("activity_events")
 }
 

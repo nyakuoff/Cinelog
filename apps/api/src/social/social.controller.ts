@@ -7,7 +7,12 @@ import type {
 } from '@cinelog/contracts';
 import { CurrentUser, Public } from '../common/decorators';
 import { SocialService } from './social.service';
-import { ActivityFeedQueryDto, MemberListQueryDto } from './social.dto';
+import {
+  ActivityFeedQueryDto,
+  CommunitySearchQueryDto,
+  MemberListQueryDto,
+  ProfileActivityQueryDto,
+} from './social.dto';
 
 @ApiTags('social')
 @Controller()
@@ -21,6 +26,27 @@ export class SocialController {
     @Query() query: MemberListQueryDto,
   ): Promise<MemberListResponse> {
     return this.social.listMembers(viewerId, query);
+  }
+
+  /** Member search: username/displayName substring; PRIVATE profiles and
+   *  blocked members excluded (same rules as the directory). */
+  @Public()
+  @Get('search/members')
+  searchMembers(
+    @CurrentUser('sub') viewerId: string | undefined,
+    @Query() query: CommunitySearchQueryDto,
+  ): Promise<MemberListResponse> {
+    return this.social.listMembers(viewerId, { ...query, sort: 'POPULAR' });
+  }
+
+  @Public()
+  @Get('users/:username/activity')
+  userActivity(
+    @Param('username') username: string,
+    @CurrentUser('sub') viewerId: string | undefined,
+    @Query() query: ProfileActivityQueryDto,
+  ): Promise<ActivityFeedResponse> {
+    return this.social.getUserActivity(username, viewerId, query);
   }
 
   @Public()

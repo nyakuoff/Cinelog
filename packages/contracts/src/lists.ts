@@ -14,6 +14,8 @@ export const ListEntry = z.object({
   position: z.number().int(),
   note: z.string().nullable(),
   media: MediaSummary,
+  /** Whether the signed-in viewer has watched this title (diary, COMPLETED, or rated). */
+  viewerWatched: z.boolean().optional(),
 });
 export type ListEntry = z.infer<typeof ListEntry>;
 
@@ -24,12 +26,16 @@ export const ListSummary = z.object({
   title: z.string(),
   description: z.string().nullable(),
   isPublic: z.boolean(),
+  /** Ranked lists show position numbers; unranked ones are just a set. */
+  isRanked: z.boolean().optional(),
   owner: ListOwner,
   itemCount: z.number().int(),
   likeCount: z.number().int(),
   commentCount: z.number().int(),
   likedByViewer: z.boolean(),
   isOwnList: z.boolean(),
+  /** Only when the request passed `containsMediaId`: whether this list holds that title. */
+  containsMedia: z.boolean().optional(),
   /** Up to four posters for the generated cover, in list order. */
   coverPosters: z.array(z.string().nullable()),
   createdAt: z.string().datetime(),
@@ -39,6 +45,8 @@ export type ListSummary = z.infer<typeof ListSummary>;
 
 export const ListDetail = ListSummary.extend({
   entries: z.array(ListEntry),
+  /** For a signed-in viewer: how many of the list's titles they've watched. */
+  viewerWatchedCount: z.number().int().optional(),
 });
 export type ListDetail = z.infer<typeof ListDetail>;
 
@@ -52,6 +60,7 @@ export const CreateListRequest = z.object({
   title: z.string().min(1).max(120),
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional().default(true),
+  isRanked: z.boolean().optional(),
 });
 export type CreateListRequest = z.infer<typeof CreateListRequest>;
 
@@ -59,6 +68,7 @@ export const UpdateListRequest = z.object({
   title: z.string().min(1).max(120).optional(),
   description: z.string().max(2000).nullable().optional(),
   isPublic: z.boolean().optional(),
+  isRanked: z.boolean().optional(),
 });
 export type UpdateListRequest = z.infer<typeof UpdateListRequest>;
 

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import {
   MediaType,
   TrackingStatus,
@@ -10,9 +11,11 @@ import {
   type UserMediaState,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
+import { mediaSummarySelect } from '../common/media-select';
 import { MediaService } from '../media/media.service';
 import { ArtworkService } from '../artwork/artwork.service';
 import { ActivityService } from '../social/activity.service';
+import { parseWatchDate } from '../common/dates';
 
 @Injectable()
 export class TrackingService {
@@ -66,6 +69,10 @@ export class TrackingService {
    * rewatch tally, and retracts the feed event — otherwise the control could
    * only ever be switched on, and the claim would outlive the data.
    *
+   * A rating implies watched, so it goes too (Letterboxd does the same):
+   * otherwise the title would stay in the Watched tab and stats. The review,
+   * if any, is kept — it's the member's writing, not a watched claim.
+   *
    * A non-COMPLETED status (WATCHING, ON_HOLD, DROPPED) is preserved: the user
    * asked to undo "watched", not to stop tracking the title altogether.
    */
@@ -85,8 +92,9 @@ export class TrackingService {
           rewatchCount: 0,
         },
       }),
+      this.prisma.rating.deleteMany({ where: { userId, mediaItemId } }),
       this.prisma.activityEvent.deleteMany({
-        where: { actorId: userId, type: 'WATCHED', mediaItemId },
+        where: { actorId: userId, type: { in: ['WATCHED', 'RATED'] }, mediaItemId },
       }),
     ]);
 
@@ -99,7 +107,7 @@ export class TrackingService {
 
   async markWatched(userId: string, req: MarkWatchedRequest): Promise<TrackingResponse> {
     const mediaItemId = (await this.media.resolveRef(req)).id;
-    const watchedAt = req.watchedAt ? new Date(req.watchedAt) : new Date();
+    const watchedAt = parseWatchDate(req.watchedAt) ?? new Date();
     const isRewatch = req.isRewatch ?? false;
 
     await this.prisma.$transaction([
@@ -135,21 +143,64 @@ export class TrackingService {
     entryId: string,
     dto: UpdateWatchEntryRequest,
   ): Promise<void> {
-    const entry = await this.prisma.watchHistory.findUnique({ where: { id: entryId } });
-    if (!entry || entry.userId !== userId) throw new NotFoundException('Diary entry not found');
-    await this.prisma.watchHistory.update({
-      where: { id: entryId },
-      data: {
-        ...(dto.watchedAt !== undefined ? { watchedAt: new Date(dto.watchedAt) } : {}),
-        ...(dto.isRewatch !== undefined ? { isRewatch: dto.isRewatch } : {}),
-      },
+    const entry = await this.requireOwnEntry(userId, entryId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.watchHistory.update({
+        where: { id: entryId },
+        data: {
+          ...(dto.watchedAt !== undefined ? { watchedAt: parseWatchDate(dto.watchedAt) ?? entry.watchedAt } : {}),
+          ...(dto.isRewatch !== undefined ? { isRewatch: dto.isRewatch } : {}),
+        },
+      });
+      await this.syncAfterHistoryChange(tx, userId, entry.mediaItemId);
     });
   }
 
   async deleteWatchEntry(userId: string, entryId: string): Promise<void> {
+    const entry = await this.requireOwnEntry(userId, entryId);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.watchHistory.delete({ where: { id: entryId } });
+      await this.syncAfterHistoryChange(tx, userId, entry.mediaItemId);
+    });
+  }
+
+  private async requireOwnEntry(userId: string, entryId: string) {
     const entry = await this.prisma.watchHistory.findUnique({ where: { id: entryId } });
     if (!entry || entry.userId !== userId) throw new NotFoundException('Diary entry not found');
-    await this.prisma.watchHistory.delete({ where: { id: entryId } });
+    return entry;
+  }
+
+  /**
+   * Re-derive what depends on a title's diary after one entry changed: the
+   * rewatch tally is the number of entries flagged as rewatches, and once the
+   * last entry is gone the WATCHED feed event is retracted. A COMPLETED status
+   * is reset then too — unless the title is rated, since a rating on its own
+   * still means "watched".
+   */
+  private async syncAfterHistoryChange(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    mediaItemId: string,
+  ): Promise<void> {
+    const [remaining, rewatches, rating] = await Promise.all([
+      tx.watchHistory.count({ where: { userId, mediaItemId } }),
+      tx.watchHistory.count({ where: { userId, mediaItemId, isRewatch: true } }),
+      tx.rating.findUnique({ where: { userId_mediaItemId: { userId, mediaItemId } }, select: { id: true } }),
+    ]);
+    const lastGone = remaining === 0;
+    await tx.userMediaStatus.updateMany({
+      where: { userId, mediaItemId },
+      data: { rewatchCount: rewatches },
+    });
+    if (lastGone) {
+      await tx.activityEvent.deleteMany({ where: { actorId: userId, type: 'WATCHED', mediaItemId } });
+      if (!rating) {
+        await tx.userMediaStatus.updateMany({
+          where: { userId, mediaItemId, status: 'COMPLETED' },
+          data: { status: null, completedAt: null },
+        });
+      }
+    }
   }
 
   async getLibrary(userId: string): Promise<LibraryResponse> {
@@ -158,15 +209,15 @@ export class TrackingService {
         userId,
         OR: [{ status: { not: null } }, { isFavorite: true }, { isWatchlisted: true }],
       },
-      include: { media: true },
+      include: { media: { select: mediaSummarySelect } },
       orderBy: { updatedAt: 'desc' },
     });
 
-    const mediaIds = statuses.map((s) => s.mediaItemId);
     const [ratings, posterOverrides] = await Promise.all([
-      this.prisma.rating.findMany({ where: { userId, mediaItemId: { in: mediaIds } } }),
+      // By user, not `id IN (...)`: libraries can be thousands of titles.
+      this.prisma.rating.findMany({ where: { userId }, select: { mediaItemId: true, value: true } }),
       // The member's own poster picks must show here too, not just on the detail page.
-      this.prisma.userPosterOverride.findMany({ where: { userId, mediaItemId: { in: mediaIds } } }),
+      this.prisma.userPosterOverride.findMany({ where: { userId }, select: { mediaItemId: true, url: true } }),
     ]);
     const ratingByMedia = new Map(ratings.map((r) => [r.mediaItemId, r.value]));
     const posterByMedia = new Map(posterOverrides.map((a) => [a.mediaItemId, a.url]));
@@ -203,12 +254,17 @@ export class TrackingService {
   }
 
   private async getUserState(userId: string, mediaItemId: string): Promise<UserMediaState> {
-    const [status, rating] = await Promise.all([
+    const [status, rating, diary] = await Promise.all([
       this.prisma.userMediaStatus.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId } },
       }),
       this.prisma.rating.findUnique({
         where: { userId_mediaItemId: { userId, mediaItemId } },
+      }),
+      this.prisma.watchHistory.aggregate({
+        where: { userId, mediaItemId },
+        _count: { _all: true },
+        _max: { watchedAt: true },
       }),
     ]);
     return {
@@ -219,6 +275,8 @@ export class TrackingService {
       rating: rating?.value ?? null,
       startedAt: status?.startedAt?.toISOString() ?? null,
       completedAt: status?.completedAt?.toISOString() ?? null,
+      watchCount: diary._count._all,
+      lastWatchedAt: diary._max.watchedAt?.toISOString() ?? null,
     };
   }
 }

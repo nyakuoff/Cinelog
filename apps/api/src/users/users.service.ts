@@ -189,8 +189,37 @@ export class UsersService {
     }
     const target = await this.findByIdOrThrow(targetId);
     if (target.role === 'ADMIN') await this.assertNotLastAdmin(targetId);
-    // Cascades remove the user's tracking/ratings/history/artwork (see schema).
-    await this.prisma.user.delete({ where: { id: targetId } });
+    // Cascades remove the user's tracking/ratings/history/artwork (see schema),
+    // including their likes and comments on other members' reviews — but the
+    // denormalized counters on those reviews must be brought down first, in
+    // the same transaction. (List likes/comments are counted live, not stored.)
+    await this.prisma.$transaction(async (tx) => {
+      const othersReviews = { review: { userId: { not: targetId } } };
+      const liked = await tx.reviewLike.findMany({
+        where: { userId: targetId, ...othersReviews },
+        select: { reviewId: true },
+      });
+      if (liked.length) {
+        await tx.review.updateMany({
+          where: { id: { in: liked.map((l) => l.reviewId) } },
+          data: { likeCount: { decrement: 1 } },
+        });
+      }
+      const commented = await tx.reviewComment.groupBy({
+        by: ['reviewId'],
+        where: { userId: targetId, ...othersReviews },
+        _count: { _all: true },
+      });
+      for (const c of commented) {
+        await tx.review.update({
+          where: { id: c.reviewId },
+          data: { commentCount: { decrement: c._count._all } },
+        });
+      }
+      // "X followed <deleted user>" events have no FK to cascade from.
+      await tx.activityEvent.deleteMany({ where: { targetUserId: targetId } });
+      await tx.user.delete({ where: { id: targetId } });
+    });
   }
 
   private async assertNotLastAdmin(targetId: string): Promise<void> {

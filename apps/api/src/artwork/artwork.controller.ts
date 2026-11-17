@@ -16,7 +16,11 @@ export class ArtworkController {
     if (!src) throw new BadRequestException('Missing src parameter');
     const { path, contentType } = await this.artwork.getLocalFile(src);
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-    res.sendFile(path);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.sendFile(path, (err) => {
+      if (!err) return;
+      this.artwork.forget(src); // file vanished: next request re-fetches
+      if (!res.headersSent) res.status(404).end();
+    });
   }
 }

@@ -14,7 +14,7 @@ import type { AuthResponse, SetupStatus } from '@cinelog/contracts';
 import { Public } from '../common/decorators';
 import type { AppConfig } from '../config/configuration';
 import { AuthService } from './auth.service';
-import { LoginDto, RegisterDto, SetupDto } from './auth.dto';
+import { LoginDto, SetupDto } from './auth.dto';
 
 const REFRESH_COOKIE = 'refresh_token';
 
@@ -39,17 +39,6 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
     const session = await this.auth.setup(dto);
-    this.setRefreshCookie(res, session.refreshToken);
-    return session.response;
-  }
-
-  @Public()
-  @Post('register')
-  async register(
-    @Body() dto: RegisterDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthResponse> {
-    const session = await this.auth.register(dto);
     this.setRefreshCookie(res, session.refreshToken);
     return session.response;
   }

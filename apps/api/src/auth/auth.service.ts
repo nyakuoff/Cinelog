@@ -11,7 +11,6 @@ import type { User } from '@prisma/client';
 import type {
   AuthResponse,
   LoginRequest,
-  RegisterRequest,
   SetupRequest,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
@@ -53,11 +52,8 @@ export class AuthService {
     return this.issueSession(user);
   }
 
-  /** Self-service registration for a normal user. */
-  async register(dto: RegisterRequest): Promise<IssuedSession> {
-    const user = await this.createUser(dto, 'USER');
-    return this.issueSession(user);
-  }
+  // No self-service registration: the instance is invite-only. Members are
+  // created by an admin via POST /admin/users.
 
   async login(dto: LoginRequest): Promise<IssuedSession> {
     const user = await this.prisma.user.findUnique({ where: { username: dto.username } });
@@ -106,7 +102,7 @@ export class AuthService {
   // -- helpers ---------------------------------------------------------------
 
   private async createUser(
-    dto: SetupRequest | RegisterRequest,
+    dto: SetupRequest,
     role: 'ADMIN' | 'USER',
   ): Promise<User> {
     const existing = await this.prisma.user.findFirst({

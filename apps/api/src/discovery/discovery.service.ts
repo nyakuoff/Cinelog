@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { MediaItem } from '@prisma/client';
+import { Prisma, type MediaItem } from '@prisma/client';
 import {
   MediaType,
   type BrowseQuery,
@@ -16,6 +16,13 @@ import { ProviderRegistry } from '../metadata/provider-registry.service';
 import type { ProviderSearchResult } from '../metadata/provider.types';
 
 const RAIL_SIZE = 18;
+
+/** Only the columns toSearchResult reads — keeps rawMetadata out of the query. */
+const searchSelect = {
+  id: true, provider: true, externalId: true, type: true, title: true,
+  originalTitle: true, releaseDate: true, overview: true, posterPath: true,
+} as const;
+type SearchRow = Pick<MediaItem, keyof typeof searchSelect>;
 
 /**
  * Titles per Films-browse page. The grid is 8-up at its widest, so a multiple
@@ -34,18 +41,40 @@ export class DiscoveryService {
   ) {}
 
   async getDiscover(): Promise<DiscoverResponse> {
-    const [trendingMovies, trendingShows, popular, upcoming, highlyRated] =
-      await Promise.all([
-        this.providerSection('TRENDING_MOVIES', 'Trending movies', 'TRENDING', 'MOVIE'),
-        this.providerSection('TRENDING_SHOWS', 'Trending shows', 'TRENDING', 'TV'),
-        this.providerSection('POPULAR', 'Popular this week', 'POPULAR', 'MOVIE'),
-        this.providerSection('NEW_AND_UPCOMING', 'New & upcoming', 'UPCOMING', 'MOVIE'),
-        this.highlyRatedSection(),
-      ]);
+    const defs = [
+      ['TRENDING_MOVIES', 'Trending movies', 'TRENDING', 'MOVIE'],
+      ['TRENDING_SHOWS', 'Trending shows', 'TRENDING', 'TV'],
+      ['POPULAR', 'Popular this week', 'POPULAR', 'MOVIE'],
+      ['NEW_AND_UPCOMING', 'New & upcoming', 'UPCOMING', 'MOVIE'],
+    ] as const;
+    const [lists, highlyRated] = await Promise.all([
+      Promise.all(defs.map(([, , kind, type]) => this.registry.getDiscoverList(kind, type))),
+      this.highlyRatedSection(),
+    ]);
+    const rails = lists.map((l) => l.slice(0, RAIL_SIZE));
+
+    // One local lookup for every rail's titles instead of one per rail.
+    const keys = rails.flat().map((r) => ({ provider: r.provider, externalId: r.externalId }));
+    const existing = keys.length
+      ? await this.prisma.mediaItem.findMany({
+          where: { OR: keys },
+          select: { id: true, provider: true, externalId: true },
+        })
+      : [];
+    const idByKey = new Map(existing.map((e) => [`${e.provider}:${e.externalId}`, e.id]));
+    const providerSections = defs.map(([key, title], i): DiscoverSection => ({
+      key,
+      title,
+      source: 'PROVIDER',
+      items: rails[i]!.map((r) => ({
+        ...this.providerToSearchResult(r),
+        id: idByKey.get(`${r.provider}:${r.externalId}`) ?? null,
+      })),
+    }));
 
     // Empty sections (provider not configured, or not enough community data yet)
     // are dropped rather than shown as dead/empty rails.
-    const sections = [trendingMovies, trendingShows, popular, upcoming, highlyRated].filter(
+    const sections = [...providerSections, highlyRated].filter(
       (s): s is DiscoverSection => s.items.length > 0,
     );
     return { sections };
@@ -153,83 +182,67 @@ export class DiscoveryService {
     return { items, page: query.page, hasMore, source: 'PROVIDER' };
   }
 
+  /** Browse the local catalogue. Community rating/count are aggregated in
+   *  SQL so minRating and the rating sorts see every matching title, then the
+   *  page is cut — sorting/filtering an over-fetched window in memory only
+   *  ever ranked the most recently cached few dozen. */
   async filter(query: DiscoverFilterQuery): Promise<DiscoverFilterResponse> {
     const take = query.limit;
     const skip = query.cursor ? Number(query.cursor) : 0;
 
-    const where: Record<string, unknown> = {};
-    if (query.type) where.type = query.type;
-    if (query.genre) where.genres = { some: { name: query.genre } };
+    const conds: Prisma.Sql[] = [Prisma.sql`1 = 1`];
+    if (query.type) conds.push(Prisma.sql`m."type" = ${query.type}`);
+    if (query.genre) {
+      // Implicit m:n table: A = genres.id, B = media_items.id.
+      conds.push(Prisma.sql`EXISTS (SELECT 1 FROM "_MediaGenres" mg JOIN "genres" g ON g."id" = mg."A"
+        WHERE mg."B" = m."id" AND g."name" = ${query.genre})`);
+    }
     if (query.decade) {
-      where.releaseDate = { gte: `${query.decade}-01-01`, lt: `${query.decade + 10}-01-01` };
+      conds.push(Prisma.sql`m."releaseDate" >= ${`${query.decade}-01-01`}
+        AND m."releaseDate" < ${`${query.decade + 10}-01-01`}`);
     }
+    const having =
+      query.minRating !== undefined
+        ? Prisma.sql`HAVING COALESCE(AVG(r."value"), 0) >= ${query.minRating}`
+        : Prisma.empty;
+    const orderBy = {
+      POPULARITY: Prisma.sql`m."cachedAt" DESC`,
+      RELEASE_DATE: Prisma.sql`m."releaseDate" DESC`,
+      CINELOG_RATING: Prisma.sql`"avg" IS NULL, "avg" DESC`,
+      RATING_COUNT: Prisma.sql`"cnt" DESC`,
+      RECENTLY_REVIEWED: Prisma.sql`"lastReviewed" IS NULL, "lastReviewed" DESC`,
+    }[query.sort];
 
-    const items = await this.prisma.mediaItem.findMany({
-      where,
-      include: { ratings: true },
-      // Approximate ordering in SQL; final precise ordering (by rating/rating
-      // count, which need aggregation) is applied in memory below.
-      orderBy: query.sort === 'RELEASE_DATE' ? { releaseDate: 'desc' } : { cachedAt: 'desc' },
-      take: take * 3, // over-fetch since minRating/community sort are applied post-query
-      skip,
-    });
+    // take + 1 tells us whether another page exists without a COUNT query.
+    const rows = await this.prisma.$queryRaw<{ id: string; avg: number | null; cnt: bigint | number }[]>`
+      SELECT m."id" AS "id", AVG(r."value") AS "avg", COUNT(r."id") AS "cnt",
+        (SELECT MAX(rv."createdAt") FROM "reviews" rv WHERE rv."mediaItemId" = m."id") AS "lastReviewed"
+      FROM "media_items" m
+      LEFT JOIN "ratings" r ON r."mediaItemId" = m."id"
+      WHERE ${Prisma.join(conds, ' AND ')}
+      GROUP BY m."id"
+      ${having}
+      ORDER BY ${orderBy}, m."id"
+      LIMIT ${take + 1} OFFSET ${skip}`;
 
-    let scored = items.map((item) => {
-      const ratings = item.ratings.map((r) => r.value);
-      const communityRating = ratings.length
-        ? ratings.reduce((a, b) => a + b, 0) / ratings.length
-        : null;
-      return { item, communityRating, ratingCount: ratings.length };
-    });
-
-    if (query.minRating !== undefined) {
-      scored = scored.filter((s) => (s.communityRating ?? 0) >= query.minRating!);
-    }
-    if (query.sort === 'CINELOG_RATING') {
-      scored.sort((a, b) => (b.communityRating ?? -1) - (a.communityRating ?? -1));
-    } else if (query.sort === 'RATING_COUNT' || query.sort === 'RECENTLY_REVIEWED') {
-      scored.sort((a, b) => b.ratingCount - a.ratingCount);
-    }
-    scored = scored.slice(0, take);
+    const page = rows.slice(0, take);
+    const media = page.length
+      ? await this.prisma.mediaItem.findMany({ where: { id: { in: page.map((r) => r.id) } }, select: searchSelect })
+      : [];
+    const byId = new Map(media.map((m) => [m.id, m]));
 
     return {
-      items: scored.map((s) => ({
-        ...this.toSearchResult(s.item),
-        communityRating: s.communityRating,
-        ratingCount: s.ratingCount,
-      })),
-      nextCursor: items.length >= take ? String(skip + take) : null,
+      items: page.flatMap((r) => {
+        const item = byId.get(r.id);
+        return item
+          ? [{ ...this.toSearchResult(item), communityRating: r.avg ?? null, ratingCount: Number(r.cnt) }]
+          : [];
+      }),
+      nextCursor: rows.length > take ? String(skip + take) : null,
     };
   }
 
   // -- sections ----------------------------------------------------------------
-
-  private async providerSection(
-    key: DiscoverSection['key'],
-    title: string,
-    kind: 'TRENDING' | 'POPULAR' | 'UPCOMING',
-    type: MediaType,
-  ): Promise<DiscoverSection> {
-    const results = (await this.registry.getDiscoverList(kind, type)).slice(0, RAIL_SIZE);
-    const keys = results.map((r) => ({ provider: r.provider, externalId: r.externalId }));
-    const existing = keys.length
-      ? await this.prisma.mediaItem.findMany({
-          where: { OR: keys },
-          select: { id: true, provider: true, externalId: true },
-        })
-      : [];
-    const idByKey = new Map(existing.map((e) => [`${e.provider}:${e.externalId}`, e.id]));
-
-    return {
-      key,
-      title,
-      source: 'PROVIDER',
-      items: results.map((r) => ({
-        ...this.providerToSearchResult(r),
-        id: idByKey.get(`${r.provider}:${r.externalId}`) ?? null,
-      })),
-    };
-  }
 
   private async highlyRatedSection(): Promise<DiscoverSection> {
     const grouped = await this.prisma.rating.groupBy({
@@ -246,12 +259,12 @@ export class DiscoveryService {
 
   private async mediaForGroups(ids: string[]): Promise<SearchResult[]> {
     if (!ids.length) return [];
-    const media = await this.prisma.mediaItem.findMany({ where: { id: { in: ids } } });
+    const media = await this.prisma.mediaItem.findMany({ where: { id: { in: ids } }, select: searchSelect });
     const byId = new Map(media.map((m) => [m.id, m]));
-    return ids.map((id) => byId.get(id)).filter((m): m is MediaItem => !!m).map((m) => this.toSearchResult(m));
+    return ids.map((id) => byId.get(id)).filter((m): m is SearchRow => !!m).map((m) => this.toSearchResult(m));
   }
 
-  private toSearchResult(m: MediaItem): SearchResult {
+  private toSearchResult(m: SearchRow): SearchResult {
     return {
       id: m.id,
       provider: m.provider as SearchResult['provider'],

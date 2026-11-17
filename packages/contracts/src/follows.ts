@@ -57,6 +57,8 @@ export const ActivityItem = z.object({
   ratingValue: z.number().min(0).max(100).nullable(),
   reviewId: z.string().nullable(),
   listId: z.string().nullable(),
+  /** Title of the list for LIST_* events (null otherwise, or if it's gone). */
+  listTitle: z.string().nullable(),
   targetUser: z
     .object({ id: z.string(), username: z.string(), displayName: z.string().nullable() })
     .nullable(),

@@ -30,10 +30,7 @@ export class RatingsService {
       });
       await this.activity.recordReplacing({ actorId: userId, type: 'RATED', mediaItemId });
 
-      // Rating something means you watched it. Without this, a rated title
-      // stayed uncounted in the profile's Films/Shows stats and in a title's
-      // "watched by" tally, because only an explicit status change or a dated
-      // diary entry ever marked it complete.
+      // Rating something means you watched it — see markWatchedByRating.
       await this.markWatchedByRating(userId, mediaItemId);
     }
 
@@ -50,35 +47,24 @@ export class RatingsService {
   }
 
   /**
-   * Promote a rated title to COMPLETED and give it a diary entry if it has
-   * neither. Deliberately additive: an existing status (WATCHING, ON_HOLD,
-   * DROPPED) is left alone, since rating a show midway through shouldn't
-   * silently claim you finished it, and an existing diary entry is never
-   * duplicated.
+   * Rating implies watched (Letterboxd semantics): a rated title with no
+   * status becomes COMPLETED, which is what the Watched tab, profile stats and
+   * a title's "watched by" tally count alongside the rating itself. It does
+   * NOT invent a diary entry — the diary is dated watches the member actually
+   * logged, and a rating carries no watch date. An existing status (WATCHING,
+   * ON_HOLD, DROPPED) is left alone, since rating a show midway through
+   * shouldn't silently claim you finished it.
    */
   private async markWatchedByRating(userId: string, mediaItemId: string): Promise<void> {
     const now = new Date();
     const existing = await this.prisma.userMediaStatus.findUnique({
       where: { userId_mediaItemId: { userId, mediaItemId } },
     });
-
-    if (!existing?.status) {
-      await this.prisma.userMediaStatus.upsert({
-        where: { userId_mediaItemId: { userId, mediaItemId } },
-        create: { userId, mediaItemId, status: 'COMPLETED', completedAt: now },
-        update: { status: 'COMPLETED', completedAt: now },
-      });
-    }
-
-    const hasHistory = await this.prisma.watchHistory.findFirst({
-      where: { userId, mediaItemId },
-      select: { id: true },
+    if (existing?.status) return;
+    await this.prisma.userMediaStatus.upsert({
+      where: { userId_mediaItemId: { userId, mediaItemId } },
+      create: { userId, mediaItemId, status: 'COMPLETED', completedAt: now },
+      update: { status: 'COMPLETED', completedAt: now },
     });
-    if (!hasHistory) {
-      await this.prisma.watchHistory.create({
-        data: { userId, mediaItemId, watchedAt: now, isRewatch: false },
-      });
-      await this.activity.recordReplacing({ actorId: userId, type: 'WATCHED', mediaItemId });
-    }
   }
 }

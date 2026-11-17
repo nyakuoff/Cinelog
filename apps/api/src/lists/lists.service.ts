@@ -22,13 +22,14 @@ import {
   type UpdateListRequest,
 } from '@cinelog/contracts';
 import { PrismaService } from '../prisma/prisma.service';
+import { mediaSummarySelect, watchedMediaWhere, type MediaSummaryRow } from '../common/media-select';
 import { ArtworkService } from '../artwork/artwork.service';
 import { ActivityService } from '../social/activity.service';
-import { SocialService } from '../social/social.service';
+import { canSeeUser, isBlockedBetween, visibleUserWhere } from '../common/visibility';
 
 type ListWithOwner = List & {
   user: User;
-  items?: (ListItem & { media: MediaItem })[];
+  items?: (ListItem & { media: MediaSummaryRow })[];
   _count?: { items: number; likes: number; comments: number };
 };
 
@@ -38,23 +39,34 @@ export class ListsService {
     private readonly prisma: PrismaService,
     private readonly artwork: ArtworkService,
     private readonly activity: ActivityService,
-    private readonly social: SocialService,
   ) {}
 
   // -- reads -------------------------------------------------------------------
 
-  /** Public lists across the instance, for the Lists browse page. */
-  async browse(viewerId: string | undefined, query: ListBrowseQuery): Promise<ListListResponse> {
+  /** Public lists across the instance, for the Lists browse page — or, with
+   *  `containingMediaId`, the public lists that include that title (the
+   *  title page's "Lists" panel). `ownerIds` narrows to those owners (home's
+   *  friends' lists); `q` is the list search (title/description substring,
+   *  case-insensitive for ASCII via SQLite LIKE). */
+  async browse(
+    viewerId: string | undefined,
+    query: ListBrowseQuery,
+    containingMediaId?: string,
+    extra: { ownerIds?: string[]; q?: string } = {},
+  ): Promise<ListListResponse> {
     const skip = query.cursor ? Number(query.cursor) : 0;
-    const blocked = await this.social.blockedIds(viewerId);
 
     const rows = await this.prisma.list.findMany({
       where: {
         isPublic: true,
-        ...(blocked.length ? { userId: { notIn: blocked } } : {}),
-        // A private profile's lists stay off the public browse page even when
-        // the list itself is marked public.
-        user: { profileVisibility: { not: 'PRIVATE' } },
+        // A public list on a private/followers-only profile follows the
+        // profile's visibility; blocked members' lists never appear.
+        user: visibleUserWhere(viewerId),
+        ...(containingMediaId ? { items: { some: { mediaItemId: containingMediaId } } } : {}),
+        ...(extra.ownerIds ? { userId: { in: extra.ownerIds } } : {}),
+        ...(extra.q
+          ? { OR: [{ title: { contains: extra.q } }, { description: { contains: extra.q } }] }
+          : {}),
       },
       include: this.listInclude(),
       orderBy:
@@ -74,17 +86,66 @@ export class ListsService {
   }
 
   /** Lists owned by a member. Private lists are only returned to their owner. */
-  async listByOwner(username: string, viewerId: string | undefined): Promise<ListListResponse> {
+  async listByOwner(
+    username: string,
+    viewerId: string | undefined,
+    containsMediaId?: string,
+  ): Promise<ListListResponse> {
     const owner = await this.prisma.user.findUnique({ where: { username } });
     if (!owner) throw new NotFoundException('User not found');
+    if (await isBlockedBetween(this.prisma, owner.id, viewerId)) {
+      throw new NotFoundException('User not found');
+    }
     const isOwner = owner.id === viewerId;
+    // Same rule as the profile's other tabs: hidden profile -> empty, not an error.
+    if (!(await canSeeUser(this.prisma, owner.id, viewerId))) return { lists: [], nextCursor: null };
 
     const rows = await this.prisma.list.findMany({
       where: { userId: owner.id, ...(isOwner ? {} : { isPublic: true }) },
       include: this.listInclude(),
       orderBy: { updatedAt: 'desc' },
     });
-    return { lists: await this.toSummaries(rows, viewerId), nextCursor: null };
+    const lists = await this.toSummaries(rows, viewerId);
+    if (containsMediaId) {
+      // One query answers membership for every list (visible ones only, via `rows`).
+      const hits = await this.prisma.listItem.findMany({
+        where: { mediaItemId: containsMediaId, listId: { in: rows.map((r) => r.id) } },
+        select: { listId: true },
+      });
+      const held = new Set(hits.map((h) => h.listId));
+      for (const l of lists) l.containsMedia = held.has(l.id);
+    }
+    return { lists, nextCursor: null };
+  }
+
+  /** Lists `likerId` has liked, newest like first — only ones the viewer could
+   *  open. Caller checks the liker's own profile visibility. */
+  async listLikedBy(
+    likerId: string,
+    viewerId: string | undefined,
+    cursor: string | undefined,
+    limit: number,
+  ): Promise<ListListResponse> {
+    const skip = cursor ? Number(cursor) : 0;
+    const likes = await this.prisma.listLike.findMany({
+      where: {
+        userId: likerId,
+        list: {
+          OR: [
+            { isPublic: true, user: visibleUserWhere(viewerId) },
+            ...(viewerId ? [{ userId: viewerId }] : []),
+          ],
+        },
+      },
+      include: { list: { include: this.listInclude() } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip,
+    });
+    return {
+      lists: await this.toSummaries(likes.map((l) => l.list), viewerId),
+      nextCursor: likes.length >= limit ? String(skip + limit) : null,
+    };
   }
 
   async getDetail(listId: string, viewerId: string | undefined): Promise<ListDetail> {
@@ -93,19 +154,22 @@ export class ListsService {
       include: {
         user: true,
         _count: { select: { items: true, likes: true, comments: true } },
-        items: { include: { media: true }, orderBy: { position: 'asc' } },
+        items: { include: { media: { select: mediaSummarySelect } }, orderBy: { position: 'asc' } },
       },
     });
     if (!row) throw new NotFoundException('List not found');
+    await this.assertVisible(row, viewerId);
 
-    // A private list is visible only to its owner; report 404 rather than 403 so
-    // its existence isn't confirmed to anyone else.
-    if (!row.isPublic && row.userId !== viewerId) throw new NotFoundException('List not found');
-    if (row.userId !== viewerId && (await this.social.blockedIds(viewerId)).includes(row.userId)) {
-      throw new NotFoundException('List not found');
-    }
-
-    const [summary] = await this.toSummaries([row], viewerId);
+    const [[summary], watched] = await Promise.all([
+      this.toSummaries([row], viewerId),
+      viewerId
+        ? this.prisma.mediaItem.findMany({
+            where: { AND: [{ listItems: { some: { listId } } }, watchedMediaWhere(viewerId)] },
+            select: { id: true },
+          })
+        : null,
+    ]);
+    const watchedIds = watched ? new Set(watched.map((m) => m.id)) : null;
     return {
       ...(summary as ListSummary),
       entries: (row.items ?? []).map((item) => ({
@@ -113,7 +177,9 @@ export class ListsService {
         position: item.position,
         note: item.note,
         media: this.toSummary(item.media),
+        ...(watchedIds ? { viewerWatched: watchedIds.has(item.mediaItemId) } : {}),
       })),
+      ...(watchedIds ? { viewerWatchedCount: watchedIds.size } : {}),
     };
   }
 
@@ -126,6 +192,7 @@ export class ListsService {
         title: dto.title,
         description: dto.description ?? null,
         isPublic: dto.isPublic ?? true,
+        ...(dto.isRanked !== undefined ? { isRanked: dto.isRanked } : {}),
       },
     });
     if (row.isPublic) {
@@ -142,6 +209,7 @@ export class ListsService {
         ...(dto.title !== undefined ? { title: dto.title } : {}),
         ...(dto.description !== undefined ? { description: dto.description } : {}),
         ...(dto.isPublic !== undefined ? { isPublic: dto.isPublic } : {}),
+        ...(dto.isRanked !== undefined ? { isRanked: dto.isRanked } : {}),
       },
     });
     // Making a list private retracts its feed events; nothing should point at
@@ -307,7 +375,7 @@ export class ListsService {
       user: true,
       _count: { select: { items: true, likes: true, comments: true } },
       // Only enough entries to build the cover collage.
-      items: { include: { media: true }, orderBy: { position: 'asc' as const }, take: 4 },
+      items: { include: { media: { select: mediaSummarySelect } }, orderBy: { position: 'asc' as const }, take: 4 },
     };
   }
 
@@ -321,8 +389,18 @@ export class ListsService {
   private async requireVisible(listId: string, viewerId: string | undefined): Promise<List> {
     const list = await this.prisma.list.findUnique({ where: { id: listId } });
     if (!list) throw new NotFoundException('List not found');
-    if (!list.isPublic && list.userId !== viewerId) throw new NotFoundException('List not found');
+    await this.assertVisible(list, viewerId);
     return list;
+  }
+
+  /** A list is visible to its owner, or to others when it's public AND its
+   *  owner's profile is visible to them (visibility + blocks). Anything else
+   *  is a 404 rather than a 403 so its existence isn't confirmed. */
+  private async assertVisible(list: List, viewerId: string | undefined): Promise<void> {
+    if (list.userId === viewerId) return;
+    if (!list.isPublic || !(await canSeeUser(this.prisma, list.userId, viewerId))) {
+      throw new NotFoundException('List not found');
+    }
   }
 
   /** Bump updatedAt and surface an "updated a list" event for public lists. */
@@ -338,7 +416,7 @@ export class ListsService {
     }
   }
 
-  private toSummary(media: MediaItem): MediaSummary {
+  private toSummary(media: MediaSummaryRow): MediaSummary {
     return {
       id: media.id,
       type: MediaType.catch('MOVIE').parse(media.type),
@@ -369,6 +447,7 @@ export class ListsService {
       title: row.title,
       description: row.description,
       isPublic: row.isPublic,
+      isRanked: row.isRanked,
       owner: {
         id: row.user.id,
         username: row.user.username,

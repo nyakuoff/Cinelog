@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
-import type { PersonCredit, PersonDetail } from '@cinelog/contracts';
+import { useParams } from 'react-router-dom';
+import type { PersonDetail } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { PosterCard } from '../components/PosterCard';
-import { EmptyState, SectionHeader, TabBar } from '../components/lb';
-import { Spinner } from '../components/ui';
+import { useScreenHeader } from '../lib/appShell';
+import { formatDate } from '../lib/format';
+import {
+  EmptyState,
+  mediaHref,
+  Poster,
+  PosterGrid,
+  PosterMarks,
+  SectionHeader,
+  TabBar,
+} from '../components/lb';
+import { Button, Spinner } from '../components/ui';
 
 /**
  * A person's filmography — where "directed by" and a cast name lead.
@@ -16,8 +25,6 @@ import { Spinner } from '../components/ui';
  */
 export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Element {
   const { id = '', name = '' } = useParams();
-  const navigate = useNavigate();
-  const [opening, setOpening] = useState(false);
   const [tab, setTab] = useState<'acting' | 'crew'>('acting');
 
   const { data, isLoading, isError } = useQuery({
@@ -27,31 +34,10 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
     staleTime: 1000 * 60 * 30,
   });
 
-  async function open(credit: PersonCredit): Promise<void> {
-    if (credit.id) {
-      navigate(`/media/${credit.id}`);
-      return;
-    }
-    setOpening(true);
-    try {
-      const detail = await api.resolveMedia({
-        provider: credit.provider,
-        externalId: credit.externalId,
-        type: credit.type,
-      });
-      navigate(`/media/${detail.id}`);
-    } finally {
-      setOpening(false);
-    }
-  }
+  // The app's title bar carries the person's name, not the word "Person".
+  useScreenHeader({ title: data?.name ?? (byName ? name : undefined), back: true });
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner center />;
 
   if (isError || !data) {
     return (
@@ -68,29 +54,32 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
   const crewFirst = (data.knownForDepartment ?? 'Acting') !== 'Acting';
   const active = tab === 'acting' && data.acting.length === 0 ? 'crew' : tab;
   const credits = active === 'acting' ? data.acting : data.crew;
+  // One title can carry several credits (writer and director); count it once.
+  const titles = new Map(credits.map((c) => [`${c.provider}:${c.externalId}`, c.watched ?? false]));
+  const seen = [...titles.values()].filter(Boolean).length;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start">
         <div className="h-28 w-28 shrink-0 overflow-hidden rounded-sm bg-surface-2 ring-1 ring-border-hi/60 sm:h-36 sm:w-36">
           {data.profileUrl && (
-            <img src={data.profileUrl} alt={data.name} className="h-full w-full object-cover" />
+            <img
+              src={data.profileUrl}
+              alt={data.name}
+              decoding="async"
+              fetchPriority="high"
+              className="h-full w-full object-cover"
+            />
           )}
         </div>
         <div className="min-w-0">
-          <h1 className="font-cond text-4xl font-extrabold uppercase leading-[0.95] tracking-tight">
+          <h1 className="font-cond text-4xl font-extrabold uppercase leading-[0.95] tracking-tight app:text-[27px]">
             {data.name}
           </h1>
           <p className="mt-2 font-data text-[11px] text-muted-2">{lifeLine(data)}</p>
           {data.biography && <Biography text={data.biography} />}
         </div>
       </header>
-
-      {opening && (
-        <div className="flex justify-center py-6">
-          <Spinner />
-        </div>
-      )}
 
       <div className="mt-8">
         <TabBar
@@ -112,37 +101,42 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
 
       <div className="pt-6">
         {credits.length === 0 ? (
-          <p className="py-10 text-center text-muted">Nothing recorded under this credit.</p>
+          <EmptyState compact title="Nothing recorded under this credit" />
         ) : (
           <>
             <SectionHeader
               title={active === 'acting' ? 'Appeared in' : 'Worked on'}
               count={credits.length}
+              right={
+                seen > 0 ? (
+                  <span className="font-data text-[11px] text-muted-2">
+                    You&rsquo;ve watched <b className="text-cyan">{seen}</b> of {titles.size}
+                  </span>
+                ) : undefined
+              }
             />
-            <div className="grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-              {credits.map((c, i) => (
-                <div key={`${c.provider}:${c.externalId}`}>
-                  <PosterCard
-                    title={c.title}
-                    year={c.year}
-                    type={c.type}
-                    posterUrl={c.posterUrl}
-                    index={i}
-                    onClick={() => void open(c)}
-                  />
-                  {/* The part played is the reason this list differs from any
-                      other poster grid, so it's captioned rather than hidden. */}
-                  {(c.character ?? c.job) && (
-                    <p
-                      className="mt-1.5 truncate text-xs text-muted-2"
-                      title={c.character ?? c.job ?? ''}
-                    >
-                      {c.character ?? c.job}
-                    </p>
-                  )}
-                </div>
+            <PosterGrid>
+              {credits.map((c) => (
+                <Poster
+                  key={`${c.provider}:${c.externalId}`}
+                  title={c.title}
+                  year={c.year}
+                  type={c.type}
+                  posterUrl={c.posterUrl}
+                  to={mediaHref(c)}
+                  // The part played is the reason this list differs from any
+                  // other poster grid, so it's captioned rather than hidden.
+                  caption={
+                    <>
+                      <span className="block truncate">{c.character ?? c.job ?? '\u00a0'}</span>
+                      <span className="mt-1 block min-h-4">
+                        <PosterMarks type={c.type} rating={c.rating} watched={c.watched} />
+                      </span>
+                    </>
+                  }
+                />
               ))}
-            </div>
+            </PosterGrid>
           </>
         )}
       </div>
@@ -154,7 +148,13 @@ export function PersonPage({ byName = false }: { byName?: boolean }): JSX.Elemen
 function lifeLine(p: PersonDetail): string {
   const parts: string[] = [];
   if (p.knownForDepartment) parts.push(p.knownForDepartment);
-  if (p.birthday) parts.push(p.deathday ? `${p.birthday} — ${p.deathday}` : `b. ${p.birthday}`);
+  if (p.birthday) {
+    parts.push(
+      p.deathday
+        ? `${formatDate(p.birthday)} — ${formatDate(p.deathday)}`
+        : `b. ${formatDate(p.birthday)}`,
+    );
+  }
   if (p.placeOfBirth) parts.push(p.placeOfBirth);
   return parts.join('  ·  ');
 }
@@ -169,12 +169,9 @@ function Biography({ text }: { text: string }): JSX.Element {
         {expanded || !long ? text : `${text.slice(0, 420).trimEnd()}…`}
       </p>
       {long && (
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          className="mt-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 hover:text-gold"
-        >
+        <Button variant="link" size="sm" className="mt-1.5" onClick={() => setExpanded((v) => !v)}>
           {expanded ? 'Less' : 'More'}
-        </button>
+        </Button>
       )}
     </div>
   );

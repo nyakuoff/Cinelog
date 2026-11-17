@@ -97,10 +97,11 @@ body {
    it this rule silently did nothing and every field still zoomed on focus.
    Checkboxes, radios and file inputs are excluded — font-size doesn't change
    the box for the first two and does resize the file picker's button. */
-/* 639.98px, not 640px: Tailwind's `sm:` is min-width 640px, so a plain
-   max-width 640px query overlaps it by one pixel and a 640px-wide viewport
-   would get both the mobile type size and the desktop control heights. */
-@media (max-width: 639.98px) {
+/* Keyed on the pointer, not just the width: the installed app shell runs up to
+   899px and a tablet in a browser tab is wider still, and both zoom the same
+   way. The width clause keeps narrow desktop windows on the phone sizing too
+   (639.98px so it never overlaps Tailwind's `sm:` at 640px). */
+@media (pointer: coarse), (max-width: 639.98px) {
   input:not([type='checkbox']):not([type='radio']):not([type='file']),
   select,
   textarea {
@@ -119,6 +120,13 @@ body::after {
   opacity: 0.05;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* A full-viewport fixed layer in `overlay` blend makes iOS re-composite the
+   whole screen on every scroll frame. The installed app is where that cost is
+   paid on a phone, so the tooth is a website-only material. */
+html.app-shell body::after {
+  display: none;
 }
 
 a,
@@ -224,6 +232,46 @@ html.app-shell body {
   overscroll-behavior-y: none;
 }
 
+/* ---- Dialog -------------------------------------------------------
+   One modal, drawn on a native <dialog> (top layer, focus trap, Escape).
+   The element itself is the scrim; the panel inside is the sheet. In the
+   installed app it rises from the foot of the screen like a sheet of
+   stock pulled from a drawer; on the website it sits centred. */
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  color: inherit;
+  background: rgb(var(--ink) / 0.85);
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+.dialog[open] {
+  display: flex;
+}
+.dialog::backdrop {
+  background: transparent;
+}
+html.app-shell .dialog {
+  align-items: flex-end;
+  padding: max(1rem, env(safe-area-inset-top)) env(safe-area-inset-right) 0
+    env(safe-area-inset-left);
+}
+html.app-shell .dialog > .dialog-panel {
+  max-width: 36rem;
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* ---- Rubber stamp ------------------------------------------------
    State is struck onto the record, never glowed. Used for WATCHED /
    LIKED / WATCHLISTED and any other "this is now true of this title"
@@ -296,6 +344,11 @@ html.app-shell body {
   content: '★★★★★';
   letter-spacing: 1px;
 }
+/* Shows rate out of ten. */
+.stars-10::before,
+.stars-10 .stars-fill::before {
+  content: '★★★★★★★★★★';
+}
 .stars-fill {
   position: absolute;
   top: 0;
@@ -306,6 +359,10 @@ html.app-shell body {
      so every rating rendered as 5 full stars. */
   overflow: hidden;
   color: rgb(var(--gold));
+}
+/* An average is the archive's arithmetic, not anyone's mark — plain ink. */
+.stars-average .stars-fill {
+  color: rgb(var(--content));
 }
 
 /* Tab bars and rails scroll horizontally without showing a bar. */
@@ -327,4 +384,18 @@ html.app-shell body {
   .stamp-strike {
     animation: none !important;
   }
+}
+
+/* Native checkboxes and radios take the user's ink rather than OS blue. */
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: rgb(var(--gold));
+}
+
+/* Skip layout/paint for off-screen poster tiles in long grids. The clip margin
+   keeps the 2px hover ring (drawn outside the tile) from being cut off. */
+.poster-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
+  overflow-clip-margin: 4px;
 }

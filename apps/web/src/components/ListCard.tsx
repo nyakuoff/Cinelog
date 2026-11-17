@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom';
 import type { ListSummary } from '@cinelog/contracts';
 import { posterGradient } from '../lib/poster';
+import { plural } from '../lib/format';
+import { IconHeart } from './app/Icons';
 import { Avatar } from './Avatar';
 
 /**
  * A list tile with a cover built from its first posters — overlapping fanned
- * cards, so a list reads as "a stack of films" at a glance.
+ * cards, so a list reads as "a stack of titles" at a glance.
  */
 export function ListCard({ list }: { list: ListSummary }): JSX.Element {
   // The API sends up to 4 cover posters; beyond that a "+N" tile on the end
@@ -22,7 +24,7 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
     >
       <div className="flex h-[86px] items-center justify-center overflow-hidden rounded-sm bg-bg-2">
         {posters.length === 0 ? (
-          <span className="font-cond text-[11px] font-bold uppercase tracking-wider text-muted-2">
+          <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
             Empty list
           </span>
         ) : (
@@ -31,10 +33,16 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
               <div
                 key={i}
                 style={{ marginLeft: i === 0 || single ? 0 : -18, zIndex: i }}
-                className="h-[86px] w-[58px] shrink-0 overflow-hidden rounded-[2px] ring-1 ring-black/40 transition-transform group-hover:translate-y-[-2px]"
+                className="h-[86px] w-[58px] shrink-0 overflow-hidden rounded-[2px] ring-1 ring-black/40"
               >
                 {p ? (
-                  <img src={p} alt="" loading="lazy" className="h-full w-full object-cover" />
+                  <img
+                    src={p}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <span
                     className="block h-full w-full"
@@ -65,13 +73,13 @@ export function ListCard({ list }: { list: ListSummary }): JSX.Element {
         />
         <span className="truncate">{list.owner.displayName || list.owner.username}</span>
         <span>·</span>
-        <span className="font-data">
-          {list.itemCount} {list.itemCount === 1 ? 'title' : 'titles'}
-        </span>
+        <span className="font-data">{plural(list.itemCount, 'title')}</span>
         {list.likeCount > 0 && (
           <>
             <span>·</span>
-            <span className="font-data text-rose">♥ {list.likeCount}</span>
+            <span className="flex items-center gap-1 font-data text-rose">
+              <IconHeart filled className="h-3 w-3" /> {list.likeCount}
+            </span>
           </>
         )}
         {!list.isPublic && (

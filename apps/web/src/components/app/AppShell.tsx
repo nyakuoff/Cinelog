@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Link, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Suspense, useLayoutEffect, useRef, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
 import { cn } from '../../lib/cn';
-import { useScreenHeaderConfig } from '../../lib/appShell';
+import { useGoBack, useScreenHeaderConfig } from '../../lib/appShell';
 import { Avatar } from '../Avatar';
-import { LogModal } from '../LogModal';
+import { Spinner } from '../ui';
+import { TabBar } from '../lb';
+import { LogModal, useLogShortcut } from '../LogModal';
 import { UpdateToast } from '../UpdateToast';
 import { IconBolt, IconChevronLeft, IconPanels, IconPerson, IconPlus, IconSearch } from './Icons';
 
@@ -16,12 +18,12 @@ import { IconBolt, IconChevronLeft, IconPanels, IconPerson, IconPlus, IconSearch
  * goes — with the log action struck through its centre, because logging is the
  * point of the app and everything else is navigation around it.
  *
- * The website's masthead nav is not lost, it's redistributed: the browse tab
+ * The website's masthead nav is not lost, it's redistributed: the home tab
  * and the profile tab each carry a strip of their own sub-screens, which is how
  * a phone app of this shape holds a nav that wide.
  */
 
-type TabKey = 'browse' | 'search' | 'activity' | 'profile';
+type TabKey = 'home' | 'search' | 'activity' | 'profile';
 
 interface Tab {
   key: TabKey;
@@ -31,29 +33,38 @@ interface Tab {
 }
 
 const TABS: Tab[] = [
-  { key: 'browse', to: '/', label: 'Browse', icon: IconPanels },
+  { key: 'home', to: '/', label: 'Home', icon: IconPanels },
   { key: 'search', to: '/search', label: 'Search', icon: IconSearch },
   { key: 'activity', to: '/activity', label: 'Activity', icon: IconBolt },
   { key: 'profile', to: '/profile', label: 'Profile', icon: IconPerson },
 ];
 
 /** Sub-screens reachable from a tab, shown as a strip under its title bar. */
-const BROWSE_STRIP = [
-  { to: '/', label: 'Discover', end: true },
-  { to: '/films', label: 'Media' },
-  { to: '/lists', label: 'Lists' },
-  { to: '/members', label: 'Members' },
+const HOME_STRIP = [
+  { key: '/', to: '/', label: 'Home' },
+  { key: '/films', to: '/films', label: 'Media' },
+  { key: '/lists', to: '/lists', label: 'Lists' },
+  { key: '/members', to: '/members', label: 'Members' },
 ];
+/** Your own profile's sections (the same ones a member page tabs through),
+ *  then the private shelves that sit beside them. */
 const PROFILE_STRIP = [
-  { to: '/profile', label: 'Profile', end: true },
-  { to: '/library', label: 'Library' },
-  { to: '/watchlist', label: 'Watchlist' },
-  { to: '/settings', label: 'Settings' },
+  { key: '/profile', to: '/profile', label: 'Profile' },
+  { key: '/profile/diary', to: '/profile/diary', label: 'Diary' },
+  { key: '/profile/films', to: '/profile/films', label: 'Films' },
+  { key: '/profile/reviews', to: '/profile/reviews', label: 'Reviews' },
+  { key: '/watchlist', to: '/watchlist', label: 'Watchlist' },
+  { key: '/profile/lists', to: '/profile/lists', label: 'Lists' },
+  { key: '/profile/likes', to: '/profile/likes', label: 'Likes' },
+  { key: '/profile/activity', to: '/profile/activity', label: 'Activity' },
+  { key: '/profile/network', to: '/profile/network', label: 'Network' },
+  { key: '/library', to: '/library', label: 'Library' },
+  { key: '/settings', to: '/settings', label: 'Settings' },
 ];
 
 /** Route → screen name, for the bar the screen didn't override. */
 const ROUTE_TITLES: { match: RegExp; title: string; back?: boolean }[] = [
-  { match: /^\/$/, title: 'Discover' },
+  { match: /^\/$/, title: 'Home' },
   { match: /^\/films/, title: 'Media' },
   { match: /^\/members/, title: 'Members' },
   { match: /^\/lists$/, title: 'Lists' },
@@ -64,12 +75,19 @@ const ROUTE_TITLES: { match: RegExp; title: string; back?: boolean }[] = [
   { match: /^\/activity/, title: 'Activity' },
   { match: /^\/profile/, title: 'Profile' },
   { match: /^\/u\//, title: 'Member', back: true },
+  { match: /^\/review\//, title: 'Review', back: true },
   { match: /^\/person\//, title: 'Person', back: true },
   { match: /^\/settings/, title: 'Settings' },
   { match: /^\/admin/, title: 'Admin', back: true },
 ];
 
-function tabForPath(path: string): TabKey | null {
+/** The tab a path belongs to outright; null for detail screens, which belong
+ *  to whichever tab you opened them from (see `useActiveTab`). */
+function tabForPath(path: string, ownUsername?: string): TabKey | null {
+  if (path.startsWith('/lists/')) return null;
+  if (ownUsername && (path === `/u/${ownUsername}` || path.startsWith(`/u/${ownUsername}/`))) {
+    return 'profile';
+  }
   if (path.startsWith('/search')) return 'search';
   if (path.startsWith('/activity')) return 'activity';
   if (
@@ -87,15 +105,30 @@ function tabForPath(path: string): TabKey | null {
     path.startsWith('/lists') ||
     path.startsWith('/members')
   ) {
-    return 'browse';
+    return 'home';
   }
-  return null; // media/person detail screens sit under no tab
+  return null; // media / person / member / list detail
 }
 
-function stripForPath(path: string): { to: string; label: string; end?: boolean }[] | null {
-  if (path === '/' || /^\/(films|lists|members)$/.test(path)) return BROWSE_STRIP;
-  if (/^\/(profile|library|watchlist|settings)$/.test(path)) return PROFILE_STRIP;
+function stripForPath(path: string): typeof HOME_STRIP | null {
+  if (HOME_STRIP.some((s) => s.to === path)) return HOME_STRIP;
+  if (PROFILE_STRIP.some((s) => s.to === path)) return PROFILE_STRIP;
   return null;
+}
+
+/**
+ * Which tab is lit. A detail screen (a title, a person, a member, a list)
+ * keeps the tab it was opened from lit, remembered per history entry so Back
+ * and Forward light the right one too.
+ */
+function useActiveTab(path: string, locationKey: string, ownUsername?: string): TabKey {
+  const byEntry = useRef(new Map<string, TabKey>());
+  const last = useRef<TabKey>('home');
+  const own = tabForPath(path, ownUsername);
+  const tab = own ?? byEntry.current.get(locationKey) ?? last.current;
+  byEntry.current.set(locationKey, tab);
+  last.current = tab;
+  return tab;
 }
 
 export function AppShell(): JSX.Element {
@@ -104,40 +137,54 @@ export function AppShell(): JSX.Element {
   const { user } = useAuth();
   const [logging, setLogging] = useState(false);
 
-  const path = location.pathname;
+  // Trailing slashes are the same screen (`/films/` is a valid deep link).
+  const path = location.pathname.replace(/\/+$/, '') || '/';
   const override = useScreenHeaderConfig();
   const route = ROUTE_TITLES.find((r) => r.match.test(path));
   const title = override?.title ?? route?.title ?? 'Cinelog';
   const hidden = override?.hidden ?? false;
-  const back = override?.back ?? route?.back ?? tabForPath(path) === null;
+  const back = override?.back ?? route?.back ?? tabForPath(path, user?.username) === null;
   const strip = stripForPath(path);
-  const activeTab = tabForPath(path);
+  const activeTab = useActiveTab(path, location.key, user?.username);
 
-  // A phone app opens each screen at its top. Without this, tapping a poster
-  // from halfway down a grid lands you halfway down the film page.
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [path]);
+  // A phone app opens each new screen at its top — tapping a poster from
+  // halfway down a grid shouldn't land you halfway down the film page — but
+  // Back returns to where you were.
+  const navType = useNavigationType();
+  const goBack = useGoBack();
+  // Layout effect: the cleanup must record the old position before the new
+  // screen's DOM can clamp it, and the new position applies before paint.
+  useLayoutEffect(() => {
+    const key = `cinelog:scroll:${location.key}`;
+    const saved = navType === 'POP' ? Number(sessionStorage.getItem(key) ?? 0) : 0;
+    window.scrollTo(0, saved);
+    let y = window.scrollY;
+    const onScroll = (): void => {
+      y = window.scrollY;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      try {
+        sessionStorage.setItem(key, String(y));
+      } catch {
+        /* storage full or disabled — Back just opens at the top */
+      }
+    };
+    // Once per history entry; navType is read for that entry only.
+  }, [location.key]);
 
-  // The home-screen icon's "Log a film" shortcut (see manifest.webmanifest)
-  // launches at `/?log=1`; consume the flag so a refresh doesn't reopen it.
-  const [search, setSearch] = useSearchParams();
-  useEffect(() => {
-    if (search.get('log') !== '1') return;
-    setLogging(true);
-    const next = new URLSearchParams(search);
-    next.delete('log');
-    setSearch(next, { replace: true });
-  }, [search, setSearch]);
+  // The home-screen icon's "Log a title" shortcut (see manifest.webmanifest).
+  useLogShortcut(setLogging);
 
   return (
     <div className="min-h-full pl-safe pr-safe">
       {!hidden && (
-        <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2/95 pt-safe backdrop-blur-sm">
+        <header className="sticky top-0 z-40 border-b-2 border-border-hi bg-bg-2 pt-safe">
           <div className="grid h-12 grid-cols-[3rem_minmax(0,1fr)_3rem] items-center">
             {back ? (
               <button
-                onClick={() => (typeof back === 'string' ? navigate(back) : navigate(-1))}
+                onClick={() => (typeof back === 'string' ? navigate(back) : goBack())}
                 aria-label="Back"
                 className="grid h-12 w-12 place-items-center text-content"
               >
@@ -158,48 +205,34 @@ export function AppShell(): JSX.Element {
             </Link>
           </div>
 
-          {strip && (
-            <nav className="flex gap-0.5 overflow-x-auto px-2 scrollbar-none">
-              {strip.map((s) => (
-                <NavLink
-                  key={s.to}
-                  to={s.to}
-                  end={s.end}
-                  className={({ isActive }) =>
-                    cn(
-                      'shrink-0 whitespace-nowrap border-b-2 px-3 pb-2 pt-1 font-cond text-[13px] font-bold uppercase tracking-[0.13em]',
-                      isActive ? 'border-gold text-content' : 'border-transparent text-muted',
-                    )
-                  }
-                >
-                  {s.label}
-                </NavLink>
-              ))}
-            </nav>
-          )}
+          {/* The strip's own baseline rule is dropped: the header's 2px edge
+              is the rule, and the active tab's underline sits on it. */}
+          {strip && <TabBar tabs={strip} active={path} className="border-b-0 px-2" />}
         </header>
       )}
 
       {/* Clearance for the fixed tab bar, which would otherwise sit on top of
           the last row of every screen. */}
       <main className="pb-tabbar">
-        <Outlet />
+        <Suspense fallback={<Spinner center />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       <nav
         aria-label="Primary"
         className="fixed inset-x-0 bottom-0 z-40 border-t-2 border-border-hi bg-bg-2 pb-safe pl-safe pr-safe"
       >
-        <div className="mx-auto flex h-[3.5rem] max-w-md items-stretch">
+        <div className="mx-auto flex h-[var(--tabbar-h)] max-w-md items-stretch">
           {TABS.slice(0, 2).map((t) => (
-            <TabButton key={t.key} tab={t} active={activeTab === t.key} />
+            <TabButton key={t.key} tab={t} active={activeTab === t.key} here={path === t.to} />
           ))}
 
           {/* The log action, struck through the centre of the bar. */}
           <div className="flex flex-1 items-center justify-center">
             <button
               onClick={() => setLogging(true)}
-              aria-label="Log a film"
+              aria-label="Log a title"
               className="grid h-11 w-11 place-items-center rounded-sm border-2 border-gold text-gold active:bg-gold active:text-ink"
             >
               <IconPlus className="h-6 w-6" />
@@ -207,7 +240,7 @@ export function AppShell(): JSX.Element {
           </div>
 
           {TABS.slice(2).map((t) => (
-            <TabButton key={t.key} tab={t} active={activeTab === t.key} />
+            <TabButton key={t.key} tab={t} active={activeTab === t.key} here={path === t.to} />
           ))}
         </div>
       </nav>
@@ -218,13 +251,28 @@ export function AppShell(): JSX.Element {
   );
 }
 
-function TabButton({ tab, active }: { tab: Tab; active: boolean }): JSX.Element {
+function TabButton({
+  tab,
+  active,
+  here,
+}: {
+  tab: Tab;
+  active: boolean;
+  /** Already on this tab's root screen — a tap means "back to the top". */
+  here: boolean;
+}): JSX.Element {
   const Icon = tab.icon;
   return (
     <Link
       to={tab.to}
       aria-label={tab.label}
       aria-current={active ? 'page' : undefined}
+      onClick={(e) => {
+        if (!here) return;
+        e.preventDefault();
+        const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
+      }}
       className={cn(
         'flex flex-1 flex-col items-center justify-center gap-1',
         active ? 'text-gold' : 'text-muted-2',

@@ -42,6 +42,11 @@ import type {
   MarkWatchedRequest,
   FavoriteSlot,
   FriendRatingsResponse,
+  HomeResponse,
+  ProfileLikesKind,
+  ProfileLikesResponse,
+  ProfileWatchedQuery,
+  UserReview,
   MediaDetail,
   MediaRef,
   ProfileDiaryResponse,
@@ -52,7 +57,6 @@ import type {
   CreateReviewCommentRequest,
   CreateReviewRequest,
   RatingResponse,
-  RegisterRequest,
   RematchRequest,
   Review,
   ReviewComment,
@@ -108,12 +112,7 @@ async function parseError(res: Response): Promise<never> {
   throw new ApiError(res.status, message);
 }
 
-async function raw(
-  method: string,
-  path: string,
-  body?: unknown,
-  retry = true,
-): Promise<Response> {
+async function raw(method: string, path: string, body?: unknown, retry = true): Promise<Response> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
@@ -176,18 +175,31 @@ function toQuery(query: Record<string, unknown>): string {
   return qs ? `?${qs}` : '';
 }
 
+// Refresh tokens rotate, so parallel 401s must share one refresh call —
+// a second request with the same cookie would be rejected.
+let refreshing: Promise<AuthResponse | null> | null = null;
+function refreshSession(): Promise<AuthResponse | null> {
+  refreshing ??= doRefresh().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
 async function tryRefresh(): Promise<boolean> {
+  return (await refreshSession()) !== null;
+}
+
+async function doRefresh(): Promise<AuthResponse | null> {
   try {
     const res = await fetch(`${BASE}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     const data = (await res.json()) as AuthResponse;
     accessToken = data.tokens.accessToken;
-    return true;
+    return data;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -195,16 +207,19 @@ export const api = {
   // -- auth ------------------------------------------------------------------
   getSetupStatus: () => request<SetupStatus>('GET', '/auth/status'),
   setup: (dto: SetupRequest) => request<AuthResponse>('POST', '/auth/setup', dto),
-  register: (dto: RegisterRequest) => request<AuthResponse>('POST', '/auth/register', dto),
   login: (dto: LoginRequest) => request<AuthResponse>('POST', '/auth/login', dto),
   logout: () => request<void>('POST', '/auth/logout'),
-  refresh: () => request<AuthResponse>('POST', '/auth/refresh'),
+  /** Shares the in-flight refresh with any concurrent 401 retries. */
+  refresh: async () => {
+    const res = await refreshSession();
+    if (!res) throw new ApiError(401, 'Not signed in');
+    return res;
+  },
   me: () => request<UserPublic>('GET', '/users/me'),
 
   // -- profile -----------------------------------------------------------------
   updateProfile: (dto: UpdateProfileRequest) => request<UserPublic>('PATCH', '/users/me', dto),
-  changePassword: (dto: ChangePasswordRequest) =>
-    request<void>('PUT', '/users/me/password', dto),
+  changePassword: (dto: ChangePasswordRequest) => request<void>('PUT', '/users/me/password', dto),
   uploadAvatar: (file: File) => uploadImage('/users/me/avatar', file),
   removeAvatar: () => request<UserPublic>('DELETE', '/users/me/avatar'),
   uploadBanner: (file: File) => uploadImage('/users/me/banner', file),
@@ -219,14 +234,41 @@ export const api = {
       '/users/me/favorites',
       dto,
     ),
-  getProfileDiary: (username: string) =>
-    request<ProfileDiaryResponse>('GET', `/users/${encodeURIComponent(username)}/diary`),
+  getProfileDiary: (
+    username: string,
+    opts: { cursor?: string; limit?: number; year?: number; month?: number } = {},
+  ) =>
+    request<ProfileDiaryResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/diary${toQuery(opts)}`,
+    ),
   getProfileWatchlist: (username: string) =>
     request<ProfileWatchlistResponse>('GET', `/users/${encodeURIComponent(username)}/watchlist`),
-  getProfileReviews: (username: string) =>
-    request<UserReviewListResponse>('GET', `/users/${encodeURIComponent(username)}/reviews`),
-  getProfileWatched: (username: string) =>
-    request<ProfileWatchedResponse>('GET', `/users/${encodeURIComponent(username)}/watched`),
+  getProfileReviews: (username: string, cursor?: string) =>
+    request<UserReviewListResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/reviews${toQuery({ cursor })}`,
+    ),
+  getProfileWatched: (username: string, query: Partial<ProfileWatchedQuery> = {}) =>
+    request<ProfileWatchedResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/watched${toQuery(query)}`,
+    ),
+  getProfileLikes: (username: string, kind: ProfileLikesKind, cursor?: string) =>
+    request<ProfileLikesResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/likes${toQuery({ kind, cursor })}`,
+    ),
+  getProfileActivity: (username: string, opts: { cursor?: string; limit?: number } = {}) =>
+    request<ActivityFeedResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/activity${toQuery(opts)}`,
+    ),
+  getHome: () => request<HomeResponse>('GET', '/home'),
+  searchMembers: (q: string, cursor?: string) =>
+    request<MemberListResponse>('GET', `/search/members${toQuery({ q, cursor })}`),
+  searchLists: (q: string, cursor?: string) =>
+    request<ListListResponse>('GET', `/search/lists${toQuery({ q, cursor })}`),
 
   // -- social graph -------------------------------------------------------------
   getMembers: (query: Partial<MemberListQuery>) =>
@@ -276,8 +318,15 @@ export const api = {
   // -- lists ---------------------------------------------------------------------
   browseLists: (query: Partial<ListBrowseQuery>) =>
     request<ListListResponse>('GET', `/lists${toQuery(query)}`),
-  getUserLists: (username: string) =>
-    request<ListListResponse>('GET', `/users/${encodeURIComponent(username)}/lists`),
+  /** `containsMediaId` adds `containsMedia` to every summary. */
+  getUserLists: (username: string, containsMediaId?: string) =>
+    request<ListListResponse>(
+      'GET',
+      `/users/${encodeURIComponent(username)}/lists${toQuery({ containsMediaId })}`,
+    ),
+  /** Public lists that include this title. */
+  getMediaLists: (mediaId: string, cursor?: string, limit = 6) =>
+    request<ListListResponse>('GET', `/media/${mediaId}/lists${toQuery({ cursor, limit })}`),
   getList: (id: string) => request<ListDetail>('GET', `/lists/${id}`),
   createList: (dto: CreateListRequest) => request<ListDetail>('POST', '/lists', dto),
   updateList: (id: string, dto: UpdateListRequest) =>
@@ -293,8 +342,7 @@ export const api = {
     request<ListDetail>('PUT', `/lists/${id}/order`, dto),
   likeList: (id: string) => request<void>('POST', `/lists/${id}/like`),
   unlikeList: (id: string) => request<void>('DELETE', `/lists/${id}/like`),
-  getListComments: (id: string) =>
-    request<ListCommentListResponse>('GET', `/lists/${id}/comments`),
+  getListComments: (id: string) => request<ListCommentListResponse>('GET', `/lists/${id}/comments`),
   addListComment: (id: string, dto: CreateListCommentRequest) =>
     request<ListComment>('POST', `/lists/${id}/comments`, dto),
   deleteListComment: (id: string, commentId: string) =>
@@ -326,7 +374,8 @@ export const api = {
   getPerson: (id: string) => request<PersonDetail>('GET', `/people/${encodeURIComponent(id)}`),
   getPersonByName: (name: string) =>
     request<PersonDetail>('GET', `/people/by-name?name=${encodeURIComponent(name)}`),
-  getFriendRatings: (id: string) => request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
+  getFriendRatings: (id: string) =>
+    request<FriendRatingsResponse>('GET', `/media/${id}/friend-ratings`),
   getArtworkOptions: (mediaId: string) =>
     request<ArtworkOptionsResponse>('GET', `/media/${mediaId}/artwork`),
   setArtwork: (mediaId: string, kind: ArtworkKind, sourceUrl: string | null) =>
@@ -352,11 +401,8 @@ export const api = {
   createReview: (mediaId: string, dto: CreateReviewRequest) =>
     request<Review>('POST', `/media/${mediaId}/reviews`, dto),
   getReviews: (mediaId: string, sort: ReviewSort = 'POPULAR', cursor?: string) =>
-    request<ReviewListResponse>(
-      'GET',
-      `/media/${mediaId}/reviews?sort=${sort}${cursor ? `&cursor=${cursor}` : ''}`,
-    ),
-  getReview: (reviewId: string) => request<Review>('GET', `/reviews/${reviewId}`),
+    request<ReviewListResponse>('GET', `/media/${mediaId}/reviews${toQuery({ sort, cursor })}`),
+  getReview: (reviewId: string) => request<UserReview>('GET', `/reviews/${reviewId}`),
   updateReview: (reviewId: string, dto: UpdateReviewRequest) =>
     request<Review>('PATCH', `/reviews/${reviewId}`, dto),
   deleteReview: (reviewId: string) => request<void>('DELETE', `/reviews/${reviewId}`),
@@ -379,8 +425,7 @@ export const api = {
     request<RatingResponse>('PUT', '/ratings', { ...ref, value }),
 
   // -- episodes --------------------------------------------------------------
-  getEpisodes: (mediaId: string) =>
-    request<EpisodesResponse>('GET', `/media/${mediaId}/episodes`),
+  getEpisodes: (mediaId: string) => request<EpisodesResponse>('GET', `/media/${mediaId}/episodes`),
   rateEpisode: (episodeId: string, value: number | null) =>
     request<EpisodeRatingResponse>('PUT', `/episodes/${episodeId}/rating`, { value }),
   clearSeasonRatings: (mediaId: string, seasonNumber: number) =>
@@ -396,8 +441,7 @@ export const api = {
 
   // -- admin -----------------------------------------------------------------
   adminListUsers: () => request<AdminUserListResponse>('GET', '/admin/users'),
-  adminCreateUser: (dto: AdminCreateUserRequest) =>
-    request<AdminUser>('POST', '/admin/users', dto),
+  adminCreateUser: (dto: AdminCreateUserRequest) => request<AdminUser>('POST', '/admin/users', dto),
   adminUpdateUser: (id: string, dto: AdminUpdateUserRequest) =>
     request<AdminUser>('PATCH', `/admin/users/${id}`, dto),
   adminDeleteUser: (id: string) => request<void>('DELETE', `/admin/users/${id}`),

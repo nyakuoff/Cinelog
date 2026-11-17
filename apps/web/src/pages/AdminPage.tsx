@@ -4,8 +4,9 @@ import { Navigate } from 'react-router-dom';
 import type { AdminUser, UserRole } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { cn } from '../lib/cn';
-import { Button, Card, Input, Spinner } from '../components/ui';
+import { Button, Card, Input, Notice, Segmented, Spinner } from '../components/ui';
+import { useConfirm } from '../components/Dialog';
+import { PageHeader } from '../components/lb';
 import { Field } from '../components/Field';
 
 export function AdminPage(): JSX.Element {
@@ -14,12 +15,10 @@ export function AdminPage(): JSX.Element {
   if (user && user.role !== 'ADMIN') return <Navigate to="/" replace />;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10 app:py-4 sm:px-6">
-      <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">Admin</p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight">Instance</h1>
-      <p className="mt-1 text-sm text-muted">
+    <div className="mx-auto max-w-4xl px-4 py-8 app:py-4 sm:px-6">
+      <PageHeader title="Instance" kicker="Admin">
         Manage accounts and point Cinelog at the other services you host.
-      </p>
+      </PageHeader>
 
       <IntegrationsCard />
       <CreateUserCard />
@@ -173,9 +172,9 @@ function IntegrationsCard(): JSX.Element {
           </div>
 
           {mut.isError && (
-            <p className="rounded-sm border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+            <Notice>
               {errorMessage(mut.error)}
-            </p>
+            </Notice>
           )}
 
           <div className="flex items-center gap-3">
@@ -264,7 +263,7 @@ function CreateUserCard(): JSX.Element {
             {createMut.isPending ? 'Creating…' : 'Create user'}
           </Button>
           {createMut.isError && (
-            <span className="text-sm text-rose">{errorMessage(createMut.error)}</span>
+            <Notice>{errorMessage(createMut.error)}</Notice>
           )}
           {createMut.isSuccess && <span className="text-sm text-cyan">User created.</span>}
         </div>
@@ -322,6 +321,7 @@ function UserRow({ u, isSelf }: { u: AdminUser; isSelf: boolean }): JSX.Element 
     onSuccess: invalidate,
   });
 
+  const confirm = useConfirm();
   const busy = roleMut.isPending || passwordMut.isPending || deleteMut.isPending;
   const anyError = roleMut.error ?? passwordMut.error ?? deleteMut.error;
 
@@ -356,12 +356,17 @@ function UserRow({ u, isSelf }: { u: AdminUser; isSelf: boolean }): JSX.Element 
           </Button>
           <Button
             size="sm"
-            variant="ghost"
+            variant="danger"
             disabled={busy || isSelf}
             title={isSelf ? 'You cannot delete your own account' : undefined}
-            className="text-rose hover:bg-rose/10 hover:text-rose"
-            onClick={() => {
-              if (confirm(`Delete ${u.username}? This removes all their data.`)) deleteMut.mutate();
+            onClick={async () => {
+              const ok = await confirm({
+                title: `Delete ${u.username}?`,
+                body: 'This removes the account and all of its data. It cannot be undone.',
+                confirmLabel: 'Delete account',
+                danger: true,
+              });
+              if (ok) deleteMut.mutate();
             }}
           >
             Delete
@@ -389,7 +394,7 @@ function UserRow({ u, isSelf }: { u: AdminUser; isSelf: boolean }): JSX.Element 
         </div>
       )}
 
-      {anyError && <p className="mt-2 text-sm text-rose">{errorMessage(anyError)}</p>}
+      {anyError && <Notice className="mt-3">{errorMessage(anyError)}</Notice>}
     </Card>
   );
 }
@@ -398,36 +403,23 @@ function RolePicker({
   value,
   onChange,
   disabled,
-  compact,
 }: {
   value: UserRole;
   onChange: (role: UserRole) => void;
   disabled?: boolean;
   compact?: boolean;
 }): JSX.Element {
-  const roles: UserRole[] = ['USER', 'ADMIN'];
   return (
-    <div
-      className={cn(
-        'flex gap-1 rounded-xl border border-border bg-surface-2 p-1',
-        compact ? '' : 'w-fit',
-      )}
-    >
-      {roles.map((r) => (
-        <button
-          key={r}
-          type="button"
-          disabled={disabled}
-          onClick={() => value !== r && onChange(r)}
-          className={cn(
-            'rounded-lg px-3 py-1 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors disabled:opacity-50',
-            value === r ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-          )}
-        >
-          {r}
-        </button>
-      ))}
-    </div>
+    <Segmented
+      label="Role"
+      value={value}
+      onChange={(r) => !disabled && r !== value && onChange(r)}
+      className={disabled ? 'pointer-events-none opacity-50' : undefined}
+      options={[
+        { value: 'USER', label: 'User' },
+        { value: 'ADMIN', label: 'Admin' },
+      ]}
+    />
   );
 }
 

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MediaDetail, RequestStatus, WatchProvider } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
 import { cn } from '../lib/cn';
+import { Button, Notice } from './ui';
 
 /**
  * "Where to watch", under the poster.
@@ -170,6 +171,7 @@ function ProviderRow({
               alt={p.name}
               title={p.name}
               loading="lazy"
+              decoding="async"
               className="h-7 w-7 rounded-sm ring-1 ring-border-hi/60"
             />
           ) : (
@@ -240,17 +242,13 @@ function RequestControl({
 
   return (
     <>
-      <button
-        onClick={onRequest}
-        disabled={pending}
-        className="w-full rounded-sm border border-border-hi bg-transparent px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content hover:border-gold hover:text-gold disabled:opacity-50"
-      >
+      <Button size="sm" className="w-full" onClick={onRequest} disabled={pending}>
         {pending ? 'Requesting…' : 'Request'}
-      </button>
+      </Button>
       {error != null && (
-        <p className="mt-1.5 text-xs text-rose">
+        <Notice className="mt-1.5">
           {error instanceof ApiError ? error.message : 'Could not send that request'}
-        </p>
+        </Notice>
       )}
     </>
   );

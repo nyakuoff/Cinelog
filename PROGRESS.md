@@ -282,6 +282,43 @@ repeat log edits rather than hitting the one-review-per-title constraint.
   nonsense name → 404, unauthenticated → 401, and a freshly fetched title carrying person ids
   on every credit.
 
+### Letterboxd-parity UI refresh (2026-11-17)
+
+Web only (`apps/web`); consumes the endpoints added alongside it (`/home`, profile
+diary/watched/likes/activity, `/search/members`, `/search/lists`, `/media/:id/lists`,
+`GET /reviews/:id`, `isRanked`, `viewerWatched`, `watchCount`). Same shells, same primitives.
+
+- **Nav** (`components/Layout.tsx`, `components/app/AppShell.tsx`): Home · Media · Lists ·
+  Members · Activity; account menu Profile / Diary / Reviews / Watchlist / Lists / Likes /
+  Library / Settings / Admin. `/` focuses search. The app's first tab is "Home", and its
+  profile strip carries the same sections as a profile.
+- **Home** (`pages/DiscoverPage.tsx`): friends-first — New from friends, Popular with friends
+  this week, the provider rails, Popular reviews from friends, Recent lists. Falls back to
+  instance-wide with a "follow members" prompt. The filter bar is gone (it lives on Media).
+- **Profile** (`pages/PublicProfilePage.tsx`): routed tabs at `/u/:username/:tab` and
+  `/profile/:tab` — Profile, Activity, Films, Diary, Reviews, Watchlist, Lists, Likes,
+  Network. Films has type/decade/genre/sort/liked/rated filters in the URL and pages by
+  cursor; Diary is grouped by month with edit (date, rewatch) and remove; the header uses
+  the uploaded banner when there is one.
+- **Title page** (`pages/MediaDetailPage.tsx`): record card reordered (stamps → rating →
+  Review or log → Add to lists → Share → Your activity), status picker only for episodic
+  titles, `components/AddToListsDialog.tsx`, reviews split into friends / popular, "Lists
+  containing this", genres link to `/films?genre=`, histogram with end labels and a readout
+  (`RatingHistogram` in `components/Rating.tsx`).
+- **Review page** (`pages/ReviewPage.tsx`, `/review/:id`): linked from review cards, the
+  diary, Home, profiles and the activity feed. Spoilers wait behind a reveal.
+- **Search** (`pages/SearchPage.tsx`): Titles (captioned rows) · Members · Lists, tab and
+  query in the URL.
+- **Lists** (`pages/ListDetailPage.tsx`, `pages/ListsPage.tsx`): grid/detail toggle
+  (remembered), position numbers only on ranked lists, "You've watched X of Y", a watched
+  mark per entry, a "Ranked list" checkbox on create/edit.
+- **Log** (`components/LogModal.tsx`): "Add to diary" checkbox; off marks the title watched
+  without a diary entry.
+- **Person** (`pages/PersonPage.tsx`): your marks under each credit and a watched tally.
+- **Media browse** (`pages/FilmsPage.tsx`): filters and page live in the URL.
+- New shared pieces: `PosterMarks` (`components/lb.tsx`), `UserReviewCard` /
+  `ReviewLikeButton` (`components/ReviewsSection.tsx`), `ActivityFeed` takes a `username`.
+
 ## Not yet started
 
 - **Notifications** — `Notification` table exists from slice 1; no endpoints or UI yet.
@@ -291,11 +328,6 @@ repeat log edits rather than hitting the one-review-per-title constraint.
 - **Moderation** — `ContentReport` / `ModerationAction` tables exist from slice 1; no
   endpoints or UI yet. Needs a report action on reviews/comments/lists/profiles, an admin
   queue, and hide/remove actions with an audit trail.
-- **Unified search** — search currently covers titles only. Extending it to members and
-  lists needs the same privacy filters already used elsewhere (no private profiles or
-  lists in results). Recent searches stored client-side.
-- **"Lists containing this title"** on the film page — the query is straightforward
-  (`ListItem` by `mediaItemId`, filtered to public lists); just not wired up yet.
 - **Episode-level tracking** — currently only episode *ratings* exist; there's no separate
   "watched" flag per episode, which is why profile stats count rated episodes as a proxy.
 

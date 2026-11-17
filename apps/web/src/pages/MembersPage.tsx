@@ -2,15 +2,14 @@ import { useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { MemberSort } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { cn } from '../lib/cn';
-import { EmptyState, SectionHeader } from '../components/lb';
+import { EmptyState, PageHeader } from '../components/lb';
 import { MemberCard } from '../components/MemberCard';
-import { Spinner } from '../components/ui';
+import { Input, Segmented, Spinner } from '../components/ui';
 
-const SORTS: { key: MemberSort; label: string }[] = [
-  { key: 'POPULAR', label: 'Popular' },
-  { key: 'ACTIVE', label: 'Recently active' },
-  { key: 'RECENT', label: 'Newest' },
+const SORTS: { value: MemberSort; label: string }[] = [
+  { value: 'POPULAR', label: 'Popular' },
+  { value: 'ACTIVE', label: 'Recently active' },
+  { value: 'RECENT', label: 'Newest' },
 ];
 
 export function MembersPage(): JSX.Element {
@@ -27,40 +26,25 @@ export function MembersPage(): JSX.Element {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 app:py-4 sm:px-6">
-      <SectionHeader
+      <PageHeader
         title="Members"
-        right={isFetching ? <Spinner className="h-4 w-4" /> : undefined}
+        actions={isFetching && !isLoading ? <Spinner className="h-4 w-4" /> : undefined}
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded border border-border bg-surface p-0.5">
-          {SORTS.map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setSort(s.key)}
-              className={cn(
-                'rounded px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-                sort === s.key ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <input
+        <Segmented label="Sort members" value={sort} onChange={setSort} options={SORTS} />
+        <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Find a member…"
           aria-label="Find a member"
-          className="h-9 flex-1 min-w-[10rem] rounded border border-border bg-surface-2 px-3 text-sm text-content placeholder:text-muted-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+          className="h-9 min-w-[10rem] flex-1 coarse:h-11"
         />
       </div>
 
       <div className="mt-6">
         {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Spinner />
-          </div>
+          <Spinner center />
         ) : members.length === 0 ? (
           <EmptyState
             title={q ? 'No members match that search' : 'No members yet'}

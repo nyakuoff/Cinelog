@@ -1,30 +1,98 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
-import type { ProfileDiaryEntry, PublicProfile } from '@cinelog/contracts';
-import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  BROWSE_GENRES,
+  type FavoriteSlot,
+  type ProfileDiaryEntry,
+  type ProfileLikesKind,
+  type ProfileWatchedSort,
+  type PublicProfile,
+} from '@cinelog/contracts';
 import { useAuth } from '../lib/auth';
 import { api, ApiError } from '../lib/api';
+import { useScreenHeader } from '../lib/appShell';
+import { decadeOptions, formatMonth, localDateString } from '../lib/format';
+import { invalidateUserMedia } from '../lib/invalidate';
 import { posterGradient } from '../lib/poster';
 import { cn } from '../lib/cn';
 import { Avatar } from '../components/Avatar';
-import { PosterCard } from '../components/PosterCard';
-import { Button, Card, Spinner } from '../components/ui';
+import { ActivityFeed } from '../components/ActivityFeed';
+import { IconEdit, IconHeart, IconReview, IconRewatch } from '../components/app/Icons';
+import {
+  Button,
+  Checkbox,
+  Input,
+  LoadMore,
+  Notice,
+  Segmented,
+  Select,
+  Spinner,
+} from '../components/ui';
+import { Dialog, useConfirm } from '../components/Dialog';
+import { RatingHistogram, RatingMark } from '../components/Rating';
 import { FavoritesEditorModal } from '../components/FavoritesEditorModal';
 import { FollowButton, MemberCard } from '../components/MemberCard';
 import { ListCard } from '../components/ListCard';
+import { UserReviewCard } from '../components/ReviewsSection';
 import { CreateListModal } from './ListsPage';
-import { EmptyState } from '../components/lb';
+import {
+  EmptyState,
+  ErrorState,
+  isEpisodic,
+  mediaHref,
+  Poster,
+  PosterGrid,
+  PosterGridSkeleton,
+  PosterMarks,
+  PosterThumb,
+  SectionHeader,
+  TabBar,
+  Tag,
+} from '../components/lb';
 
-type Tab = 'overview' | 'diary' | 'reviews' | 'watched' | 'lists' | 'watchlist' | 'network';
+const TABS = [
+  { key: 'profile', label: 'Profile' },
+  { key: 'activity', label: 'Activity' },
+  { key: 'films', label: 'Films' },
+  { key: 'diary', label: 'Diary' },
+  { key: 'reviews', label: 'Reviews' },
+  { key: 'watchlist', label: 'Watchlist' },
+  { key: 'lists', label: 'Lists' },
+  { key: 'likes', label: 'Likes' },
+  { key: 'network', label: 'Network' },
+] as const;
+type Tab = (typeof TABS)[number]['key'];
 
+/**
+ * A member's profile. Each section is its own address — `/u/:username/:tab`,
+ * or `/profile/:tab` for your own — so Back, reload and a shared link all land
+ * on the section you were reading.
+ */
 export function PublicProfilePage(): JSX.Element {
-  const params = useParams<{ username?: string }>();
+  const params = useParams<{ username?: string; tab?: string }>();
   const { user: viewer } = useAuth();
   const username = params.username ?? viewer?.username;
+  if (!username) return <></>;
+  const tab = TABS.find((t) => t.key === params.tab)?.key ?? 'profile';
+  // Keyed so /u/a → /u/b starts fresh (follow state) instead of reusing a's.
+  return <ProfileView key={username} username={username} tab={tab} routed={!!params.username} />;
+}
+
+/** Query keys are all `['profile', username, ...]` so one prefix invalidates a profile. */
+function ProfileView({
+  username,
+  tab,
+  routed,
+}: {
+  username: string;
+  tab: Tab;
+  /** Reached as `/u/:username` (a pushed screen) rather than the `/profile` tab. */
+  routed: boolean;
+}): JSX.Element {
   const navigate = useNavigate();
   const [editingFavorites, setEditingFavorites] = useState(false);
-  const [tab, setTab] = useState<Tab>('overview');
+  const base = routed ? `/u/${encodeURIComponent(username)}` : '/profile';
 
   const {
     data: profile,
@@ -34,31 +102,24 @@ export function PublicProfilePage(): JSX.Element {
     refetch,
   } = useQuery({
     queryKey: ['profile', username],
-    queryFn: () => api.getPublicProfile(username as string),
-    enabled: !!username,
+    queryFn: () => api.getPublicProfile(username),
   });
 
-  if (!username) return <></>;
+  // A member's screen is titled with their name; your own tab stays "Profile".
+  useScreenHeader({
+    title: routed ? (profile ? profile.displayName || profile.username : username) : undefined,
+  });
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-24">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner center />;
 
   if (isError) {
     const notFound = error instanceof ApiError && error.status === 404;
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center sm:px-6">
-        <p className="mb-4 text-muted">
-          {notFound ? 'No user found with that username.' : 'Could not load this profile.'}
-        </p>
-        {!notFound && (
-          <Button variant="secondary" onClick={() => void refetch()}>
-            Try again
-          </Button>
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+        {notFound ? (
+          <EmptyState title="Member not found" body="No one here has that username." />
+        ) : (
+          <ErrorState title="Could not load this profile" onRetry={() => void refetch()} />
         )}
       </div>
     );
@@ -74,149 +135,146 @@ export function PublicProfilePage(): JSX.Element {
           size={64}
           className="mx-auto mb-4"
         />
-        <h1 className="font-cond text-xl font-extrabold uppercase tracking-tight">
+        <h1 className="font-cond text-2xl font-extrabold uppercase tracking-[0.02em]">
           @{profile.username}
         </h1>
-        <p className="mt-2 text-sm text-muted">This profile is private.</p>
+        {profile.profileVisibility === 'FOLLOWERS' && profile.isFollowedByViewer !== null ? (
+          <>
+            <p className="mt-2 text-sm text-muted">Follow to see their activity.</p>
+            <div className="mt-4 flex justify-center">
+              <FollowButton
+                username={profile.username}
+                initialFollowing={profile.isFollowedByViewer}
+              />
+            </div>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-muted">This profile is private.</p>
+        )}
       </div>
     );
   }
+
+  const u = profile.username;
+  const own = profile.isOwnProfile;
+  const editFavorites = (): void => setEditingFavorites(true);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 app:py-4 sm:px-6">
       <ProfileHeader
         profile={profile}
-        onEditFavorites={() => setEditingFavorites(true)}
+        base={base}
+        // The header is the profile's cover; the deeper sections keep only its
+        // name line so their content starts near the top of a phone screen.
+        compact={tab !== 'profile'}
+        onEditFavorites={editFavorites}
         onEditProfile={() => navigate('/settings')}
       />
 
-      <div className="mt-8 flex gap-1 border-b border-border">
-        <TabButton active={tab === 'overview'} onClick={() => setTab('overview')}>
-          Overview
-        </TabButton>
-        <TabButton active={tab === 'diary'} onClick={() => setTab('diary')}>
-          Diary
-        </TabButton>
-        <TabButton active={tab === 'reviews'} onClick={() => setTab('reviews')}>
-          Reviews
-        </TabButton>
-        <TabButton active={tab === 'watched'} onClick={() => setTab('watched')}>
-          Watched
-        </TabButton>
-        <TabButton active={tab === 'lists'} onClick={() => setTab('lists')}>
-          Lists
-        </TabButton>
-        {profile.canViewWatchlist && (
-          <TabButton active={tab === 'watchlist'} onClick={() => setTab('watchlist')}>
-            Watchlist
-          </TabButton>
-        )}
-        <TabButton active={tab === 'network'} onClick={() => setTab('network')}>
-          Network
-        </TabButton>
-      </div>
+      {/* Your own profile in the installed app is tabbed by the shell's strip. */}
+      <TabBar
+        className={cn('mt-6', !routed && 'app:hidden')}
+        active={tab}
+        tabs={TABS.filter((t) => t.key !== 'watchlist' || profile.canViewWatchlist).map((t) => ({
+          ...t,
+          to: t.key === 'profile' ? base : `${base}/${t.key}`,
+        }))}
+      />
 
-      {tab === 'overview' && (
-        <div className="mt-8 grid gap-8 lg:grid-cols-[2fr_1fr]">
-          <section>
-            <SectionTitle>Favorite films</SectionTitle>
-            {profile.favoriteFilms.length === 0 ? (
-              <EmptyFavorites
-                isOwnProfile={profile.isOwnProfile}
-                label="films"
-                onEdit={() => setEditingFavorites(true)}
+      {tab === 'profile' && (
+        <div className="mt-8 grid gap-x-10 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-8">
+            <Favorites
+              title="Favorite films"
+              noun="films"
+              slots={profile.favoriteFilms}
+              profile={profile}
+              onEdit={editFavorites}
+            />
+            <Favorites
+              title="Favorite shows"
+              noun="shows"
+              slots={profile.favoriteShows}
+              profile={profile}
+              onEdit={editFavorites}
+            />
+            <RecentActivity username={u} base={base} />
+            <RecentReviews username={u} base={base} />
+          </div>
+
+          <aside className="min-w-0 space-y-8">
+            <div>
+              <SectionHeader
+                title="Ratings"
+                count={profile.stats.totalRatings}
+                more={`${base}/films?rated=true&sort=RATING_DESC`}
+                moreLabel="All"
               />
-            ) : (
-              <div className="grid grid-cols-4 gap-4">
-                {profile.favoriteFilms.map((f) => (
-                  <PosterCard
-                    key={f.media.id}
-                    title={f.media.title}
-                    year={f.media.year}
-                    type={f.media.type}
-                    posterUrl={f.media.posterUrl}
-                    onClick={() =>
-                      navigate(
-                        `/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`,
-                      )
-                    }
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="mt-8">
-              <SectionTitle>Favorite shows</SectionTitle>
-              {profile.favoriteShows.length === 0 ? (
-                <EmptyFavorites
-                  isOwnProfile={profile.isOwnProfile}
-                  label="shows"
-                  onEdit={() => setEditingFavorites(true)}
-                />
+              {profile.stats.totalRatings === 0 ? (
+                <p className="text-sm text-muted-2">No ratings yet.</p>
               ) : (
-                <div className="grid grid-cols-4 gap-4">
-                  {profile.favoriteShows.map((f) => (
-                    <PosterCard
-                      key={f.media.id}
-                      title={f.media.title}
-                      year={f.media.year}
-                      type={f.media.type}
-                      posterUrl={f.media.posterUrl}
-                      onClick={() =>
-                        navigate(
-                          `/media/${f.media.id}?libraryOf=${encodeURIComponent(profile.username)}`,
-                        )
-                      }
-                    />
-                  ))}
-                </div>
+                <RatingHistogram
+                  buckets={profile.ratingDistribution}
+                  // Buckets are normalized; label them in whichever scale the
+                  // member mostly rates in.
+                  type={profile.stats.showsWatched > profile.stats.moviesWatched ? 'TV' : 'MOVIE'}
+                  height={72}
+                />
               )}
             </div>
-
-            <div className="mt-10">
-              <SectionTitle>Rating distribution</SectionTitle>
-              <RatingHistogram buckets={profile.ratingDistribution} />
-            </div>
-          </section>
-
-          <aside className="space-y-8">
             <div>
-              <SectionTitle>Genres</SectionTitle>
+              <SectionHeader title="Genres" />
               {profile.topGenres.length === 0 ? (
                 <p className="text-sm text-muted-2">No rated titles yet.</p>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {profile.topGenres.map((g) => (
-                    <span
+                    <Link
                       key={g.genre}
-                      className="rounded-sm border border-border-hi bg-surface-2 px-2.5 py-1 font-cond text-[11px] font-bold uppercase tracking-[0.08em] text-muted"
+                      to={`${base}/films?genre=${encodeURIComponent(g.genre)}`}
+                      className="hover:[&>*]:border-content hover:[&>*]:text-content"
                     >
-                      {g.genre} <span className="text-muted-2">· {g.count}</span>
-                    </span>
+                      <Tag count={g.count}>{g.genre}</Tag>
+                    </Link>
                   ))}
                 </div>
               )}
+            </div>
+            <div>
+              <SectionHeader title="Network" more={`${base}/network`} moreLabel="All" />
+              <p className="flex gap-5 text-sm text-muted">
+                <Link to={`${base}/network`} className="hover:text-content">
+                  <b className="font-data text-content">{profile.followerCount}</b> followers
+                </Link>
+                <Link to={`${base}/network?side=following`} className="hover:text-content">
+                  <b className="font-data text-content">{profile.followingCount}</b> following
+                </Link>
+              </p>
             </div>
           </aside>
         </div>
       )}
 
-      {tab === 'diary' && (
-        <DiaryTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
+      {tab === 'activity' && (
+        <div className="mt-2">
+          <ActivityFeed
+            username={u}
+            emptyTitle="No activity yet"
+            emptyBody={own ? 'What you log, rate and review shows up here.' : 'Nothing logged yet.'}
+          />
+        </div>
       )}
-      {tab === 'reviews' && <ReviewsTab username={profile.username} />}
-      {tab === 'watched' && <WatchedTab username={profile.username} />}
-      {tab === 'lists' && (
-        <ListsTab username={profile.username} isOwnProfile={profile.isOwnProfile} />
-      )}
-      {tab === 'watchlist' && profile.canViewWatchlist && (
-        <WatchlistTab username={profile.username} />
-      )}
-      {tab === 'network' && <NetworkTab username={profile.username} />}
+      {tab === 'films' && <FilmsTab username={u} own={own} />}
+      {tab === 'diary' && <DiaryTab username={u} own={own} />}
+      {tab === 'reviews' && <ReviewsTab username={u} />}
+      {tab === 'watchlist' && profile.canViewWatchlist && <WatchlistTab username={u} />}
+      {tab === 'lists' && <ListsTab username={u} isOwnProfile={own} />}
+      {tab === 'likes' && <LikesTab username={u} />}
+      {tab === 'network' && <NetworkTab username={u} />}
 
       {editingFavorites && (
         <FavoritesEditorModal
-          username={profile.username}
+          username={u}
           initialFilms={profile.favoriteFilms}
           initialShows={profile.favoriteShows}
           onClose={() => setEditingFavorites(false)}
@@ -226,161 +284,135 @@ export function PublicProfilePage(): JSX.Element {
   );
 }
 
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'border-b-2 px-3 py-2.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-        active ? 'border-gold text-content' : 'border-transparent text-muted hover:text-content',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+/* ---- Overview ------------------------------------------------------------ */
 
-function DiaryTab({
+/** The latest four diary entries as posters with the marks left on them. */
+function RecentActivity({
   username,
-  isOwnProfile,
+  base,
 }: {
   username: string;
-  isOwnProfile: boolean;
-}): JSX.Element {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ['profile-diary', username],
-    queryFn: () => api.getProfileDiary(username),
+  base: string;
+}): JSX.Element | null {
+  const { data } = useQuery({
+    queryKey: ['profile', username, 'diary', 'recent'],
+    queryFn: () => api.getProfileDiary(username, { limit: 4 }),
   });
-
-  const deleteMut = useMutation({
-    mutationFn: (entryId: string) => api.deleteWatchEntry(entryId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['profile-diary', username] }),
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-  }
-  if ((data?.entries.length ?? 0) === 0) {
-    return <p className="py-10 text-center text-muted">No diary entries yet.</p>;
-  }
-
+  if (!data || data.entries.length === 0) return null;
   return (
-    <div className="mt-6 divide-y divide-border">
-      {data?.entries.map((entry) => (
-        <DiaryRow
-          key={entry.id}
-          entry={entry}
-          canEdit={isOwnProfile}
-          onOpen={() => navigate(`/media/${entry.media.id}`)}
-          onDelete={() => deleteMut.mutate(entry.id)}
-        />
-      ))}
+    <div>
+      <SectionHeader title="Recent activity" more={`${base}/diary`} moreLabel="Diary" />
+      <PosterGrid variant="four">
+        {data.entries.map((e) => (
+          <Poster
+            key={e.id}
+            title={e.media.title}
+            year={e.media.year}
+            type={e.media.type}
+            posterUrl={e.media.posterUrl}
+            to={mediaHref(e.media, username)}
+            caption={
+              <PosterMarks
+                type={e.media.type}
+                rating={e.rating}
+                liked={e.liked}
+                rewatch={e.isRewatch}
+                reviewId={e.reviewId}
+              />
+            }
+          />
+        ))}
+      </PosterGrid>
     </div>
   );
 }
 
-function DiaryRow({
-  entry,
-  canEdit,
-  onOpen,
-  onDelete,
+function RecentReviews({ username, base }: { username: string; base: string }): JSX.Element | null {
+  const { data } = useQuery({
+    queryKey: ['profile', username, 'reviews', 'recent'],
+    queryFn: () => api.getProfileReviews(username),
+  });
+  if (!data || data.reviews.length === 0) return null;
+  return (
+    <div>
+      <SectionHeader title="Recent reviews" more={`${base}/reviews`} moreLabel="All reviews" />
+      <div className="divide-y divide-border">
+        {data.reviews.slice(0, 3).map((r) => (
+          <UserReviewCard key={r.id} review={r} showAuthor={false} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A member's four favourites, or the invitation to pick them. */
+function Favorites({
+  title,
+  noun,
+  slots,
+  profile,
+  onEdit,
 }: {
-  entry: ProfileDiaryEntry;
-  canEdit: boolean;
-  onOpen: () => void;
-  onDelete: () => void;
+  title: string;
+  noun: string;
+  slots: FavoriteSlot[];
+  profile: PublicProfile;
+  onEdit: () => void;
 }): JSX.Element {
   return (
-    <div className="flex items-center gap-3 py-3">
-      <button onClick={onOpen} className="h-16 w-11 shrink-0 overflow-hidden rounded bg-surface-2">
-        {entry.media.posterUrl ? (
-          <img
-            src={entry.media.posterUrl}
-            alt={entry.media.title}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div
-            className="h-full w-full"
-            style={{ background: posterGradient(entry.media.title) }}
-          />
-        )}
-      </button>
-      <button onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <p className="truncate text-sm font-medium text-content">
-          {entry.media.title}{' '}
-          {entry.media.year && <span className="text-muted-2">({entry.media.year})</span>}
-        </p>
-        <p className="text-xs text-muted-2">
-          {new Date(entry.watchedAt).toLocaleDateString()}
-          {entry.isRewatch && ' · rewatch'}
-        </p>
-      </button>
-      {entry.rating !== null && (
-        <span className="font-data text-xs font-bold text-gold">
-          {fromNormalized(entry.rating, scaleForMediaType(entry.media.type))}
-        </span>
-      )}
-      {canEdit && (
-        <button
-          onClick={() => {
-            if (confirm('Remove this diary entry?')) onDelete();
-          }}
-          className="text-xs text-muted-2 hover:text-rose"
-        >
-          Remove
-        </button>
+    <div>
+      <SectionHeader title={title} />
+      {slots.length === 0 ? (
+        <EmptyState
+          compact
+          title={profile.isOwnProfile ? `Pick up to four ${noun}` : `No favorite ${noun} yet`}
+          body={profile.isOwnProfile ? 'They sit at the top of your profile.' : undefined}
+          action={
+            profile.isOwnProfile ? <Button onClick={onEdit}>Choose favorites</Button> : undefined
+          }
+        />
+      ) : (
+        <PosterGrid variant="four">
+          {slots.map((f) => (
+            <Poster
+              key={f.media.id}
+              title={f.media.title}
+              year={f.media.year}
+              type={f.media.type}
+              posterUrl={f.media.posterUrl}
+              to={mediaHref(f.media, profile.username)}
+            />
+          ))}
+        </PosterGrid>
       )}
     </div>
   );
 }
 
 function WatchlistTab({ username }: { username: string }): JSX.Element {
-  const navigate = useNavigate();
   const { data, isLoading } = useQuery({
-    queryKey: ['profile-watchlist', username],
+    queryKey: ['profile', username, 'watchlist'],
     queryFn: () => api.getProfileWatchlist(username),
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner center />;
   if ((data?.items.length ?? 0) === 0) {
-    return <p className="py-10 text-center text-muted">Nothing on the watchlist yet.</p>;
+    return <EmptyState compact className="mt-6" title="Nothing on the watchlist yet" />;
   }
 
   return (
-    <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-      {data?.items.map((item, i) => (
-        <PosterCard
+    <PosterGrid className="mt-6">
+      {data?.items.map((item) => (
+        <Poster
           key={item.id}
           title={item.title}
           year={item.year}
           type={item.type}
           posterUrl={item.posterUrl}
-          index={i}
-          onClick={() => navigate(`/media/${item.id}?libraryOf=${encodeURIComponent(username)}`)}
+          to={mediaHref(item, username)}
         />
       ))}
-    </div>
+    </PosterGrid>
   );
 }
 
@@ -397,13 +429,7 @@ function ListsTab({
     queryFn: () => api.getUserLists(username),
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner center />;
 
   return (
     <div className="mt-6">
@@ -412,13 +438,13 @@ function ListsTab({
           title={isOwnProfile ? "You haven't made a list yet" : 'No lists yet'}
           body={
             isOwnProfile
-              ? 'Group films into a top ten, a marathon, or any collection you like.'
+              ? 'Group titles into a top ten, a marathon, or any collection you like.'
               : undefined
           }
           action={
             isOwnProfile ? (
               <Button variant="primary" onClick={() => setCreating(true)}>
-                + New list
+                New list
               </Button>
             ) : undefined
           }
@@ -427,9 +453,7 @@ function ListsTab({
         <>
           {isOwnProfile && (
             <div className="mb-4 flex justify-end">
-              <Button variant="secondary" onClick={() => setCreating(true)}>
-                + New list
-              </Button>
+              <Button onClick={() => setCreating(true)}>New list</Button>
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -444,345 +468,716 @@ function ListsTab({
   );
 }
 
-function NetworkTab({ username }: { username: string }): JSX.Element {
-  const [side, setSide] = useState<'followers' | 'following'>('followers');
-  const { data, isLoading } = useQuery({
-    queryKey: ['network', username, side],
-    queryFn: () => (side === 'followers' ? api.getFollowers(username) : api.getFollowing(username)),
+/* ---- Films ---------------------------------------------------------------- */
+
+const WATCHED_SORTS: { value: ProfileWatchedSort; label: string }[] = [
+  { value: 'WATCHED_DESC', label: 'Recently watched' },
+  { value: 'RATED_DESC', label: 'Recently rated' },
+  { value: 'RATING_DESC', label: 'Highest rated' },
+  { value: 'RATING_ASC', label: 'Lowest rated' },
+  { value: 'RELEASE_DESC', label: 'Newest release' },
+  { value: 'RELEASE_ASC', label: 'Oldest release' },
+  { value: 'TITLE', label: 'Title' },
+];
+
+const WATCHED_TYPES = [
+  { value: 'all', label: 'All' },
+  { value: 'films', label: 'Films' },
+  { value: 'shows', label: 'Shows' },
+] as const;
+
+/**
+ * Everything the member has watched, rated, or marked completed — not just
+ * what has a diary entry — with their marks under each poster. The filters
+ * live in the URL, so a filtered shelf is a link.
+ */
+function FilmsTab({ username, own }: { username: string; own: boolean }): JSX.Element {
+  const [params, setParams] = useSearchParams();
+  const type = WATCHED_TYPES.find((t) => t.value === params.get('type'))?.value ?? 'all';
+  const sort = WATCHED_SORTS.find((o) => o.value === params.get('sort'))?.value ?? 'WATCHED_DESC';
+  const decade = Number(params.get('decade')) || undefined;
+  const genre = params.get('genre') ?? '';
+  const liked = params.get('liked') === 'true';
+  const rated = params.get('rated') === 'true';
+  const filtered = type !== 'all' || !!decade || !!genre || liked || rated;
+
+  /** Set or (with '' / the default) clear one filter, replacing history. */
+  function set(key: string, value: string): void {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setParams(next, { replace: true });
+  }
+
+  const query = useInfiniteQuery({
+    queryKey: ['profile', username, 'watched', { type, sort, decade, genre, liked, rated }],
+    queryFn: ({ pageParam }) =>
+      api.getProfileWatched(username, {
+        type,
+        sort,
+        decade,
+        genre: genre || undefined,
+        // Flags are filters only when on; `false` would mean "not liked".
+        liked: liked || undefined,
+        rated: rated || undefined,
+        cursor: pageParam,
+        limit: 72,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
+  const entries = query.data?.pages.flatMap((p) => p.entries) ?? [];
+  // A genre from a link (a profile's own top genres) may not be in the fixed list.
+  const genres: string[] = [...BROWSE_GENRES];
+  if (genre && !genres.includes(genre)) genres.unshift(genre);
+  const cell = 'w-full sm:w-auto';
 
   return (
     <div className="mt-6">
-      <div className="mb-4 flex gap-1 rounded border border-border bg-surface p-0.5 sm:w-fit">
-        {(['followers', 'following'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setSide(s)}
-            className={cn(
-              'flex-1 rounded px-4 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors sm:flex-none',
-              side === s ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-            )}
-          >
-            {s}
-          </button>
-        ))}
+      <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 sm:flex sm:flex-wrap">
+        <Segmented
+          label="Films or shows"
+          value={type}
+          onChange={(v) => set('type', v === 'all' ? '' : v)}
+          options={WATCHED_TYPES}
+          className="col-span-2 w-fit sm:mr-1"
+        />
+        <Select
+          value={decade ?? ''}
+          onChange={(e) => set('decade', e.target.value)}
+          aria-label="Decade"
+          className={cell}
+        >
+          <option value="">Any decade</option>
+          {decadeOptions().map((d) => (
+            <option key={d} value={d}>
+              {d}s
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={genre}
+          onChange={(e) => set('genre', e.target.value)}
+          aria-label="Genre"
+          className={cell}
+        >
+          <option value="">Any genre</option>
+          {genres.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={sort}
+          onChange={(e) => set('sort', e.target.value === 'WATCHED_DESC' ? '' : e.target.value)}
+          aria-label="Sort by"
+          className={cn(cell, 'col-span-2 sm:col-span-1')}
+        >
+          {WATCHED_SORTS.map((o) => (
+            <option key={o.value} value={o.value}>
+              Sort: {o.label}
+            </option>
+          ))}
+        </Select>
+        <div className="col-span-2 flex gap-4 sm:ml-1">
+          <Checkbox checked={liked} onChange={(e) => set('liked', e.target.checked ? 'true' : '')}>
+            Liked
+          </Checkbox>
+          <Checkbox checked={rated} onChange={(e) => set('rated', e.target.checked ? 'true' : '')}>
+            Rated
+          </Checkbox>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
-      ) : (data?.members.length ?? 0) === 0 ? (
+      <div className="mt-6">
+        {query.isLoading ? (
+          <PosterGridSkeleton />
+        ) : query.isError ? (
+          <ErrorState compact onRetry={() => void query.refetch()} />
+        ) : entries.length === 0 ? (
+          <EmptyState
+            compact
+            title={filtered ? 'Nothing matches these filters' : 'Nothing watched yet'}
+            action={
+              filtered ? (
+                <Button onClick={() => setParams({}, { replace: true })}>Clear filters</Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <>
+            <PosterGrid>
+              {entries.map((e) => (
+                <Poster
+                  key={e.media.id}
+                  title={e.media.title}
+                  year={e.media.year}
+                  type={e.media.type}
+                  posterUrl={e.media.posterUrl}
+                  to={mediaHref(e.media, username)}
+                  caption={
+                    <span title={own ? 'Your rating' : `${username}'s rating`}>
+                      <PosterMarks type={e.media.type} rating={e.rating} liked={e.liked} />
+                    </span>
+                  }
+                />
+              ))}
+            </PosterGrid>
+            <LoadMore query={query} />
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Diary ---------------------------------------------------------------- */
+
+function DiaryTab({ username, own }: { username: string; own: boolean }): JSX.Element {
+  const [editing, setEditing] = useState<ProfileDiaryEntry | null>(null);
+  const query = useInfiniteQuery({
+    queryKey: ['profile', username, 'diary'],
+    queryFn: ({ pageParam }) => api.getProfileDiary(username, { cursor: pageParam, limit: 50 }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const entries = query.data?.pages.flatMap((p) => p.entries) ?? [];
+
+  if (query.isLoading) return <Spinner center />;
+  if (query.isError) return <ErrorState compact onRetry={() => void query.refetch()} />;
+  if (entries.length === 0) {
+    return (
+      <EmptyState
+        compact
+        className="mt-6"
+        title="No diary entries yet"
+        body={own ? 'Log a title with a date and it lands here.' : undefined}
+      />
+    );
+  }
+
+  // Newest first from the server, so months arrive already in order. Watch
+  // dates are stored at 12:00 UTC: the ISO prefix is the calendar month.
+  const months: { key: string; entries: ProfileDiaryEntry[] }[] = [];
+  for (const e of entries) {
+    const key = e.watchedAt.slice(0, 7);
+    const last = months[months.length - 1];
+    if (last?.key === key) last.entries.push(e);
+    else months.push({ key, entries: [e] });
+  }
+
+  return (
+    <>
+      <div className="mt-6 space-y-8">
+        {months.map((m) => (
+          <section key={m.key}>
+            <SectionHeader
+              title={formatMonth(`${m.key}-01T12:00:00.000Z`, { dateOnly: true })}
+              count={m.entries.length}
+            />
+            <ul className="divide-y divide-border">
+              {m.entries.map((e, i) => (
+                <DiaryRow
+                  key={e.id}
+                  entry={e}
+                  // The day is printed once; later entries that day sit under it.
+                  showDay={m.entries[i - 1]?.watchedAt.slice(0, 10) !== e.watchedAt.slice(0, 10)}
+                  onEdit={own ? () => setEditing(e) : undefined}
+                />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+      <LoadMore query={query} />
+      {/* Outside the spaced stack: `space-y` would push the sheet off the foot. */}
+      {editing && <EditDiaryEntry entry={editing} onClose={() => setEditing(null)} />}
+    </>
+  );
+}
+
+function DiaryRow({
+  entry: e,
+  showDay,
+  onEdit,
+}: {
+  entry: ProfileDiaryEntry;
+  showDay: boolean;
+  onEdit?: () => void;
+}): JSX.Element {
+  const to = mediaHref(e.media);
+  const rating = e.rating !== null && (
+    <RatingMark
+      value={e.rating}
+      type={e.media.type}
+      size={12}
+      display={isEpisodic(e.media.type) ? 'number' : 'stars'}
+    />
+  );
+  const mark = 'grid w-5 place-items-center';
+  const liked = e.liked && (
+    <span title="Liked" className={cn(mark, 'text-rose')}>
+      <IconHeart filled className="h-3.5 w-3.5" />
+      <span className="sr-only">Liked</span>
+    </span>
+  );
+  const rewatch = e.isRewatch && (
+    <span title="Rewatch" className={mark}>
+      <IconRewatch className="h-3.5 w-3.5" />
+      <span className="sr-only">Rewatch</span>
+    </span>
+  );
+  return (
+    <li className="flex items-center gap-3 py-2.5">
+      <time
+        dateTime={e.watchedAt.slice(0, 10)}
+        className={cn(
+          'w-9 shrink-0 text-center font-data text-[26px] font-bold leading-none',
+          showDay ? 'text-muted' : 'text-transparent',
+        )}
+        aria-hidden={!showDay}
+      >
+        {Number(e.watchedAt.slice(8, 10))}
+      </time>
+      <PosterThumb title={e.media.title} posterUrl={e.media.posterUrl} to={to} size="xs" />
+      <div className="min-w-0 flex-1">
+        <Link to={to} className="group block">
+          <span className="font-cond text-[17px] font-extrabold uppercase leading-tight tracking-[0.02em] text-content group-hover:text-gold">
+            {e.media.title}
+          </span>
+          {e.media.year && (
+            <span className="ml-2 font-data text-[13px] text-muted-2">{e.media.year}</span>
+          )}
+        </Link>
+        {/* On a phone the marks sit under the title; there's no room beside it. */}
+        {(rating || liked || rewatch) && (
+          <p className="mt-1 flex items-center gap-1 text-muted-2 sm:hidden">
+            {rating}
+            {liked}
+            {rewatch}
+          </p>
+        )}
+      </div>
+      {/* Fixed-width mark columns, so ratings and icons line up down the page. */}
+      <span className="hidden w-24 shrink-0 justify-end sm:flex">{rating}</span>
+      <span className="hidden w-10 shrink-0 items-center text-muted-2 sm:flex">
+        <span className="w-5">{liked}</span>
+        <span className="w-5">{rewatch}</span>
+      </span>
+      <span className="flex shrink-0 items-center text-muted-2">
+        {e.reviewId ? (
+          <Link
+            to={`/review/${e.reviewId}`}
+            title="Read the review"
+            aria-label="Read the review"
+            className="grid h-8 w-7 place-items-center hover:text-content coarse:h-11"
+          >
+            <IconReview className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span className="w-7" />
+        )}
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            aria-label={`Edit diary entry for ${e.media.title}`}
+            title="Edit entry"
+            className="grid h-8 w-7 place-items-center rounded-sm hover:bg-surface-2 hover:text-content coarse:h-11 coarse:w-9"
+          >
+            <IconEdit className="h-4 w-4" />
+          </button>
+        )}
+      </span>
+    </li>
+  );
+}
+
+/** Correct a diary entry's date or rewatch flag, or strike it from the diary. */
+function EditDiaryEntry({
+  entry,
+  onClose,
+}: {
+  entry: ProfileDiaryEntry;
+  onClose: () => void;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const confirm = useConfirm();
+  const [date, setDate] = useState(entry.watchedAt.slice(0, 10));
+  const [isRewatch, setIsRewatch] = useState(entry.isRewatch);
+
+  const done = (): void => {
+    invalidateUserMedia(queryClient, entry.media.id);
+    onClose();
+  };
+  const save = useMutation({
+    mutationFn: () =>
+      // Date-only on the server (stored at 12:00 UTC), so send that instant.
+      api.updateWatchEntry(entry.id, { watchedAt: `${date}T12:00:00.000Z`, isRewatch }),
+    onSuccess: done,
+  });
+  const remove = useMutation({
+    mutationFn: () => api.deleteWatchEntry(entry.id),
+    onSuccess: done,
+  });
+  const failed = save.error ?? remove.error;
+
+  return (
+    <Dialog
+      title={entry.media.title}
+      size="sm"
+      onClose={onClose}
+      footer={
+        <>
+          <Button
+            variant="danger"
+            className="mr-auto"
+            disabled={remove.isPending}
+            onClick={async () => {
+              const ok = await confirm({
+                title: 'Remove this diary entry?',
+                body: `Your ${entry.isRewatch ? 'rewatch' : 'watch'} of ${entry.media.title} will be removed from your diary. Your rating stays.`,
+                confirmLabel: 'Remove',
+                danger: true,
+              });
+              if (ok) remove.mutate();
+            }}
+          >
+            Remove
+          </Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!date || save.isPending}
+            onClick={() => save.mutate()}
+          >
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <label className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2">
+            Watched on
+          </span>
+          <Input
+            type="date"
+            value={date}
+            max={localDateString()}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-9 w-auto font-data coarse:h-11"
+          />
+        </label>
+        <Checkbox checked={isRewatch} onChange={(e) => setIsRewatch(e.target.checked)}>
+          I&rsquo;d seen it before (rewatch)
+        </Checkbox>
+        {failed && (
+          <Notice>
+            {failed instanceof ApiError ? failed.message : 'Could not save the entry'}
+          </Notice>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
+/* ---- Reviews, likes, network ---------------------------------------------- */
+
+function ReviewsTab({ username }: { username: string }): JSX.Element {
+  const query = useInfiniteQuery({
+    queryKey: ['profile', username, 'reviews'],
+    queryFn: ({ pageParam }) => api.getProfileReviews(username, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const reviews = query.data?.pages.flatMap((p) => p.reviews) ?? [];
+
+  if (query.isLoading) return <Spinner center />;
+  if (reviews.length === 0) {
+    return <EmptyState compact className="mt-6" title="No reviews yet" />;
+  }
+  return (
+    <div className="mt-2">
+      <div className="divide-y divide-border">
+        {reviews.map((r) => (
+          <UserReviewCard key={r.id} review={r} showAuthor={false} />
+        ))}
+      </div>
+      <LoadMore query={query} />
+    </div>
+  );
+}
+
+const LIKE_KINDS: { value: ProfileLikesKind; label: string }[] = [
+  { value: 'titles', label: 'Titles' },
+  { value: 'reviews', label: 'Reviews' },
+  { value: 'lists', label: 'Lists' },
+];
+
+function LikesTab({ username }: { username: string }): JSX.Element {
+  const [params, setParams] = useSearchParams();
+  const kind = LIKE_KINDS.find((k) => k.value === params.get('kind'))?.value ?? 'titles';
+  const query = useInfiniteQuery({
+    queryKey: ['profile', username, 'likes', kind],
+    queryFn: ({ pageParam }) => api.getProfileLikes(username, kind, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const pages = query.data?.pages ?? [];
+  const titles = pages.flatMap((p) => p.titles);
+  const reviews = pages.flatMap((p) => p.reviews);
+  const lists = pages.flatMap((p) => p.lists);
+
+  return (
+    <div className="mt-6">
+      <Segmented
+        label="Kind of like"
+        className="mb-5"
+        value={kind}
+        onChange={(k) => setParams(k === 'titles' ? {} : { kind: k }, { replace: true })}
+        options={LIKE_KINDS}
+      />
+      {query.isLoading ? (
+        <Spinner center />
+      ) : query.isError ? (
+        <ErrorState compact onRetry={() => void query.refetch()} />
+      ) : titles.length + reviews.length + lists.length === 0 ? (
+        <EmptyState compact title={`No liked ${kind} yet`} />
+      ) : (
+        <>
+          {kind === 'titles' && (
+            <PosterGrid>
+              {titles.map((t) => (
+                <Poster
+                  key={t.id}
+                  title={t.title}
+                  year={t.year}
+                  type={t.type}
+                  posterUrl={t.posterUrl}
+                  to={mediaHref(t)}
+                />
+              ))}
+            </PosterGrid>
+          )}
+          {kind === 'reviews' && (
+            <div className="divide-y divide-border">
+              {reviews.map((r) => (
+                <UserReviewCard key={r.id} review={r} />
+              ))}
+            </div>
+          )}
+          {kind === 'lists' && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {lists.map((l) => (
+                <ListCard key={l.id} list={l} />
+              ))}
+            </div>
+          )}
+          <LoadMore query={query} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function NetworkTab({ username }: { username: string }): JSX.Element {
+  const [params, setParams] = useSearchParams();
+  const side = params.get('side') === 'following' ? 'following' : 'followers';
+  const query = useInfiniteQuery({
+    queryKey: ['profile', username, 'network', side],
+    queryFn: ({ pageParam }) =>
+      side === 'followers'
+        ? api.getFollowers(username, pageParam)
+        : api.getFollowing(username, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const members = query.data?.pages.flatMap((p) => p.members) ?? [];
+
+  return (
+    <div className="mt-6">
+      <Segmented
+        label="Followers or following"
+        className="mb-4"
+        value={side}
+        onChange={(s) => setParams(s === 'following' ? { side: s } : {}, { replace: true })}
+        options={[
+          { value: 'followers', label: 'Followers' },
+          { value: 'following', label: 'Following' },
+        ]}
+      />
+
+      {query.isLoading ? (
+        <Spinner center />
+      ) : members.length === 0 ? (
         <EmptyState
+          compact
           title={side === 'followers' ? 'No followers yet' : 'Not following anyone yet'}
         />
       ) : (
-        <div className="grid gap-2.5 sm:grid-cols-2">
-          {data?.members.map((m) => (
-            <MemberCard key={m.id} member={m} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ReviewsTab({ username }: { username: string }): JSX.Element {
-  const navigate = useNavigate();
-  const [revealedBodies, setRevealedBodies] = useState<Record<string, string>>({});
-  const { data, isLoading } = useQuery({
-    queryKey: ['profile-reviews', username],
-    queryFn: () => api.getProfileReviews(username),
-  });
-
-  async function reveal(reviewId: string): Promise<void> {
-    const full = await api.getReview(reviewId);
-    setRevealedBodies((prev) => ({ ...prev, [reviewId]: full.body }));
-  }
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-  }
-  if ((data?.reviews.length ?? 0) === 0) {
-    return <p className="py-10 text-center text-muted">No reviews yet.</p>;
-  }
-
-  return (
-    <div className="mt-6 divide-y divide-border">
-      {data?.reviews.map((r) => (
-        <div key={r.id} className="flex items-start gap-3 py-4">
-          <button
-            onClick={() => navigate(`/media/${r.media.id}`)}
-            className="h-20 w-14 shrink-0 overflow-hidden rounded bg-surface-2"
-          >
-            {r.media.posterUrl ? (
-              <img
-                src={r.media.posterUrl}
-                alt={r.media.title}
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div
-                className="h-full w-full"
-                style={{ background: posterGradient(r.media.title) }}
-              />
-            )}
-          </button>
-          <div className="min-w-0 flex-1">
-            <button onClick={() => navigate(`/media/${r.media.id}`)} className="text-left">
-              <span className="text-sm font-medium text-content hover:text-gold">
-                {r.media.title}{' '}
-                {r.media.year && <span className="text-muted-2">({r.media.year})</span>}
-              </span>
-            </button>
-            {r.ratingValue !== null && (
-              <span className="ml-2 text-xs font-semibold text-gold">
-                {fromNormalized(r.ratingValue, scaleForMediaType(r.media.type))}
-              </span>
-            )}
-            <p className="text-xs text-muted-2">{new Date(r.createdAt).toLocaleDateString()}</p>
-            {r.concealed && revealedBodies[r.id] === undefined ? (
-              <button
-                onClick={() => void reveal(r.id)}
-                className="mt-1.5 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5 text-xs text-muted hover:text-content"
-              >
-                Contains spoilers — click to reveal
-              </button>
-            ) : (
-              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-content/90">
-                {revealedBodies[r.id] ?? r.body}
-              </p>
-            )}
+        <>
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            {members.map((m) => (
+              <MemberCard key={m.id} member={m} />
+            ))}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Every title the member has watched, rated, or marked completed — not just
- *  the ones with a diary entry. Uses PosterCard (rating badge top-right) to
- *  match the same convention as Library/Watchlist, rather than the inline
- *  star-text style used elsewhere on the page. */
-function WatchedTab({ username }: { username: string }): JSX.Element {
-  const navigate = useNavigate();
-  const { data, isLoading } = useQuery({
-    queryKey: ['profile-watched', username],
-    queryFn: () => api.getProfileWatched(username),
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-  }
-  if ((data?.entries.length ?? 0) === 0) {
-    return <p className="py-10 text-center text-muted">Nothing watched yet.</p>;
-  }
-
-  return (
-    <div className="mt-6 grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-      {data?.entries.map((e, i) => (
-        <PosterCard
-          key={e.media.id}
-          title={e.media.title}
-          year={e.media.year}
-          type={e.media.type}
-          posterUrl={e.media.posterUrl}
-          rating={e.rating}
-          index={i}
-          onClick={() => navigate(`/media/${e.media.id}?libraryOf=${encodeURIComponent(username)}`)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }): JSX.Element {
-  return (
-    <h2 className="mb-3 font-cond text-[13px] font-extrabold uppercase tracking-[0.16em] text-content">
-      {children}
-    </h2>
-  );
-}
-
-function EmptyFavorites({
-  isOwnProfile,
-  onEdit,
-  label,
-}: {
-  isOwnProfile: boolean;
-  onEdit: () => void;
-  label: string;
-}): JSX.Element {
-  return (
-    <Card className="p-6 text-center">
-      <p className="text-sm text-muted">
-        {isOwnProfile
-          ? `Pick up to 4 ${label} to feature on your profile.`
-          : `No favorite ${label} yet.`}
-      </p>
-      {isOwnProfile && (
-        <Button variant="secondary" className="mt-3" onClick={onEdit}>
-          Choose favorites
-        </Button>
+          <LoadMore query={query} />
+        </>
       )}
-    </Card>
-  );
-}
-
-function RatingHistogram({
-  buckets,
-}: {
-  buckets: { bucket: number; count: number }[];
-}): JSX.Element {
-  const max = Math.max(1, ...buckets.map((b) => b.count));
-  const total = buckets.reduce((s, b) => s + b.count, 0);
-  if (total === 0) return <p className="text-sm text-muted-2">No ratings yet.</p>;
-  return (
-    <div className="flex h-28 items-end gap-1.5">
-      {buckets.map((b) => (
-        <div key={b.bucket} className="flex flex-1 flex-col items-center gap-1">
-          <div
-            className={cn('w-full', b.count > 0 ? 'bg-gold' : 'bg-border')}
-            style={{ height: `${Math.max(4, (b.count / max) * 100)}%` }}
-            title={`${b.count} rating${b.count === 1 ? '' : 's'}`}
-          />
-          <span className="font-data text-[11px] text-muted-2">{b.bucket}</span>
-        </div>
-      ))}
     </div>
   );
 }
+
+/* ---- Header --------------------------------------------------------------- */
 
 function ProfileHeader({
   profile,
+  base,
+  compact,
   onEditFavorites,
   onEditProfile,
 }: {
   profile: PublicProfile;
+  base: string;
+  compact: boolean;
   onEditFavorites: () => void;
   onEditProfile: () => void;
 }): JSX.Element {
-  const joined = new Date(profile.joinedAt).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'long',
-  });
+  const avatar = { username: profile.username, avatarUrl: profile.avatarUrl };
+  const favorites = [...profile.favoriteFilms, ...profile.favoriteShows].slice(0, 4);
   return (
     <div>
-      {/* Header backdrop: a collage of the member's own favorite posters, the
-          way a Letterboxd profile header is built from the account's own
-          activity rather than a separately-uploaded banner image. */}
-      <div className="relative">
-        <div className="h-40 overflow-hidden rounded-2xl border border-border bg-surface-2 sm:h-52">
-          {(() => {
-            const banner = [...profile.favoriteFilms, ...profile.favoriteShows].slice(0, 4);
-            return banner.length > 0 ? (
-              <div className="grid h-full grid-cols-4">
-                {banner.map((f) => (
-                  <div key={f.media.id} className="relative overflow-hidden">
-                    {f.media.posterUrl ? (
-                      <img src={f.media.posterUrl} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <div
-                        className="h-full w-full"
-                        style={{ background: posterGradient(f.media.title) }}
-                      />
-                    )}
-                  </div>
-                ))}
-                {Array.from({ length: 4 - banner.length }).map((_, i) => (
-                  <div
-                    key={`fill-${i}`}
-                    style={{ background: posterGradient(profile.username + i) }}
-                  />
-                ))}
-              </div>
-            ) : null;
-          })()}
-          {[...profile.favoriteFilms, ...profile.favoriteShows].length === 0 && (
-            <div
-              className="h-full w-full"
-              style={{ background: posterGradient(profile.username) }}
-            />
-          )}
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
-        </div>
-        <div className="absolute -bottom-8 left-5">
-          <div className="rounded-sm ring-4 ring-bg">
-            <Avatar user={{ username: profile.username, avatarUrl: profile.avatarUrl }} size={80} />
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-10 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-cond text-2xl font-extrabold uppercase tracking-tight">
-            {profile.displayName || profile.username}
-          </h1>
-          <p className="text-sm text-muted-2">
-            @{profile.username} · Joined {joined}
-          </p>
-          {profile.bio && <p className="mt-2 max-w-xl text-sm text-muted">{profile.bio}</p>}
-        </div>
-
-        {profile.isOwnProfile ? (
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={onEditFavorites}>
-              Edit favorites
-            </Button>
-            <Button variant="secondary" onClick={onEditProfile}>
-              Edit profile
-            </Button>
-          </div>
-        ) : (
-          profile.isFollowedByViewer !== null && (
-            <div className="flex items-center gap-2">
-              {profile.followsViewer && (
-                <span className="font-cond text-[11px] font-bold uppercase tracking-wide text-cyan">
-                  Follows you
-                </span>
-              )}
-              <FollowButton
-                username={profile.username}
-                initialFollowing={profile.isFollowedByViewer}
+      {/* Cover: the member's uploaded banner, or — the way a Letterboxd header
+          is built from the account's own taste — a collage of their favourites. */}
+      {!compact && (
+        <div className="relative mb-10">
+          <div className="relative h-40 overflow-hidden rounded-sm border border-border bg-surface-2 sm:h-52">
+            {profile.bannerUrl ? (
+              <img
+                src={profile.bannerUrl}
+                alt=""
+                decoding="async"
+                fetchPriority="high"
+                className="h-full w-full object-cover"
               />
-            </div>
-          )
-        )}
+            ) : favorites.length > 0 ? (
+              <div className="grid h-full grid-cols-4">
+                {Array.from({ length: 4 }, (_, i) => {
+                  const f = favorites[i];
+                  return f?.media.posterUrl ? (
+                    <img
+                      key={i}
+                      src={f.media.posterUrl}
+                      alt=""
+                      decoding="async"
+                      fetchPriority="high"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div
+                      key={i}
+                      style={{ background: posterGradient(f?.media.title ?? profile.username + i) }}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                className="h-full w-full"
+                style={{ background: posterGradient(profile.username) }}
+              />
+            )}
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
+          </div>
+          <div className="absolute -bottom-8 left-5 rounded-sm ring-4 ring-bg">
+            <Avatar user={avatar} size={80} />
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          {compact && (
+            <Link to={base} className="shrink-0">
+              <Avatar user={avatar} size={44} />
+            </Link>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate font-cond text-2xl font-extrabold uppercase tracking-[0.02em]">
+              <Link to={base}>{profile.displayName || profile.username}</Link>
+            </h1>
+            <p className="mt-0.5 font-data text-[13px] text-muted-2">
+              @{profile.username} · joined {formatMonth(profile.joinedAt)}
+            </p>
+            {!compact && profile.bio && (
+              <p className="mt-2 max-w-xl whitespace-pre-wrap text-sm text-muted">{profile.bio}</p>
+            )}
+          </div>
+        </div>
+
+        {profile.isOwnProfile
+          ? !compact && (
+              <div className="flex gap-2">
+                <Button onClick={onEditFavorites}>Edit favorites</Button>
+                <Button onClick={onEditProfile}>Edit profile</Button>
+              </div>
+            )
+          : profile.isFollowedByViewer !== null && (
+              <div className="flex items-center gap-2">
+                {profile.followsViewer && (
+                  <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-cyan">
+                    Follows you
+                  </span>
+                )}
+                <FollowButton
+                  username={profile.username}
+                  initialFollowing={profile.isFollowedByViewer}
+                />
+              </div>
+            )}
       </div>
 
-      <StatsRow profile={profile} />
+      {!compact && <StatsRow profile={profile} base={base} />}
     </div>
   );
 }
 
-function StatsRow({ profile }: { profile: PublicProfile }): JSX.Element {
+/** The tallies, each one a door to the shelf it counts. */
+function StatsRow({ profile, base }: { profile: PublicProfile; base: string }): JSX.Element {
   const stats = profile.stats;
-  const items = [
-    { label: 'Films', value: stats.moviesWatched },
-    { label: 'Shows', value: stats.showsWatched },
+  const items: { label: string; value: number; to?: string }[] = [
+    { label: 'Films', value: stats.moviesWatched, to: `${base}/films?type=films` },
+    { label: 'Shows', value: stats.showsWatched, to: `${base}/films?type=shows` },
     { label: 'Episodes', value: stats.episodesWatched },
-    { label: 'Ratings', value: stats.totalRatings },
-    { label: 'Followers', value: profile.followerCount },
-    { label: 'Following', value: profile.followingCount },
+    { label: 'Ratings', value: stats.totalRatings, to: `${base}/films?rated=true` },
+    { label: 'Followers', value: profile.followerCount, to: `${base}/network` },
+    { label: 'Following', value: profile.followingCount, to: `${base}/network?side=following` },
   ];
   return (
     <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border pt-6 sm:grid-cols-6">
-      {items.map((i) => (
-        <div key={i.label} className="text-center">
-          <p className="font-data text-2xl font-bold text-content">{i.value}</p>
-          <p className="font-cond text-[11px] font-bold uppercase tracking-[0.16em] text-muted-2">
-            {i.label}
-          </p>
-        </div>
-      ))}
+      {items.map((i) => {
+        const inner = (
+          <>
+            <p className="font-data text-2xl font-bold text-content">{i.value}</p>
+            <p className="font-cond text-[11px] font-bold uppercase tracking-[0.16em] text-muted-2 group-hover:text-content">
+              {i.label}
+            </p>
+          </>
+        );
+        return i.to ? (
+          <Link key={i.label} to={i.to} className="group block text-center">
+            {inner}
+          </Link>
+        ) : (
+          <div key={i.label} className="text-center">
+            {inner}
+          </div>
+        );
+      })}
     </div>
   );
 }

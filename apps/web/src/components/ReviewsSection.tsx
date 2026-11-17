@@ -1,68 +1,115 @@
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Review, ReviewSort } from '@cinelog/contracts';
-import { fromNormalized, type RatingScale } from '@cinelog/contracts';
+import { useEffect, useState } from 'react';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { MediaDetail, Review, ReviewSort, UserReview } from '@cinelog/contracts';
+import type { RatingScale } from '@cinelog/contracts';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 import { cn } from '../lib/cn';
 import { Avatar } from './Avatar';
-import { Button, Select, Spinner } from './ui';
+import { IconComment, IconHeart } from './app/Icons';
+import { useConfirm } from './Dialog';
+import { DateText, EmptyState, isEpisodic, mediaHref, PosterThumb, SectionHeader } from './lb';
+import { RatingMark } from './Rating';
+import { Button, Checkbox, Input, LoadMore, Notice, Select, Spinner, Textarea } from './ui';
 
 const SORTS: { value: ReviewSort; label: string }[] = [
   { value: 'POPULAR', label: 'Popular' },
   { value: 'RECENT', label: 'Recent' },
   { value: 'HIGHEST', label: 'Highest rated' },
   { value: 'LOWEST', label: 'Lowest rated' },
-  { value: 'FOLLOWING', label: 'People you follow' },
 ];
 
-export function ReviewsSection({ mediaId, scale }: { mediaId: string; scale: RatingScale }): JSX.Element {
+export function ReviewsSection({
+  mediaId,
+  scale,
+  ownReview,
+}: {
+  mediaId: string;
+  scale: RatingScale;
+  /** From the media detail — the viewer's own review regardless of which page it sorts onto. */
+  ownReview: MediaDetail['ownReview'];
+}): JSX.Element {
   const [sort, setSort] = useState<ReviewSort>('POPULAR');
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const query = useInfiniteQuery({
     queryKey: ['reviews', mediaId, sort],
-    queryFn: () => api.getReviews(mediaId, sort),
+    queryFn: ({ pageParam }) => api.getReviews(mediaId, sort, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
+  const { isLoading } = query;
+  const reviews = query.data?.pages.flatMap((p) => p.reviews) ?? [];
+  // People you follow get their own shelf above everyone else's, the way a
+  // Letterboxd film page leads with friends.
+  const friends = useInfiniteQuery({
+    queryKey: ['reviews', mediaId, 'FOLLOWING'],
+    queryFn: ({ pageParam }) => api.getReviews(mediaId, 'FOLLOWING', pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const friendReviews = friends.data?.pages.flatMap((p) => p.reviews) ?? [];
 
   const invalidate = (): void => {
     void queryClient.invalidateQueries({ queryKey: ['reviews', mediaId] });
+    // ownReview and reviewCount live on the media detail.
+    void queryClient.invalidateQueries({ queryKey: ['media', mediaId] });
+    void queryClient.invalidateQueries({ queryKey: ['profile'] });
+    void queryClient.invalidateQueries({ queryKey: ['activity'] });
   };
-
-  const ownReview = data?.reviews.find((r) => r.isOwnReview) ?? null;
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
-          Reviews
-        </h2>
-        <Select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as ReviewSort)}
-          className="h-8"
-        >
-          {SORTS.map((s) => (
-            <option key={s.value} value={s.value}>
-              Sort: {s.label}
-            </option>
-          ))}
-        </Select>
-      </div>
+      {/* Keyed by review id so the form re-seeds from the saved review rather
+          than keeping whatever it held before that review existed. */}
+      <ReviewComposer
+        key={ownReview?.id ?? 'new'}
+        mediaId={mediaId}
+        existing={ownReview}
+        onSaved={invalidate}
+      />
 
-      <ReviewComposer mediaId={mediaId} scale={scale} existing={ownReview} onSaved={invalidate} />
+      {friendReviews.length > 0 && (
+        <div className="mb-10">
+          <SectionHeader title="Reviews from friends" count={friendReviews.length} />
+          <div className="space-y-6">
+            {friendReviews.map((r) => (
+              <ReviewCard key={r.id} review={r} scale={scale} onChanged={invalidate} />
+            ))}
+          </div>
+          <LoadMore query={friends} />
+        </div>
+      )}
 
+      <SectionHeader
+        title={sort === 'POPULAR' ? 'Popular reviews' : 'Reviews'}
+        right={
+          <Select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as ReviewSort)}
+            aria-label="Sort reviews"
+          >
+            {SORTS.map((o) => (
+              <option key={o.value} value={o.value}>
+                Sort: {o.label}
+              </option>
+            ))}
+          </Select>
+        }
+      />
       {isLoading ? (
-        <div className="flex justify-center py-10">
-          <Spinner />
-        </div>
-      ) : (data?.reviews.length ?? 0) === 0 ? (
-        <p className="py-6 text-sm text-muted">No reviews yet — be the first.</p>
+        <Spinner center />
+      ) : reviews.length === 0 ? (
+        <EmptyState compact title="No reviews yet" body="Be the first to write one." />
       ) : (
-        <div className="mt-6 space-y-6">
-          {data?.reviews.map((r) => (
-            <ReviewCard key={r.id} review={r} scale={scale} onChanged={invalidate} />
-          ))}
-        </div>
+        <>
+          <div className="space-y-6">
+            {reviews.map((r) => (
+              <ReviewCard key={r.id} review={r} scale={scale} onChanged={invalidate} />
+            ))}
+          </div>
+          <LoadMore query={query} />
+        </>
       )}
     </section>
   );
@@ -70,13 +117,11 @@ export function ReviewsSection({ mediaId, scale }: { mediaId: string; scale: Rat
 
 function ReviewComposer({
   mediaId,
-  scale,
   existing,
   onSaved,
 }: {
   mediaId: string;
-  scale: RatingScale;
-  existing: Review | null;
+  existing: MediaDetail['ownReview'];
   onSaved: () => void;
 }): JSX.Element {
   const [editing, setEditing] = useState(false);
@@ -94,42 +139,32 @@ function ReviewComposer({
     },
   });
 
-  if (!editing && !existing) {
+  if (!editing) {
     return (
-      <button
-        onClick={() => setEditing(true)}
-        className="mb-6 w-full rounded-xl border border-dashed border-border bg-surface-2 px-4 py-3 text-left text-sm text-muted hover:border-cyan hover:text-content"
-      >
-        Write a review…
-      </button>
-    );
-  }
-
-  if (!editing && existing) {
-    return (
-      <div className="mb-6 flex items-center justify-between rounded-xl border border-border bg-surface-2 px-4 py-3">
-        <p className="text-sm text-muted">You already reviewed this title.</p>
-        <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
-          Edit your review
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border bg-surface px-4 py-3">
+        <p className="text-sm text-muted">
+          {existing ? 'You already reviewed this title.' : 'Seen it? Say what you thought.'}
+        </p>
+        <Button size="sm" onClick={() => setEditing(true)}>
+          {existing ? 'Edit your review' : 'Write a review'}
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-border bg-surface-2 p-4">
-      <textarea
+    <div className="mb-6 rounded-sm border border-border bg-surface p-4">
+      <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value.slice(0, 10000))}
-        rows={4}
         placeholder="What did you think?"
-        className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-content placeholder:text-muted-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+        aria-label="Your review"
+        autoFocus
       />
-      <div className="mt-2 flex items-center justify-between">
-        <label className="flex items-center gap-2 text-xs text-muted">
-          <input type="checkbox" checked={isSpoiler} onChange={(e) => setIsSpoiler(e.target.checked)} />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <Checkbox checked={isSpoiler} onChange={(e) => setIsSpoiler(e.target.checked)}>
           Contains spoilers
-        </label>
+        </Checkbox>
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -137,6 +172,7 @@ function ReviewComposer({
             onClick={() => {
               setEditing(false);
               setBody(existing?.body ?? '');
+              setIsSpoiler(existing?.isSpoiler ?? false);
             }}
           >
             Cancel
@@ -152,9 +188,9 @@ function ReviewComposer({
         </div>
       </div>
       {mut.isError && (
-        <p className="mt-2 text-xs text-rose">
+        <Notice className="mt-3">
           {mut.error instanceof ApiError ? mut.error.message : 'Could not save review'}
-        </p>
+        </Notice>
       )}
     </div>
   );
@@ -169,27 +205,9 @@ function ReviewCard({
   scale: RatingScale;
   onChanged: () => void;
 }): JSX.Element {
+  const confirm = useConfirm();
   const [revealedBody, setRevealedBody] = useState<string | null>(null);
   const [showComments, setShowComments] = useState(false);
-  const [liked, setLiked] = useState(review.likedByViewer);
-  const [likeCount, setLikeCount] = useState(review.likeCount);
-
-  const likeMut = useMutation({
-    mutationFn: (next: boolean) => (next ? api.likeReview(review.id) : api.unlikeReview(review.id)),
-    onMutate: (next: boolean) => {
-      const prev = { liked, likeCount };
-      setLiked(next);
-      setLikeCount((c) => c + (next ? 1 : -1));
-      return prev;
-    },
-    onError: (_err, _next, prev) => {
-      if (prev) {
-        setLiked(prev.liked);
-        setLikeCount(prev.likeCount);
-      }
-    },
-  });
-
   const deleteMut = useMutation({
     mutationFn: () => api.deleteReview(review.id),
     onSuccess: onChanged,
@@ -205,55 +223,67 @@ function ReviewCard({
   return (
     <div className="border-b border-border pb-6 last:border-0">
       <div className="flex items-start gap-3">
-        <Avatar user={{ username: review.author.username, avatarUrl: review.author.avatarUrl }} size={36} />
+        <Link to={`/u/${review.author.username}`} className="shrink-0">
+          <Avatar
+            user={{ username: review.author.username, avatarUrl: review.author.avatarUrl }}
+            size={36}
+          />
+        </Link>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-content">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <Link
+              to={`/u/${review.author.username}`}
+              className="text-sm font-medium text-content hover:text-gold"
+            >
               {review.author.displayName || review.author.username}
-            </span>
+            </Link>
             {review.ratingValue !== null && (
-              <span className="text-xs font-semibold text-gold">
-                {fromNormalized(review.ratingValue, scale)}
-              </span>
+              <RatingMark value={review.ratingValue} scale={scale} size={12} />
             )}
-            <span className="text-xs text-muted-2">
-              {new Date(review.createdAt).toLocaleDateString()}
-              {review.editedAt && ' · edited'}
-            </span>
+            <Link to={`/review/${review.id}`} title="Open this review" className="hover:underline">
+              <DateText iso={review.createdAt} />
+            </Link>
+            {review.editedAt && <span className="font-data text-[11px] text-muted-2">edited</span>}
           </div>
 
           {showConcealed ? (
-            <button
-              onClick={() => void reveal()}
-              className="mt-2 rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-muted hover:text-content"
-            >
-              Contains spoilers — click to reveal
-            </button>
+            <Button size="sm" className="mt-2" onClick={() => void reveal()}>
+              Spoilers — reveal
+            </Button>
           ) : (
             <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-content/90">
               {revealedBody ?? review.body}
             </p>
           )}
 
-          <div className="mt-2 flex items-center gap-4 text-xs text-muted">
-            <button
-              onClick={() => likeMut.mutate(!liked)}
-              className={cn('flex items-center gap-1 hover:text-content', liked && 'text-rose')}
+          <div className="mt-1 flex items-center gap-1">
+            <ReviewLikeButton review={review} className="-ml-3" />
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-expanded={showComments}
+              aria-label="Comments"
+              onClick={() => setShowComments((v) => !v)}
             >
-              {liked ? '♥' : '♡'} {likeCount}
-            </button>
-            <button onClick={() => setShowComments((v) => !v)} className="hover:text-content">
-              💬 {review.commentCount}
-            </button>
+              <IconComment />
+              <span className="font-data tracking-normal">{review.commentCount}</span>
+            </Button>
             {review.isOwnReview && (
-              <button
-                onClick={() => {
-                  if (confirm('Delete this review?')) deleteMut.mutate();
+              <Button
+                variant="link"
+                size="sm"
+                className="ml-2"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'Delete this review?',
+                    confirmLabel: 'Delete review',
+                    danger: true,
+                  });
+                  if (ok) deleteMut.mutate();
                 }}
-                className="hover:text-rose"
               >
                 Delete
-              </button>
+              </Button>
             )}
           </div>
 
@@ -264,7 +294,7 @@ function ReviewCard({
   );
 }
 
-function ReviewComments({ reviewId }: { reviewId: string }): JSX.Element {
+export function ReviewComments({ reviewId }: { reviewId: string }): JSX.Element {
   const queryClient = useQueryClient();
   const [body, setBody] = useState('');
 
@@ -276,6 +306,7 @@ function ReviewComments({ reviewId }: { reviewId: string }): JSX.Element {
   const invalidate = (): void => {
     void queryClient.invalidateQueries({ queryKey: ['review-comments', reviewId] });
     void queryClient.invalidateQueries({ queryKey: ['reviews'] });
+    void queryClient.invalidateQueries({ queryKey: ['review', reviewId] });
   };
 
   const addMut = useMutation({
@@ -297,41 +328,179 @@ function ReviewComments({ reviewId }: { reviewId: string }): JSX.Element {
       ) : (
         data?.comments.map((c) => (
           <div key={c.id} className="flex items-start gap-2">
-            <Avatar user={{ username: c.author.username, avatarUrl: c.author.avatarUrl }} size={24} />
+            <Avatar
+              user={{ username: c.author.username, avatarUrl: c.author.avatarUrl }}
+              size={24}
+            />
             <div className="min-w-0 flex-1">
               <p className="text-xs">
                 <span className="font-medium text-content">
                   {c.author.displayName || c.author.username}
                 </span>{' '}
-                <span className="text-muted-2">{new Date(c.createdAt).toLocaleDateString()}</span>
+                <DateText iso={c.createdAt} />
               </p>
               <p className="text-sm text-content/90">{c.body}</p>
             </div>
             {c.isOwnComment && (
-              <button
-                onClick={() => deleteMut.mutate(c.id)}
-                className="text-xs text-muted-2 hover:text-rose"
-              >
+              <Button variant="link" size="sm" onClick={() => deleteMut.mutate(c.id)}>
                 Delete
-              </button>
+              </Button>
             )}
           </div>
         ))
       )}
       <div className="flex gap-2">
-        <input
+        <Input
           value={body}
           onChange={(e) => setBody(e.target.value.slice(0, 2000))}
           placeholder="Add a comment…"
-          className="h-8 flex-1 rounded-lg border border-border bg-surface-2 px-2.5 text-sm text-content placeholder:text-muted-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+          aria-label="Add a comment"
+          className="h-8 flex-1 coarse:h-10"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && body.trim()) addMut.mutate();
+            if (e.key === 'Enter' && body.trim() && !addMut.isPending) addMut.mutate();
           }}
         />
-        <Button size="sm" variant="secondary" disabled={!body.trim() || addMut.isPending} onClick={() => addMut.mutate()}>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={!body.trim() || addMut.isPending}
+          onClick={() => addMut.mutate()}
+        >
           Post
         </Button>
       </div>
     </div>
+  );
+}
+
+/** The heart on a review: optimistic, rolled back if the server says no. */
+export function ReviewLikeButton({
+  review,
+  className,
+}: {
+  review: Pick<Review, 'id' | 'likedByViewer' | 'likeCount'>;
+  className?: string;
+}): JSX.Element {
+  const [liked, setLiked] = useState(review.likedByViewer);
+  const [likeCount, setLikeCount] = useState(review.likeCount);
+  // Follow the server when a refetch brings different values (liked elsewhere).
+  useEffect(() => {
+    setLiked(review.likedByViewer);
+    setLikeCount(review.likeCount);
+  }, [review.likedByViewer, review.likeCount]);
+  const queryClient = useQueryClient();
+  const mut = useMutation({
+    mutationFn: (next: boolean) => (next ? api.likeReview(review.id) : api.unlikeReview(review.id)),
+    onMutate: (next: boolean) => {
+      const prev = { liked, likeCount };
+      setLiked(next);
+      setLikeCount((c) => c + (next ? 1 : -1));
+      return prev;
+    },
+    onError: (_err, _next, prev) => {
+      if (prev) {
+        setLiked(prev.liked);
+        setLikeCount(prev.likeCount);
+      }
+    },
+    // Other copies of this review (its page, the title's list, Home, profile
+    // likes) are cached separately; refresh them so none shows the old state.
+    onSettled: () => {
+      for (const queryKey of [['reviews'], ['review', review.id], ['profile'], ['home']]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
+    },
+  });
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-pressed={liked}
+      aria-label={liked ? 'Unlike review' : 'Like review'}
+      onClick={() => mut.mutate(!liked)}
+      className={cn(className, liked && '!text-rose')}
+    >
+      <IconHeart filled={liked} />
+      <span className="font-data tracking-normal">{likeCount}</span>
+    </Button>
+  );
+}
+
+/**
+ * A review away from its title's page — on Home, a profile, a likes list — so
+ * it carries the poster and title it is about. The whole thing leads to the
+ * review's own page, which is where it is liked and answered.
+ */
+export function UserReviewCard({
+  review: r,
+  showAuthor = true,
+}: {
+  review: UserReview;
+  /** Off on the author's own profile, where every row would repeat them. */
+  showAuthor?: boolean;
+}): JSX.Element {
+  const to = `/review/${r.id}`;
+  return (
+    <article className="flex items-start gap-3.5 py-4">
+      <PosterThumb
+        title={r.media.title}
+        posterUrl={r.media.posterUrl}
+        to={mediaHref(r.media)}
+        size="lg"
+      />
+      <div className="min-w-0 flex-1">
+        <Link to={to} className="group block">
+          <span className="font-cond text-[17px] font-extrabold uppercase leading-tight tracking-[0.02em] text-content group-hover:text-gold">
+            {r.media.title}
+          </span>
+          {r.media.year && (
+            <span className="ml-2 font-data text-[13px] text-muted-2">{r.media.year}</span>
+          )}
+        </Link>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm">
+          {showAuthor && (
+            <Link
+              to={`/u/${r.author.username}`}
+              className="flex items-center gap-1.5 text-muted hover:text-content"
+            >
+              <Avatar
+                user={{ username: r.author.username, avatarUrl: r.author.avatarUrl }}
+                size={18}
+              />
+              {r.author.displayName || r.author.username}
+            </Link>
+          )}
+          {r.ratingValue !== null && (
+            <RatingMark
+              value={r.ratingValue}
+              type={r.media.type}
+              size={12}
+              display={isEpisodic(r.media.type) ? 'number' : 'stars'}
+            />
+          )}
+          <DateText iso={r.watchedDate ?? r.createdAt} dateOnly={!!r.watchedDate} />
+        </p>
+        {r.concealed ? (
+          <Link to={to} className="mt-2 inline-block text-sm italic text-muted hover:text-content">
+            This review contains spoilers — read it anyway
+          </Link>
+        ) : (
+          <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-content/90">
+            {r.body}
+          </p>
+        )}
+        <Link
+          to={to}
+          className="mt-2 flex w-fit items-center gap-3 font-data text-[11px] text-muted-2 hover:text-content"
+        >
+          <span className={cn('flex items-center gap-1', r.likedByViewer && 'text-rose')}>
+            <IconHeart filled={r.likedByViewer} className="h-3.5 w-3.5" /> {r.likeCount}
+          </span>
+          <span className="flex items-center gap-1">
+            <IconComment className="h-3.5 w-3.5" /> {r.commentCount}
+          </span>
+        </Link>
+      </div>
+    </article>
   );
 }

@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { cn } from '../lib/cn';
 import { Logo } from './Logo';
 import { Avatar } from './Avatar';
-import { LogModal } from './LogModal';
+import { LogModal, useLogShortcut } from './LogModal';
 import { InstallPrompt } from './InstallPrompt';
+import { IconChevronDown, IconMenu, IconPlus, IconSearch, IconX } from './app/Icons';
+import { Button, Spinner } from './ui';
 import { UpdateToast } from './UpdateToast';
 
 const NAV = [
@@ -13,15 +15,18 @@ const NAV = [
   { to: '/films', label: 'Media', end: false },
   { to: '/lists', label: 'Lists', end: false },
   { to: '/members', label: 'Members', end: false },
-  { to: '/library', label: 'Library', end: false },
-  { to: '/watchlist', label: 'Watchlist', end: false },
+  { to: '/activity', label: 'Activity', end: false },
 ];
 
-/** Account dropdown — mirrors the shortcut set a member reaches from their avatar. */
+/** Account dropdown — the member's own shelves, in the order a profile lists them. */
 const MENU_LINKS = [
   { to: '/profile', label: 'Profile' },
-  { to: '/library', label: 'Library' },
+  { to: '/profile/diary', label: 'Diary' },
+  { to: '/profile/reviews', label: 'Reviews' },
   { to: '/watchlist', label: 'Watchlist' },
+  { to: '/profile/lists', label: 'Lists' },
+  { to: '/profile/likes', label: 'Likes' },
+  { to: '/library', label: 'Library' },
   { to: '/settings', label: 'Settings' },
 ];
 
@@ -35,25 +40,56 @@ export function Layout(): JSX.Element {
   const [logging, setLogging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // "/" jumps to search, as it does on Letterboxd — unless you're typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (document.querySelector('dialog[open]')) return;
+      e.preventDefault();
+      // The masthead field is hidden on a phone; the search page has its own.
+      if (searchRef.current?.offsetParent) searchRef.current.focus();
+      else navigate('/search');
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navigate]);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function openMenu(): void {
+  // Hover opens the menu for a mouse only. A finger has no hover: on touch the
+  // synthetic enter fired on the tap that was meant to follow the avatar link,
+  // so the menu and the navigation fought. There the chevron is the menu and
+  // the avatar is just a link.
+  function openMenu(e: React.PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     setMenuOpen(true);
   }
-  function closeMenuSoon(): void {
+  function closeMenuSoon(e: React.PointerEvent): void {
+    if (e.pointerType !== 'mouse') return;
     if (closeTimer.current) clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => setMenuOpen(false), 180);
   }
 
-  // Click-to-open menu (not hover — hover gaps make the menu unreachable).
   useEffect(() => {
     if (!menuOpen && !navOpen) return;
-    function onPointerDown(e: MouseEvent): void {
+    // pointerdown, not mousedown: iOS Safari doesn't fire mousedown for taps
+    // on non-interactive content, so menus never dismissed there.
+    function onPointerDown(e: PointerEvent): void {
       if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
-      if (navOpen && navRef.current && !navRef.current.contains(e.target as Node)) {
+      // The toggle closes the drawer itself; closing here too would reopen it.
+      if (
+        navOpen &&
+        navRef.current &&
+        !navRef.current.contains(e.target as Node) &&
+        !navToggleRef.current?.contains(e.target as Node)
+      ) {
         setNavOpen(false);
       }
     }
@@ -63,13 +99,16 @@ export function Layout(): JSX.Element {
         setNavOpen(false);
       }
     }
-    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKey);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('keydown', onKey);
     };
   }, [menuOpen, navOpen]);
+
+  // The home-screen icon's "Log a title" shortcut (see manifest.webmanifest).
+  useLogShortcut(setLogging);
 
   // Close the mobile drawer on navigation.
   useEffect(() => {
@@ -94,18 +133,17 @@ export function Layout(): JSX.Element {
             avatar off-screen. Narrower until there's room for it. */}
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:h-20 sm:gap-5 sm:px-6">
           <button
+            ref={navToggleRef}
             onClick={() => setNavOpen((v) => !v)}
             aria-expanded={navOpen}
             aria-label="Toggle navigation"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded text-content md:hidden"
+            className="-ml-2.5 grid h-11 w-11 shrink-0 place-items-center rounded-sm text-content md:hidden"
           >
-            <span aria-hidden="true" className="text-xl leading-none">
-              {navOpen ? '✕' : '☰'}
-            </span>
+            {navOpen ? <IconX className="h-5 w-5" /> : <IconMenu className="h-5 w-5" />}
           </button>
 
           <Link to="/" aria-label="Cinelog home" className="flex shrink-0 items-center">
-            <Logo size={36} textClassName="text-xl sm:text-2xl" glow />
+            <Logo size={36} textClassName="text-xl sm:text-2xl" />
           </Link>
 
           <nav className="hidden gap-5 md:flex">
@@ -130,14 +168,14 @@ export function Layout(): JSX.Element {
 
           <form onSubmit={onSearch} className="ml-auto hidden items-center sm:flex">
             <div className="flex items-center gap-2 rounded-sm border border-border bg-bg px-3 py-2 text-muted transition-colors focus-within:border-gold">
-              <span aria-hidden="true" className="opacity-70">
-                ⌕
-              </span>
+              <IconSearch className="h-4 w-4 shrink-0" />
               <input
+                ref={searchRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Search…"
                 aria-label="Search"
+                title="Press / to search"
                 className="w-28 bg-transparent text-sm text-content outline-none placeholder:text-muted-2 md:w-44"
               />
             </div>
@@ -146,31 +184,29 @@ export function Layout(): JSX.Element {
           <Link
             to="/search"
             aria-label="Search"
-            className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded text-content sm:hidden"
+            className="ml-auto grid h-11 w-11 shrink-0 place-items-center rounded-sm text-content sm:hidden"
           >
-            <span aria-hidden="true" className="text-lg opacity-80">
-              ⌕
-            </span>
+            <IconSearch className="h-5 w-5" />
           </Link>
 
-          <button
+          <Button
+            variant="primary"
             onClick={() => setLogging(true)}
-            className="hidden shrink-0 rounded-sm bg-accent px-3.5 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90 sm:inline-flex"
+            className="hidden sm:inline-flex"
           >
-            + Log
-          </button>
+            <IconPlus className="h-4 w-4" /> Log
+          </Button>
 
           <div
             className="relative flex shrink-0 items-center"
             ref={menuRef}
-            onMouseEnter={openMenu}
-            onMouseLeave={closeMenuSoon}
+            onPointerEnter={openMenu}
+            onPointerLeave={closeMenuSoon}
           >
             <Link
               to="/profile"
               title={user?.username}
-              onFocus={openMenu}
-              className="flex items-center gap-2"
+              className="flex min-h-[2.75rem] items-center gap-2"
             >
               <Avatar user={user} size={32} />
               <span className="hidden max-w-[9rem] truncate font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-muted hover:text-content lg:inline">
@@ -182,11 +218,9 @@ export function Layout(): JSX.Element {
               aria-expanded={menuOpen}
               aria-haspopup="menu"
               aria-label="Account menu"
-              className="-ml-0.5 grid h-7 w-5 place-items-center rounded text-muted hover:text-content"
+              className="-mr-2 grid h-11 w-9 place-items-center rounded-sm text-muted hover:text-content"
             >
-              <span aria-hidden="true" className="text-sm leading-none">
-                ▾
-              </span>
+              <IconChevronDown className="h-3.5 w-3.5" />
             </button>
 
             {menuOpen && (
@@ -205,7 +239,7 @@ export function Layout(): JSX.Element {
                     to={l.to}
                     onClick={() => setMenuOpen(false)}
                     role="menuitem"
-                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content coarse:py-2.5"
                   >
                     {l.label}
                   </Link>
@@ -215,9 +249,9 @@ export function Layout(): JSX.Element {
                     to="/admin"
                     onClick={() => setMenuOpen(false)}
                     role="menuitem"
-                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content"
+                    className="block rounded-sm px-2.5 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-content coarse:py-2.5"
                   >
-                    Admin panel
+                    Admin
                   </Link>
                 )}
                 <div className="my-1 h-px bg-border" />
@@ -227,7 +261,7 @@ export function Layout(): JSX.Element {
                     setMenuOpen(false);
                     void logout();
                   }}
-                  className="w-full rounded-sm px-2.5 py-1.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-content"
+                  className="w-full rounded-sm px-2.5 py-1.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-content coarse:py-2.5"
                 >
                   Sign out
                 </button>
@@ -240,15 +274,10 @@ export function Layout(): JSX.Element {
             phones, but Letterboxd's mobile pattern surfaces them from a
             hamburger instead, so nothing (Lists, Members, …) is ever hidden. */}
         {navOpen && (
-          <div
-            ref={navRef}
-            className="border-t border-border-hi/40 bg-bg-2 px-4 py-3 md:hidden"
-          >
+          <div ref={navRef} className="border-t border-border-hi/40 bg-bg-2 px-4 py-3 md:hidden">
             <form onSubmit={onSearch} className="mb-3 flex items-center sm:hidden">
               <div className="flex w-full items-center gap-2 rounded-sm border border-border bg-bg px-3 py-2 text-muted focus-within:border-gold">
-                <span aria-hidden="true" className="opacity-70">
-                  ⌕
-                </span>
+                <IconSearch className="h-4 w-4 shrink-0" />
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
@@ -267,7 +296,7 @@ export function Layout(): JSX.Element {
                   onClick={() => setNavOpen(false)}
                   className={({ isActive }) =>
                     cn(
-                      'border-l-2 px-3 py-2.5 font-cond text-sm font-bold uppercase tracking-[0.12em]',
+                      'border-l-2 px-3 py-3 font-cond text-sm font-bold uppercase tracking-[0.12em]',
                       isActive
                         ? 'border-gold text-content'
                         : 'border-transparent text-muted hover:text-content',
@@ -285,17 +314,21 @@ export function Layout(): JSX.Element {
       {/* Bottom clearance for the phone-only log button, which is fixed and
           would otherwise sit on top of the last row of whatever page this is. */}
       <main className="pb-24 sm:pb-0">
-        <Outlet />
+        <Suspense fallback={<Spinner center />}>
+          <Outlet />
+        </Suspense>
       </main>
 
       {/* Compact log entry on phones, where the desktop "+ Log" button is hidden. */}
-      <button
+      <Button
+        variant="primary"
+        size="icon"
         onClick={() => setLogging(true)}
-        aria-label="Log a film"
-        className="fixed bottom-safe-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-sm bg-accent font-cond text-2xl font-extrabold text-ink shadow-lift hover:bg-gold/90 sm:hidden"
+        aria-label="Log a title"
+        className="fixed bottom-safe-5 right-5 z-30 !h-14 !w-14 shadow-lift sm:hidden"
       >
-        +
-      </button>
+        <IconPlus className="h-7 w-7" />
+      </Button>
 
       {logging && <LogModal onClose={() => setLogging(false)} />}
 

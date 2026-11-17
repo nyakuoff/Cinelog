@@ -1,11 +1,18 @@
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { BROWSE_GENRES, type BrowseSort, type DiscoverFilterItem } from '@cinelog/contracts';
+import { BROWSE_GENRES, type BrowseSort } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { cn } from '../lib/cn';
-import { EmptyState, Poster, PosterGrid, SectionHeader } from '../components/lb';
-import { Button, Spinner } from '../components/ui';
+import { decadeOptions, MIN_RATING_OPTIONS } from '../lib/format';
+import {
+  EmptyState,
+  ErrorState,
+  mediaHref,
+  PageHeader,
+  Poster,
+  PosterGrid,
+  PosterGridSkeleton,
+} from '../components/lb';
+import { Button, Segmented, Select, Spinner } from '../components/ui';
 
 type BrowseType = 'MOVIE' | 'TV';
 
@@ -16,13 +23,6 @@ const SORTS: { value: BrowseSort; label: string }[] = [
   { value: 'RELEASE_DATE', label: 'Release date' },
   { value: 'TITLE', label: 'Name' },
 ];
-
-function decades(): number[] {
-  const now = Math.floor(new Date().getFullYear() / 10) * 10;
-  const out: number[] = [];
-  for (let d = now; d >= 1900; d -= 10) out.push(d);
-  return out;
-}
 
 interface Filters {
   type: BrowseType;
@@ -40,14 +40,38 @@ const DEFAULTS: Filters = {
   sort: 'POPULARITY',
 };
 
+/**
+ * Media (`/films`): the provider catalogue, browsable as films or shows. The
+ * filters and page live in the URL (`?type=TV&genre=Drama&decade=1990`), so a
+ * genre on a title's page can link straight to its shelf and Back restores it.
+ */
 export function FilmsPage(): JSX.Element {
-  const navigate = useNavigate();
-  const [filters, setFilters] = useState<Filters>(DEFAULTS);
-  const [page, setPage] = useState(1);
-  const [opening, setOpening] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const filters: Filters = {
+    type: params.get('type') === 'TV' ? 'TV' : 'MOVIE',
+    genre: params.get('genre') ?? '',
+    decade: Number(params.get('decade')) || '',
+    minRating: Number(params.get('minRating')) || '',
+    sort: SORTS.find((o) => o.value === params.get('sort'))?.value ?? 'POPULARITY',
+  };
+  const page = Math.max(1, Number(params.get('page')) || 1);
+
+  /** Write the changed values into the URL, dropping any that are defaults. */
+  function write(next: Partial<Filters> & { page?: number }): void {
+    const merged = { ...filters, page: 1, ...next };
+    const out = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged)) {
+      if (v !== '' && v !== (k === 'page' ? 1 : DEFAULTS[k as keyof Filters]))
+        out.set(k, String(v));
+    }
+    setParams(out, { replace: true });
+  }
+  const update = (next: Partial<Filters>): void => write(next);
+  const setPage = (p: number): void => write({ page: p });
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['browse', filters, page],
+    staleTime: 10 * 60_000,
     queryFn: () =>
       api.browse({
         type: filters.type,
@@ -62,114 +86,55 @@ export function FilmsPage(): JSX.Element {
     placeholderData: keepPreviousData,
   });
 
-  function update(next: Partial<Filters>): void {
-    setFilters((f) => ({ ...f, ...next }));
-    setPage(1);
-  }
-
-  /** Provider results aren't cached locally yet, so resolve on open. */
-  async function open(item: DiscoverFilterItem): Promise<void> {
-    if (item.id) {
-      navigate(`/media/${item.id}`);
-      return;
-    }
-    setOpening(true);
-    try {
-      const detail = await api.resolveMedia({
-        provider: item.provider,
-        externalId: item.externalId,
-        type: item.type,
-      });
-      navigate(`/media/${detail.id}`);
-    } finally {
-      setOpening(false);
-    }
-  }
-
   const items = data?.items ?? [];
-  const heading =
-    filters.sort === 'POPULARITY'
-      ? `Popular ${filters.type === 'TV' ? 'shows' : 'films'}`
-      : `Browse ${filters.type === 'TV' ? 'shows' : 'films'}`;
+  const noun = filters.type === 'TV' ? 'shows' : 'films';
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
-      <SectionHeader
-        title={heading}
-        right={isFetching ? <Spinner className="h-4 w-4" /> : undefined}
-      />
+      <PageHeader title="Media" />
 
-      <FilterBar filters={filters} onChange={update} />
-
-      {opening && (
-        <div className="flex justify-center py-6">
-          <Spinner />
-        </div>
-      )}
+      <FilterBar filters={filters} onChange={update} busy={isFetching && !isLoading} />
 
       <div className="mt-6">
         {isLoading ? (
-          <PosterGrid>
-            {Array.from({ length: 24 }).map((_, i) => (
-              <div
-                key={i}
-                className="aspect-[2/3] w-full animate-pulse rounded-[3px] bg-surface-2"
-              />
-            ))}
-          </PosterGrid>
+          <PosterGridSkeleton count={24} variant="dense" />
         ) : isError ? (
-          <EmptyState
-            title="Couldn't load films"
+          <ErrorState
+            title={`Couldn't load ${noun}`}
             body="The metadata provider didn't respond. Check that TMDB is configured, then try again."
-            action={
-              <Button variant="secondary" onClick={() => void refetch()}>
-                Try again
-              </Button>
-            }
+            onRetry={() => void refetch()}
           />
         ) : items.length === 0 ? (
           <EmptyState
             title="Nothing matches these filters"
             body="Try widening the decade, genre, or rating filters."
-            action={
-              <Button variant="secondary" onClick={() => update(DEFAULTS)}>
-                Clear filters
-              </Button>
-            }
+            action={<Button onClick={() => update(DEFAULTS)}>Clear filters</Button>}
           />
         ) : (
           <>
-            <PosterGrid>
+            <PosterGrid variant="dense">
               {items.map((item) => (
                 <Poster
                   key={`${item.provider}:${item.externalId}`}
                   title={item.title}
+                  year={item.year}
                   posterUrl={item.posterUrl}
                   type={item.type}
                   rating={item.ratingCount > 0 ? item.communityRating : null}
                   ratingLabel="Average rating on this instance"
-                  onClick={() => void open(item)}
+                  average
+                  to={mediaHref(item)}
                 />
               ))}
             </PosterGrid>
 
             <div className="mt-8 flex items-center justify-center gap-3">
-              <Button
-                variant="secondary"
-                disabled={page === 1 || isFetching}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                ← Previous
+              <Button disabled={page === 1 || isFetching} onClick={() => setPage(page - 1)}>
+                Previous
               </Button>
-              <span className="font-cond text-[13px] font-bold uppercase tracking-wide tabular-nums text-muted">
-                Page {page}
-              </span>
-              <Button
-                variant="secondary"
-                disabled={!data?.hasMore || isFetching}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next →
+              <span className="font-data text-[13px] text-muted">Page {page}</span>
+              <Button disabled={!data?.hasMore || isFetching} onClick={() => setPage(page + 1)}>
+                Next
               </Button>
             </div>
           </>
@@ -182,82 +147,85 @@ export function FilmsPage(): JSX.Element {
 function FilterBar({
   filters,
   onChange,
+  busy,
 }: {
   filters: Filters;
   onChange: (next: Partial<Filters>) => void;
+  busy: boolean;
 }): JSX.Element {
-  const select =
-    'h-9 rounded border border-border bg-surface-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-wide text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50';
-
+  const cell = 'w-full sm:w-auto';
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="mr-1 flex rounded border border-border bg-surface p-0.5">
-        {(['MOVIE', 'TV'] as BrowseType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => onChange({ type: t, genre: '' })}
-            className={cn(
-              'rounded px-3 py-1.5 font-cond text-[13px] font-bold uppercase tracking-wide transition-colors',
-              filters.type === t ? 'bg-gold text-ink' : 'text-muted hover:text-content',
-            )}
-          >
-            {t === 'MOVIE' ? 'Films' : 'Shows'}
-          </button>
-        ))}
-      </div>
+    <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 sm:flex sm:flex-wrap">
+      <Segmented
+        label="Films or shows"
+        value={filters.type}
+        onChange={(type) => onChange({ type, genre: '' })}
+        options={[
+          { value: 'MOVIE', label: 'Films' },
+          { value: 'TV', label: 'Shows' },
+        ]}
+        className="col-span-2 w-fit sm:mr-1"
+      />
 
-      <select
+      <Select
         value={filters.genre}
         onChange={(e) => onChange({ genre: e.target.value })}
-        className={select}
         aria-label="Genre"
+        className={cell}
       >
-        <option value="">All genres</option>
+        <option value="">Any genre</option>
+        {/* A genre linked from a title's page may be one the provider can't browse by. */}
+        {filters.genre && !(BROWSE_GENRES as readonly string[]).includes(filters.genre) && (
+          <option value={filters.genre}>{filters.genre}</option>
+        )}
         {BROWSE_GENRES.map((g) => (
           <option key={g} value={g}>
             {g}
           </option>
         ))}
-      </select>
+      </Select>
 
-      <select
+      <Select
         value={filters.decade}
         onChange={(e) => onChange({ decade: e.target.value ? Number(e.target.value) : '' })}
-        className={select}
         aria-label="Decade"
+        className={cell}
       >
         <option value="">Any decade</option>
-        {decades().map((d) => (
+        {decadeOptions().map((d) => (
           <option key={d} value={d}>
             {d}s
           </option>
         ))}
-      </select>
+      </Select>
 
-      <select
+      <Select
         value={filters.minRating}
         onChange={(e) => onChange({ minRating: e.target.value ? Number(e.target.value) : '' })}
-        className={select}
         aria-label="Minimum rating"
+        className={cell}
       >
         <option value="">Any rating</option>
-        <option value="60">★★★ and up</option>
-        <option value="70">★★★½ and up</option>
-        <option value="80">★★★★ and up</option>
-      </select>
+        {MIN_RATING_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </Select>
 
-      <select
+      <Select
         value={filters.sort}
         onChange={(e) => onChange({ sort: e.target.value as BrowseSort })}
-        className={select}
         aria-label="Sort by"
+        className={cell}
       >
         {SORTS.map((s) => (
           <option key={s.value} value={s.value}>
             Sort: {s.label}
           </option>
         ))}
-      </select>
+      </Select>
+      {busy && <Spinner className="h-4 w-4" />}
     </div>
   );
 }

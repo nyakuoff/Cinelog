@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { MemberSummary } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { cn } from '../lib/cn';
+import { plural } from '../lib/format';
 import { Avatar } from './Avatar';
+import { Button } from './ui';
 
 /** A follow/unfollow control with optimistic state and rollback on failure. */
 export function FollowButton({
@@ -19,6 +20,7 @@ export function FollowButton({
   size?: 'sm' | 'md';
 }): JSX.Element {
   const [following, setFollowing] = useState(initialFollowing);
+  const queryClient = useQueryClient();
 
   const mut = useMutation({
     mutationFn: (next: boolean) => (next ? api.follow(username) : api.unfollow(username)),
@@ -37,30 +39,32 @@ export function FollowButton({
     onSuccess: (res) => {
       setFollowing(res.following);
       onChange?.(res.following);
+      // Follower counts, followers-only tabs, the following feed, and friend
+      // ratings all depend on the follow graph.
+      for (const queryKey of [['profile'], ['members'], ['activity'], ['friend-ratings']]) {
+        void queryClient.invalidateQueries({ queryKey });
+      }
     },
   });
 
+  // Following is your mark on someone, so the offer is the amber field; once
+  // made it settles back to a ruled label.
   return (
-    <button
+    <Button
+      variant={following ? 'secondary' : 'primary'}
+      size={size}
       onClick={() => mut.mutate(!following)}
       disabled={mut.isPending}
       aria-pressed={following}
-      className={cn(
-        'shrink-0 rounded border font-cond font-bold uppercase tracking-[0.08em] transition-colors disabled:opacity-60',
-        size === 'sm' ? 'px-2.5 py-1 text-[11px]' : 'px-3.5 py-1.5 text-[13px]',
-        following
-          ? 'border-border-hi bg-surface-2 text-muted hover:border-rose hover:text-rose'
-          : 'border-gold bg-gold text-ink hover:brightness-110',
-      )}
     >
       {following ? 'Following' : 'Follow'}
-    </button>
+    </Button>
   );
 }
 
 export function MemberCard({ member }: { member: MemberSummary }): JSX.Element {
   return (
-    <div className="flex items-center gap-3 rounded border border-border bg-surface/60 p-3">
+    <div className="flex min-w-0 items-center gap-3 rounded-sm border border-border bg-surface p-3">
       <Link to={`/u/${member.username}`} className="shrink-0">
         <Avatar user={{ username: member.username, avatarUrl: member.avatarUrl }} size={44} />
       </Link>
@@ -71,10 +75,9 @@ export function MemberCard({ member }: { member: MemberSummary }): JSX.Element {
         >
           {member.displayName || member.username}
         </Link>
-        <p className="truncate text-xs text-muted-2">
-          {member.filmCount} rated · {member.followerCount} follower
-          {member.followerCount === 1 ? '' : 's'}
-          {member.followsViewer && <span className="ml-1.5 text-cyan">· Follows you</span>}
+        <p className="truncate font-data text-[11px] text-muted-2">
+          {member.filmCount} rated · {plural(member.followerCount, 'follower')}
+          {member.followsViewer && <span className="ml-1.5 text-cyan">· follows you</span>}
         </p>
       </div>
       {!member.isSelf && member.isFollowedByViewer !== null && (

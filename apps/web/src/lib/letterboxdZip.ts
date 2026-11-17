@@ -1,4 +1,3 @@
-import { unzipSync, strFromU8 } from 'fflate';
 import type { LetterboxdItem } from '@cinelog/contracts';
 import { parseCsv } from './csv';
 
@@ -69,7 +68,9 @@ function isTrue(value: string | undefined): boolean {
   return (value ?? '').toLowerCase() === 'yes' || (value ?? '').toLowerCase() === 'true';
 }
 
-export function parseLetterboxdZip(buffer: Uint8Array): ParsedExport {
+export async function parseLetterboxdZip(buffer: Uint8Array): Promise<ParsedExport> {
+  // Loaded on use: fflate is only needed when someone imports an export.
+  const { unzipSync, strFromU8 } = await import('fflate');
   const files = unzipSync(buffer);
   const filesFound: string[] = [];
   const filesSkipped: string[] = [];

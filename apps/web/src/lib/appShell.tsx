@@ -9,17 +9,26 @@
  * action at its centre.
  *
  * The switch is deliberately narrow: standalone display-mode AND a phone-sized
- * viewport. An installed desktop PWA is still a desktop window, and a bottom
+ * device. An installed desktop PWA is still a desktop window, and a bottom
  * tab bar there would be wrong.
  *
+ * "Phone-sized" is judged on the *screen's short side*, not the viewport's
+ * width: a large phone turned to landscape is ~930px wide, and a width test
+ * flipped it to the website shell mid-session, unmounting every screen's
+ * state. The short side doesn't change when the device rotates.
+ *
  * `?app=1` forces the shell on (and `?app=0` off) so the layout can be worked
- * on in a normal browser tab; the choice persists until it's cleared.
+ * on in a normal browser tab; the choice persists until it's cleared. A forced
+ * shell on a desktop screen falls back to the viewport width, so narrowing the
+ * window is still how you preview it.
  */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const FORCE_KEY = 'cinelog:force-app-shell';
 /** Below this the app shell applies; at or above it, the site layout does. */
-const PHONE_QUERY = '(max-width: 899px)';
+const PHONE_MAX = 900;
+const PHONE_QUERY = `(max-width: ${PHONE_MAX - 1}px)`;
 const DISPLAY_MODES = ['standalone', 'fullscreen', 'minimal-ui'];
 
 /** Read (and consume) a `?app=` override, so it survives later navigations. */
@@ -54,7 +63,15 @@ function isStandalone(): boolean {
 function computeAppShell(force: boolean | null): boolean {
   if (typeof window === 'undefined') return false;
   const installed = force ?? isStandalone();
-  return installed && window.matchMedia(PHONE_QUERY).matches;
+  if (!installed) return false;
+  // iOS reports portrait dimensions whatever the orientation and Android swaps
+  // them; the smaller of the two is the same number either way.
+  // The pointer test keeps a 768p laptop — short screen, but a cursor — on the
+  // website layout.
+  const phoneScreen =
+    Math.min(window.screen.width, window.screen.height) < PHONE_MAX &&
+    window.matchMedia('(pointer: coarse)').matches;
+  return phoneScreen || (force === true && window.matchMedia(PHONE_QUERY).matches);
 }
 
 const AppShellContext = createContext(false);
@@ -132,4 +149,17 @@ export function useScreenHeader(config: ScreenHeaderConfig): void {
     return () => set(null);
     // Primitives only, so a fresh object literal per render doesn't loop.
   }, [set, title, hidden, back]);
+}
+
+/**
+ * Back, unless this is the first screen of the session (a cold deep-link
+ * launch has no history to go back to) — then home.
+ */
+export function useGoBack(): () => void {
+  const navigate = useNavigate();
+  const location = useLocation();
+  return () => {
+    if (location.key === 'default') navigate('/', { replace: true });
+    else navigate(-1);
+  };
 }

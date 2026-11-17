@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import type { UserPublic } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
@@ -8,8 +8,9 @@ import { posterGradient } from '../lib/poster';
 import { Avatar } from '../components/Avatar';
 import { Field } from '../components/Field';
 import { DataSettings } from '../components/DataSettings';
-import { TabBar } from '../components/lb';
-import { Button, Card, Input, Spinner } from '../components/ui';
+import { IconEdit } from '../components/app/Icons';
+import { PageHeader, TabBar } from '../components/lb';
+import { Button, Card, Input, Notice, Select, Spinner, Textarea } from '../components/ui';
 
 type SettingsTab = 'profile' | 'privacy' | 'account' | 'data';
 
@@ -21,7 +22,7 @@ const TABS = [
 ];
 
 export function SettingsPage(): JSX.Element {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [params, setParams] = useSearchParams();
 
   // The tab lives in the URL so the account menu can link straight to Data and
@@ -34,15 +35,10 @@ export function SettingsPage(): JSX.Element {
   if (!user) return <></>;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 app:py-4 sm:px-6">
-      <p className="mb-2 font-cond text-xs font-bold uppercase tracking-[0.2em] text-gold">
-        Your account
-      </p>
-      <h1 className="font-cond text-3xl font-extrabold uppercase tracking-tight app:hidden">
-        Settings
-      </h1>
+    <div className="mx-auto max-w-2xl px-4 py-8 app:py-4 sm:px-6">
+      <PageHeader title="Settings" kicker="Your account" />
 
-      <div className="mt-6">
+      <div>
         <TabBar
           tabs={TABS}
           active={tab}
@@ -62,6 +58,21 @@ export function SettingsPage(): JSX.Element {
         {tab === 'privacy' && <PrivacyForm user={user} />}
         {tab === 'account' && <PasswordForm />}
         {tab === 'data' && <DataSettings />}
+      </div>
+
+      {/* The installed app has no account menu, so its exits live here too. */}
+      <div className="mt-12 flex flex-wrap items-center gap-2 border-t border-border pt-6">
+        {user.role === 'ADMIN' && (
+          <Link
+            to="/admin"
+            className="rounded-sm border border-border-hi px-3.5 py-2 text-sm text-content hover:bg-surface-2"
+          >
+            Admin panel
+          </Link>
+        )}
+        <Button variant="ghost" onClick={() => void logout()}>
+          Sign out
+        </Button>
       </div>
     </div>
   );
@@ -103,7 +114,13 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
           style={!user.bannerUrl ? { background: posterGradient(user.username) } : undefined}
         >
           {user.bannerUrl && (
-            <img src={user.bannerUrl} alt="" className="h-full w-full object-cover" />
+            <img
+              src={user.bannerUrl}
+              alt=""
+              decoding="async"
+              fetchPriority="high"
+              className="h-full w-full object-cover"
+            />
           )}
           <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
@@ -148,13 +165,15 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
                 <Spinner className="h-4 w-4" />
               </div>
             )}
-            <button
+            <Button
+              size="icon"
               onClick={() => avatarRef.current?.click()}
               title="Change avatar"
-              className="absolute -right-1 -top-1 grid h-7 w-7 place-items-center rounded-sm border-2 border-bg bg-gold text-xs text-ink hover:bg-gold/90"
+              aria-label="Change avatar"
+              className="absolute -right-3 -top-3 !h-9 !w-9 !bg-bg-2"
             >
-              ✎
-            </button>
+              <IconEdit />
+            </Button>
             <input
               ref={avatarRef}
               type="file"
@@ -171,9 +190,7 @@ function BannerAndAvatar({ user }: { user: UserPublic }): JSX.Element {
       </div>
       <div className="h-10" />
       {error && (
-        <p className="text-sm text-rose">
-          {error instanceof ApiError ? error.message : 'Could not update image'}
-        </p>
+        <Notice>{error instanceof ApiError ? error.message : 'Could not update image'}</Notice>
       )}
     </div>
   );
@@ -209,7 +226,7 @@ function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
+      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
         Profile details
       </h2>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -232,19 +249,18 @@ function ProfileForm({ user }: { user: UserPublic }): JSX.Element {
           />
         </Field>
         <Field label="Bio" hint={`${bio.length}/500`}>
-          <textarea
+          <Textarea
             value={bio}
             onChange={(e) => setBio(e.target.value.slice(0, 500))}
             rows={3}
             placeholder="Tell people what you like to watch…"
-            className="w-full resize-none rounded-xl border border-border bg-surface-2 px-3.5 py-2.5 text-sm text-content placeholder:text-muted-2 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
           />
         </Field>
 
         {mut.isError && (
-          <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+          <Notice>
             {mut.error instanceof ApiError ? mut.error.message : 'Could not save changes'}
-          </p>
+          </Notice>
         )}
 
         <div className="flex items-center gap-3">
@@ -281,41 +297,41 @@ function PrivacyForm({ user }: { user: UserPublic }): JSX.Element {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
+      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
         Privacy
       </h2>
       <div className="space-y-4">
         <Field label="Who can see your profile">
-          <select
+          <Select
             value={profileVisibility}
             onChange={(e) => setProfileVisibility(e.target.value as typeof profileVisibility)}
-            className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3.5 text-sm text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+            className="w-full"
           >
             {VISIBILITY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Who can see your watchlist" hint="never wider than your profile visibility">
-          <select
+          <Select
             value={watchlistVisibility}
             onChange={(e) => setWatchlistVisibility(e.target.value as typeof watchlistVisibility)}
-            className="h-11 w-full rounded-xl border border-border bg-surface-2 px-3.5 text-sm text-content focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan/50"
+            className="w-full"
           >
             {VISIBILITY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Field>
 
         {mut.isError && (
-          <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+          <Notice>
             {mut.error instanceof ApiError ? mut.error.message : 'Could not save changes'}
-          </p>
+          </Notice>
         )}
 
         <div className="flex items-center gap-3">
@@ -354,7 +370,7 @@ function PasswordForm(): JSX.Element {
 
   return (
     <Card className="p-6">
-      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
+      <h2 className="mb-4 font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
         Change password
       </h2>
       <form onSubmit={onSubmit} className="space-y-4">
@@ -369,9 +385,9 @@ function PasswordForm(): JSX.Element {
         </Field>
 
         {mut.isError && (
-          <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+          <Notice>
             {mut.error instanceof ApiError ? mut.error.message : 'Could not change password'}
-          </p>
+          </Notice>
         )}
 
         <div className="flex items-center gap-3">

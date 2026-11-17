@@ -64,17 +64,17 @@ Constraints:
   hidden in the UI.
 
 Not yet built, and must not be implied as working: notifications and moderation
-tooling (tables exist, no endpoints or UI), and unified search across members and
-lists (search covers titles only).
+tooling (tables exist, no endpoints or UI).
 
 ## Brand Commitments
 
 - Name: **Cinelog**. Wordmark sets "Cine" in the body color and "log" in the
   accent.
 - Mark: three overlapping flat dots in the palette order gold / cyan / rose.
-- Existing palette is broadly right and should be adapted rather than discarded:
-  gold `#ffb13c` (primary), cyan `#45d0dd` (secondary), rose `#ff5d7a`
-  (affection/likes), on an indigo-plum night ground.
+- Palette (the shipped tokens in `apps/web/src/index.css` are canonical): acetate
+  amber `#fab03a` (the member's own marks), verdigris `#58beb2` (annotation and
+  system voice), stamp red `#f05c64` (affection/likes), on a near-neutral slate
+  ground `#1a2025` so poster artwork reads true.
 - The interface must have a distinct visual character of its own. Copying
   Letterboxd's *layout and information architecture* is explicitly wanted;
   copying its *visual identity* is explicitly not.

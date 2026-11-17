@@ -1,434 +1,226 @@
-import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import type {
-  DiscoverFilterItem,
-  DiscoverSection,
-  DiscoverSortKey,
-  MediaType,
-  SearchResult,
-} from '@cinelog/contracts';
+import { Link } from 'react-router-dom';
+import type { DiscoverSection, HomeFriendEntry, HomePopularEntry } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { cn } from '../lib/cn';
-import { PosterCard } from '../components/PosterCard';
-import { ActivityFeed } from '../components/ActivityFeed';
-import { SectionHeader } from '../components/lb';
-import { Spinner } from '../components/ui';
+import { plural } from '../lib/format';
+import { Avatar } from '../components/Avatar';
+import { ListCard } from '../components/ListCard';
+import { UserReviewCard } from '../components/ReviewsSection';
+import {
+  EmptyState,
+  ErrorState,
+  mediaHref,
+  PageHeader,
+  Poster,
+  PosterMarks,
+  PosterRail,
+  SectionHeader,
+} from '../components/lb';
+import { buttonClass, Spinner } from '../components/ui';
 
-const GENRES = [
-  'Action',
-  'Adventure',
-  'Animation',
-  'Comedy',
-  'Crime',
-  'Documentary',
-  'Drama',
-  'Fantasy',
-  'Horror',
-  'Mystery',
-  'Romance',
-  'Science Fiction',
-  'Thriller',
-];
-
-const SORTS: { value: DiscoverSortKey; label: string }[] = [
-  { value: 'POPULARITY', label: 'Popularity' },
-  { value: 'RELEASE_DATE', label: 'Release date' },
-  { value: 'CINELOG_RATING', label: 'Cinelog rating' },
-  { value: 'RATING_COUNT', label: 'Number of ratings' },
-];
-
-function decadeOptions(): number[] {
-  const start = 1950;
-  const end = new Date().getFullYear();
-  const out: number[] = [];
-  for (let y = Math.floor(end / 10) * 10; y >= start; y -= 10) out.push(y);
-  return out;
-}
-
-interface Filters {
-  type: MediaType | '';
-  genre: string;
-  decade: number | '';
-  minRating: number | '';
-  sort: DiscoverSortKey;
-}
-
-const DEFAULT_FILTERS: Filters = {
-  type: '',
-  genre: '',
-  decade: '',
-  minRating: '',
-  sort: 'POPULARITY',
-};
-
-function isActive(f: Filters): boolean {
-  return (
-    f.type !== '' ||
-    f.genre !== '' ||
-    f.decade !== '' ||
-    f.minRating !== '' ||
-    f.sort !== 'POPULARITY'
-  );
-}
-
+/**
+ * Home (`/`): what the people you follow have been watching, then the
+ * instance's shelves. Browsing by filter lives on Media (`/films`).
+ */
 export function DiscoverPage(): JSX.Element {
-  const navigate = useNavigate();
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
-  const [opening, setOpening] = useState(false);
-  const active = isActive(filters);
+  const home = useQuery({ queryKey: ['home'], queryFn: () => api.getHome() });
+  const shelves = useQuery({ queryKey: ['discover'], queryFn: () => api.getDiscover(), staleTime: 10 * 60_000 });
 
-  const sections = useQuery({
-    queryKey: ['discover'],
-    queryFn: () => api.getDiscover(),
-    enabled: !active,
-  });
-
-  const filtered = useQuery({
-    queryKey: ['discover-filter', filters],
-    queryFn: () =>
-      api.getDiscoverFilter({
-        type: filters.type || undefined,
-        genre: filters.genre || undefined,
-        decade: filters.decade || undefined,
-        minRating: filters.minRating || undefined,
-        sort: filters.sort,
-      }),
-    enabled: active,
-  });
-
-  async function open(item: SearchResult | DiscoverFilterItem): Promise<void> {
-    if (item.id) {
-      navigate(`/media/${item.id}`);
-      return;
-    }
-    setOpening(true);
-    try {
-      const detail = await api.resolveMedia({
-        provider: item.provider,
-        externalId: item.externalId,
-        type: item.type,
-      });
-      navigate(`/media/${detail.id}`);
-    } finally {
-      setOpening(false);
-    }
-  }
+  const h = home.data;
+  const friends = h?.scope === 'FOLLOWING';
+  const sections = shelves.data?.sections ?? [];
+  const nothing =
+    !!h &&
+    !shelves.isLoading &&
+    sections.length === 0 &&
+    h.newFromFriends.length + h.popularWithFriends.length + h.friendReviews.length === 0 &&
+    h.recentLists.length === 0;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 app:py-4 sm:px-6 sm:py-8">
-      {/* The installed app's title bar already names the screen. */}
-      <h1 className="mb-5 font-cond text-2xl font-extrabold uppercase tracking-[0.04em] app:hidden sm:mb-6 sm:text-3xl">
-        Discover
-      </h1>
+    <div className="mx-auto max-w-6xl px-4 py-8 app:py-4 sm:px-6">
+      <PageHeader
+        title="Home"
+        // The app's strip already has Media one tap away.
+        className="app:hidden"
+        actions={
+          <Link to="/films" className={buttonClass({ size: 'sm' })}>
+            Browse media
+          </Link>
+        }
+      />
 
-      <FilterBar filters={filters} onChange={setFilters} />
-
-      {opening && (
-        <div className="flex justify-center py-6">
-          <Spinner />
-        </div>
-      )}
-
-      {active ? (
-        filtered.isLoading ? (
-          <div className="flex justify-center py-24">
-            <Spinner />
-          </div>
-        ) : filtered.isError ? (
-          <p className="py-10 text-center text-sm text-rose">Could not load results. Try again.</p>
-        ) : (filtered.data?.items.length ?? 0) === 0 ? (
-          <p className="py-10 text-center text-muted">Nothing matches these filters yet.</p>
-        ) : (
-          <div className="mt-8 grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-            {filtered.data?.items.map((item, i) => (
-              <PosterCard
-                key={`${item.provider}:${item.externalId}`}
-                title={item.title}
-                year={item.year}
-                type={item.type}
-                posterUrl={item.posterUrl}
-                index={i}
-                onClick={() => void open(item)}
-              />
-            ))}
-          </div>
-        )
-      ) : sections.isLoading ? (
-        <div className="flex justify-center py-24">
-          <Spinner />
-        </div>
-      ) : sections.isError ? (
-        <p className="py-10 text-center text-sm text-rose">Could not load Discover right now.</p>
-      ) : (sections.data?.sections.length ?? 0) === 0 ? (
-        <p className="py-10 text-center text-muted">Nothing to discover yet.</p>
+      {home.isLoading ? (
+        <Spinner center />
+      ) : home.isError || !h ? (
+        <ErrorState title="Couldn't load Home" onRetry={() => void home.refetch()} />
+      ) : nothing ? (
+        <EmptyState
+          title="Nothing on the shelves yet"
+          body="Log something you've watched, or follow a few members, and Home fills in."
+          action={
+            <Link to="/members" className={buttonClass()}>
+              Find members
+            </Link>
+          }
+        />
       ) : (
-        // The `minmax(0,…)` is load-bearing on BOTH tracks, not just the pair at
-        // `lg`. Below `lg` there was no template at all, so the rails landed in an
-        // implicit `auto` track, and an auto track is floored by its item's
-        // `min-width: auto` — i.e. by the full un-scrolled width of the widest
-        // rail. The track blew out to ~2600px, dragging the section heads and the
-        // activity feed out with it while the header and filter bar stayed at the
-        // real viewport width. `body{overflow-x:hidden}` hid the scrollbar, so it
-        // surfaced only as a page that was mysteriously too wide. Naming the
-        // single column is what re-arms the rails' own scrolling on phones.
-        <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-10">
-            {sections.data?.sections.map((s) => (
-              <Rail key={s.key} section={s} onOpen={open} />
-            ))}
-          </div>
+        // `minmax(0,1fr)` is load-bearing: in an implicit `auto` track the
+        // rails are floored by their full un-scrolled width and blow the page
+        // out sideways on phones.
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-10">
+          {!friends && (
+            <p className="-mb-4 border-l-2 border-cyan pl-3 text-sm text-muted">
+              From around the instance —{' '}
+              <Link to="/members" className="text-content underline-offset-2 hover:underline">
+                follow members
+              </Link>{' '}
+              to make this yours.
+            </p>
+          )}
 
-          {/* Friend activity rail — what a signed-in member sees first. In the
-              installed app this is a tab of its own, so the rail would be the
-              same feed twice; Discover there stays purely about the shelves. */}
-          <aside className="space-y-8 app:hidden">
+          {h.newFromFriends.length > 0 && (
             <section>
               <SectionHeader
-                title="From people you follow"
-                more="/members"
-                moreLabel="Find members"
+                title={friends ? 'New from friends' : 'New from members'}
+                more="/activity"
+                moreLabel="All activity"
               />
-              <ActivityFeed
-                scope="FOLLOWING"
-                limit={6}
-                types={['RATED', 'REVIEWED']}
-                emptyTitle="No activity yet"
-                emptyBody="Follow other members and their ratings and reviews show up here."
-              />
+              <PosterRail>
+                {h.newFromFriends.map((e) => (
+                  <FriendEntry key={e.id} entry={e} />
+                ))}
+              </PosterRail>
             </section>
+          )}
+
+          {h.popularWithFriends.length > 0 && (
             <section>
-              <SectionHeader title="Recent on Cinelog" more="/activity" moreLabel="All activity" />
-              <ActivityFeed
-                scope="EVERYONE"
-                limit={6}
-                types={['RATED', 'REVIEWED']}
-                emptyTitle="Nothing rated yet"
-                emptyBody="Ratings and reviews from everyone on this instance appear here."
+              <SectionHeader
+                title={friends ? 'Popular with friends this week' : 'Popular this week'}
               />
+              <PosterRail>
+                {h.popularWithFriends.map((e) => (
+                  <PopularEntry key={e.media.id} entry={e} />
+                ))}
+              </PosterRail>
             </section>
-          </aside>
+          )}
+
+          {sections.map((s) => (
+            <Rail key={s.key} section={s} />
+          ))}
+
+          {h.friendReviews.length > 0 && (
+            <section>
+              <SectionHeader title={friends ? 'Popular reviews from friends' : 'Popular reviews'} />
+              <div className="grid gap-x-10 lg:grid-cols-2">
+                {h.friendReviews.map((r) => (
+                  <UserReviewCard key={r.id} review={r} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {h.recentLists.length > 0 && (
+            <section>
+              <SectionHeader
+                title={h.recentListsSource === 'FOLLOWING' ? 'Recent lists' : 'Popular lists'}
+                more="/lists"
+                moreLabel="All lists"
+              />
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {h.recentLists.map((l) => (
+                  <ListCard key={l.id} list={l} />
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function FilterBar({
-  filters,
-  onChange,
-}: {
-  filters: Filters;
-  onChange: (f: Filters) => void;
-}): JSX.Element {
-  // Five controls set in condensed caps wrap into three ragged rows on a phone
-  // and each sits under the 44px touch minimum. On mobile they become a plain
-  // two-up card of full-width fields — an index card of filters — and only
-  // above `sm` do they collapse back to the inline row the desktop wants.
-  const selectClass =
-    'h-11 w-full rounded-sm border border-border bg-bg-2 px-2.5 font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold sm:h-9 sm:w-auto';
+/** One member's latest watch: the poster, who, and the marks they left on it. */
+function FriendEntry({ entry: e }: { entry: HomeFriendEntry }): JSX.Element {
+  const name = e.actor.displayName || e.actor.username;
   return (
-    <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 sm:flex sm:flex-wrap">
-      <select
-        value={filters.type}
-        onChange={(e) => onChange({ ...filters, type: e.target.value as Filters['type'] })}
-        className={selectClass}
+    <div>
+      <Poster
+        title={e.media.title}
+        year={e.media.year}
+        type={e.media.type}
+        posterUrl={e.media.posterUrl}
+        to={mediaHref(e.media)}
+      />
+      <Link
+        to={`/u/${e.actor.username}`}
+        className="mt-1.5 flex items-center gap-1.5 text-xs text-muted hover:text-content"
       >
-        <option value="">All types</option>
-        <option value="MOVIE">Movies</option>
-        <option value="TV">Shows</option>
-      </select>
-      <select
-        value={filters.genre}
-        onChange={(e) => onChange({ ...filters, genre: e.target.value })}
-        className={selectClass}
-      >
-        <option value="">All genres</option>
-        {GENRES.map((g) => (
-          <option key={g} value={g}>
-            {g}
-          </option>
-        ))}
-      </select>
-      <select
-        value={filters.decade}
-        onChange={(e) =>
-          onChange({ ...filters, decade: e.target.value ? Number(e.target.value) : '' })
-        }
-        className={selectClass}
-      >
-        <option value="">All decades</option>
-        {decadeOptions().map((d) => (
-          <option key={d} value={d}>
-            {d}s
-          </option>
-        ))}
-      </select>
-      <select
-        value={filters.minRating}
-        onChange={(e) =>
-          onChange({ ...filters, minRating: e.target.value ? Number(e.target.value) : '' })
-        }
-        className={selectClass}
-      >
-        <option value="">Any rating</option>
-        <option value="50">50%+</option>
-        <option value="70">70%+</option>
-        <option value="85">85%+</option>
-      </select>
-      <select
-        value={filters.sort}
-        onChange={(e) => onChange({ ...filters, sort: e.target.value as DiscoverSortKey })}
-        /* "Sort: Number of ratings" is far the longest label — give it the
-           full width on mobile rather than truncating it in a half column. */
-        className={cn(selectClass, 'col-span-2 sm:col-span-1')}
-      >
-        {SORTS.map((s) => (
-          <option key={s.value} value={s.value}>
-            Sort: {s.label}
-          </option>
-        ))}
-      </select>
-      {isActive(filters) && (
-        <button
-          onClick={() => onChange(DEFAULT_FILTERS)}
-          className="col-span-2 h-11 rounded-lg px-2.5 text-[13px] text-muted hover:text-content sm:col-span-1 sm:h-9"
-        >
-          Clear
-        </button>
-      )}
+        <Avatar user={e.actor} size={18} />
+        <span className="truncate">{name}</span>
+      </Link>
+      <div className="mt-1 min-h-4">
+        <PosterMarks
+          type={e.media.type}
+          rating={e.rating}
+          liked={e.liked}
+          rewatch={e.isRewatch}
+          reviewId={e.reviewId}
+          watched
+        />
+      </div>
     </div>
   );
 }
 
-function Rail({
-  section,
-  onOpen,
-}: {
-  section: DiscoverSection;
-  onOpen: (item: SearchResult) => void;
-}): JSX.Element {
+function PopularEntry({ entry: e }: { entry: HomePopularEntry }): JSX.Element {
+  return (
+    <Poster
+      title={e.media.title}
+      year={e.media.year}
+      type={e.media.type}
+      posterUrl={e.media.posterUrl}
+      to={mediaHref(e.media)}
+      caption={
+        <span className="flex items-center gap-2">
+          <span className="flex -space-x-1.5">
+            {e.members.map((m) => (
+              <Link key={m.id} to={`/u/${m.username}`} title={m.displayName || m.username}>
+                <Avatar user={m} size={18} className="ring-2 !ring-bg" />
+              </Link>
+            ))}
+          </span>
+          <span className="font-data text-[11px]">{plural(e.count, 'member')}</span>
+        </span>
+      }
+    />
+  );
+}
+
+function Rail({ section }: { section: DiscoverSection }): JSX.Element {
   return (
     <section>
       <SectionHeader
         title={section.title}
         right={
-          <span
-            className={cn(
-              'font-cond text-[11px] font-bold uppercase tracking-[0.14em]',
-              section.source === 'CINELOG' ? 'text-gold' : 'text-muted-2',
-            )}
-          >
-            {section.source === 'CINELOG' ? 'Cinelog community' : 'via TMDB'}
+          <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
+            {section.source === 'CINELOG' ? 'On this instance' : 'via TMDB'}
           </span>
         }
       />
-      <ScrollRail>
-        {section.items.map((item, i) => (
-          <div
+      <PosterRail>
+        {section.items.map((item) => (
+          <Poster
             key={`${item.provider}:${item.externalId}`}
-            className="w-[130px] shrink-0 sm:w-[150px]"
-          >
-            <PosterCard
-              title={item.title}
-              year={item.year}
-              type={item.type}
-              posterUrl={item.posterUrl}
-              index={i}
-              onClick={() => onOpen(item)}
-            />
-          </div>
+            title={item.title}
+            year={item.year}
+            type={item.type}
+            posterUrl={item.posterUrl}
+            to={mediaHref(item)}
+          />
         ))}
-      </ScrollRail>
+      </PosterRail>
     </section>
-  );
-}
-
-/**
- * A horizontally scrolling rail with step arrows.
- *
- * Dragging a rail sideways is fine with a trackpad and miserable with a mouse,
- * so each rail carries its own controls. They're hidden when there's nothing
- * further that way, which doubles as the signal for how much rail is left.
- */
-function ScrollRail({ children }: { children: React.ReactNode }): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null);
-  const [edges, setEdges] = useState({ start: false, end: false });
-
-  const measure = (): void => {
-    const el = ref.current;
-    if (!el) return;
-    // A pixel of slack: fractional scroll widths otherwise leave the end arrow
-    // showing on a rail that is already fully scrolled.
-    setEdges({
-      start: el.scrollLeft > 1,
-      end: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-    });
-  };
-
-  // Re-measure when the rail's contents or size change, not just on scroll:
-  // posters arrive after the first paint, and a resize changes what fits.
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    for (const child of Array.from(el.children)) observer.observe(child);
-    return () => observer.disconnect();
-  }, [children]);
-
-  const step = (direction: -1 | 1): void => {
-    const el = ref.current;
-    if (!el) return;
-    // Just under a full pane, so the poster at the edge stays visible as an
-    // anchor rather than jumping out of view.
-    el.scrollBy({ left: direction * el.clientWidth * 0.85, behavior: 'smooth' });
-  };
-
-  return (
-    <div className="group/rail relative">
-      <div
-        ref={ref}
-        onScroll={measure}
-        /* Bleed past the page gutter on phones. Inset, a rail wastes 32px of a
-           390px screen and the edge fade lands on a poster's face instead of
-           at the screen edge, so the strip reads as clipped rather than as
-           continuing. Above `sm` the gutter is wide enough to keep. */
-        className="rail-mask -mx-4 overflow-x-auto px-4 pb-2 pt-2 scrollbar-none sm:-mx-2 sm:px-1"
-      >
-        <div className="flex gap-3.5">{children}</div>
-      </div>
-      <RailArrow side="start" show={edges.start} onClick={() => step(-1)} />
-      <RailArrow side="end" show={edges.end} onClick={() => step(1)} />
-    </div>
-  );
-}
-
-function RailArrow({
-  side,
-  show,
-  onClick,
-}: {
-  side: 'start' | 'end';
-  show: boolean;
-  onClick: () => void;
-}): JSX.Element | null {
-  if (!show) return null;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={side === 'start' ? 'Scroll left' : 'Scroll right'}
-      className={cn(
-        'absolute top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-sm',
-        'border border-border-hi bg-bg-2/95 text-lg leading-none text-content shadow-soft',
-        'opacity-0 transition-opacity hover:border-gold hover:text-gold',
-        'focus-visible:opacity-100 group-hover/rail:opacity-100',
-        side === 'start' ? '-left-1' : '-right-1',
-      )}
-    >
-      {side === 'start' ? '‹' : '›'}
-    </button>
   );
 }

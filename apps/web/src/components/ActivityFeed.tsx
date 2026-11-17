@@ -1,11 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import type { ActivityItem, MediaSummary } from '@cinelog/contracts';
+import type { ActivityItem } from '@cinelog/contracts';
 import { api } from '../lib/api';
-import { posterGradient } from '../lib/poster';
+import { relativeTime } from '../lib/format';
 import { Avatar } from './Avatar';
-import { EmptyState, StarText } from './lb';
-import { Spinner } from './ui';
+import { EmptyState, ErrorState, mediaHref, PosterThumb } from './lb';
+import { RatingMark } from './Rating';
+import { LoadMore, Spinner } from './ui';
 
 /** Verb phrasing per event kind — the sentence a feed row reads as. */
 const VERB: Record<ActivityItem['type'], string> = {
@@ -21,12 +22,15 @@ const VERB: Record<ActivityItem['type'], string> = {
 
 export function ActivityFeed({
   scope,
+  username,
   emptyTitle,
   emptyBody,
   limit,
   types,
 }: {
-  scope: 'FOLLOWING' | 'EVERYONE';
+  /** The feed's reach — or pass `username` for one member's own feed. */
+  scope?: 'FOLLOWING' | 'EVERYONE';
+  username?: string;
   emptyTitle: string;
   emptyBody: string;
   /** Cap the rows rendered; a sidebar rail wants a short list, not a page. */
@@ -34,45 +38,43 @@ export function ActivityFeed({
   /** Restrict to these event kinds. */
   types?: ActivityItem['type'][];
 }): JSX.Element {
-  const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['activity', scope, limit, types?.join(',')],
-    queryFn: () => api.getActivity(scope, { limit, types }),
+  const query = useInfiniteQuery({
+    // A member's feed sits under the profile prefix so profile invalidation covers it.
+    queryKey: username
+      ? ['profile', username, 'activity']
+      : ['activity', scope, limit, types?.join(',')],
+    queryFn: ({ pageParam }) =>
+      username
+        ? api.getProfileActivity(username, { limit, cursor: pageParam })
+        : api.getActivity(scope ?? 'FOLLOWING', { limit, types, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    // A capped rail is a preview, not a feed — it never pages.
+    getNextPageParam: (last) => (limit ? undefined : (last.nextCursor ?? undefined)),
   });
+  const { data, isLoading, isError, refetch } = query;
+  const items = data?.pages.flatMap((p) => p.items) ?? [];
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  }
+  // A capped rail is a preview in a sidebar, so its states stay small.
+  if (isLoading) return <Spinner center />;
   if (isError) {
     return (
-      <EmptyState
-        title="Couldn't load activity"
-        body="Something went wrong fetching the feed."
-        action={
-          <button
-            onClick={() => void refetch()}
-            className="rounded border border-border px-3 py-1.5 text-sm text-muted hover:text-content"
-          >
-            Try again
-          </button>
-        }
-      />
+      <ErrorState compact={!!limit} title="Couldn't load activity" onRetry={() => void refetch()} />
     );
   }
-  if (!data || data.items.length === 0) {
-    return <EmptyState title={emptyTitle} body={emptyBody} />;
+  if (items.length === 0) {
+    return <EmptyState compact={!!limit} title={emptyTitle} body={emptyBody} />;
   }
 
-  const rows = limit ? data.items.slice(0, limit) : data.items;
+  const rows = limit ? items.slice(0, limit) : items;
   return (
-    <ul className="divide-y divide-border">
-      {rows.map((item) => (
-        <ActivityRow key={item.id} item={item} />
-      ))}
-    </ul>
+    <>
+      <ul className="divide-y divide-border">
+        {rows.map((item) => (
+          <ActivityRow key={item.id} item={item} />
+        ))}
+      </ul>
+      <LoadMore query={query} />
+    </>
   );
 }
 
@@ -83,15 +85,27 @@ function ActivityRow({ item }: { item: ActivityItem }): JSX.Element {
   return (
     <li className="flex items-start gap-3 py-3">
       <Link to={`/u/${item.actor.username}`} className="shrink-0">
-        <Avatar user={{ username: item.actor.username, avatarUrl: item.actor.avatarUrl }} size={32} />
+        <Avatar
+          user={{ username: item.actor.username, avatarUrl: item.actor.avatarUrl }}
+          size={32}
+        />
       </Link>
 
       <div className="min-w-0 flex-1">
         <p className="text-sm text-muted">
-          <Link to={`/u/${item.actor.username}`} className="font-semibold text-content hover:text-gold">
+          <Link
+            to={`/u/${item.actor.username}`}
+            className="font-semibold text-content hover:text-gold"
+          >
             {name}
           </Link>{' '}
-          {VERB[item.type]}
+          {item.type === 'REVIEWED' && item.reviewId ? (
+            <Link to={`/review/${item.reviewId}`} className="underline-offset-2 hover:underline">
+              reviewed
+            </Link>
+          ) : (
+            VERB[item.type]
+          )}
           {item.targetUser && (
             <>
               {' '}
@@ -103,24 +117,40 @@ function ActivityRow({ item }: { item: ActivityItem }): JSX.Element {
               </Link>
             </>
           )}
+          {item.listId && item.listTitle && (
+            <>
+              {' '}
+              <Link
+                to={`/lists/${item.listId}`}
+                className="font-semibold text-content hover:text-gold"
+              >
+                {item.listTitle}
+              </Link>
+            </>
+          )}
           {item.media && (
             <>
               {' '}
-              <Link to={`/media/${item.media.id}`} className="font-semibold text-content hover:text-gold">
+              <Link
+                to={`/media/${item.media.id}`}
+                className="font-semibold text-content hover:text-gold"
+              >
                 {item.media.title}
               </Link>
               {item.groupedMedia.length > 0 && (
-                <span className="text-muted-2">
-                  {' '}
-                  and {item.groupedMedia.length} more
-                </span>
+                <span className="text-muted-2"> and {item.groupedMedia.length} more</span>
               )}
             </>
           )}
           {item.ratingValue !== null && (item.type === 'RATED' || item.type === 'REVIEWED') && (
             <>
               {' '}
-              <StarText value={item.ratingValue} size={12} className="align-middle" />
+              <RatingMark
+                value={item.ratingValue}
+                type={item.media?.type}
+                size={12}
+                className="align-middle"
+              />
             </>
           )}
         </p>
@@ -129,41 +159,17 @@ function ActivityRow({ item }: { item: ActivityItem }): JSX.Element {
         {allMedia.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {allMedia.slice(0, 8).map((m) => (
-              <MiniPoster key={m.id} media={m} />
+              <PosterThumb
+                key={m.id}
+                title={m.title}
+                posterUrl={m.posterUrl}
+                to={mediaHref(m)}
+                size="sm"
+              />
             ))}
           </div>
         )}
       </div>
     </li>
   );
-}
-
-function MiniPoster({ media }: { media: MediaSummary }): JSX.Element {
-  return (
-    <Link
-      to={`/media/${media.id}`}
-      title={media.title}
-      className="block h-[66px] w-11 shrink-0 overflow-hidden rounded-sm ring-1 ring-border-hi/60 hover:ring-2 hover:ring-gold"
-    >
-      {media.posterUrl ? (
-        <img src={media.posterUrl} alt={media.title} loading="lazy" className="h-full w-full object-cover" />
-      ) : (
-        <span className="block h-full w-full" style={{ background: posterGradient(media.title) }} />
-      )}
-    </Link>
-  );
-}
-
-/** Compact relative timestamp — feeds read better than absolute dates here. */
-function relativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 60) return 'just now';
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
 }

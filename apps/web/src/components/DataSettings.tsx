@@ -2,9 +2,10 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { BackupImportResult, ImportSummary, LetterboxdItem } from '@cinelog/contracts';
 import { api, ApiError } from '../lib/api';
+import { invalidateUserMedia } from '../lib/invalidate';
 import { parseCsv } from '../lib/csv';
 import { parseLetterboxdZip, type ParsedExport } from '../lib/letterboxdZip';
-import { Button, Card, Spinner } from './ui';
+import { Button, Card, Spinner, Notice } from './ui';
 
 const MAX = 5000;
 
@@ -84,7 +85,7 @@ function BackupCard(): JSX.Element {
       const parsed = JSON.parse(await file.text()) as unknown;
       const res = await api.importBackup(parsed as never);
       setResult(res);
-      void queryClient.invalidateQueries({ queryKey: ['library'] });
+      invalidateUserMedia(queryClient);
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -101,7 +102,6 @@ function BackupCard(): JSX.Element {
   return (
     <Card className="p-6">
       <div className="mb-1 flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-gold" />
         <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-content">
           Backup &amp; restore
         </h2>
@@ -114,10 +114,10 @@ function BackupCard(): JSX.Element {
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button variant="primary" disabled={exporting} onClick={() => void onExport()}>
-          {exporting ? 'Exporting…' : '↓ Export backup'}
+          {exporting ? 'Exporting…' : 'Export backup'}
         </Button>
         <Button variant="secondary" disabled={importing} onClick={() => inputRef.current?.click()}>
-          {importing ? 'Restoring…' : '↑ Import backup'}
+          {importing ? 'Restoring…' : 'Import backup'}
         </Button>
         <input
           ref={inputRef}
@@ -140,13 +140,13 @@ function BackupCard(): JSX.Element {
       )}
 
       {error && (
-        <p className="mt-3 rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+        <Notice className="mt-3">
           {error}
-        </p>
+        </Notice>
       )}
 
       {result && (
-        <div className="mt-4 rounded-xl border border-border bg-surface-2/50 p-4 text-sm">
+        <div className="mt-4 rounded-sm border border-border bg-surface-2/50 p-4 text-sm">
           <p>
             <span className="font-cond text-lg font-extrabold text-gold">{result.itemsImported}</span>{' '}
             of {result.itemsProcessed} titles restored · {result.ratingsImported} ratings ·{' '}
@@ -195,7 +195,7 @@ function LetterboxdImportCard(): JSX.Element {
     setFileName(file.name);
     try {
       if (file.name.toLowerCase().endsWith('.zip')) {
-        const result = parseLetterboxdZip(new Uint8Array(await file.arrayBuffer()));
+        const result = await parseLetterboxdZip(new Uint8Array(await file.arrayBuffer()));
         if (result.items.length === 0 && result.watchlistItems.length === 0) {
           setError(
             "That archive didn't contain any of the files this reads — expected ratings.csv, diary.csv, watched.csv, watchlist.csv, reviews.csv, or likes/films.csv.",
@@ -298,13 +298,12 @@ function LetterboxdImportCard(): JSX.Element {
         setProgress({ done, total: grandTotal });
       }
       setSummary(acc);
-      void queryClient.invalidateQueries({ queryKey: ['library'] });
-      void queryClient.invalidateQueries({ queryKey: ['profile'] });
-      void queryClient.invalidateQueries({ queryKey: ['activity'] });
+      invalidateUserMedia(queryClient);
     } catch (err) {
       // Whatever completed is already saved, so report progress honestly
       // rather than implying the whole import was lost.
       setSummary(acc);
+      invalidateUserMedia(queryClient);
       setError(
         `${err instanceof Error ? err.message : 'Import failed'} — stopped after ${done} of ${grandTotal} titles. Everything up to that point was saved; re-running skips what's already there.`,
       );
@@ -365,14 +364,14 @@ function LetterboxdImportCard(): JSX.Element {
             </p>
           )}
           {overLimit && (
-            <p className="mt-3 rounded-sm border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold">
+            <Notice className="mt-3">
               That export has {total} titles; only the first {MAX} of each set will be imported.
-            </p>
+            </Notice>
           )}
 
           <Button
             variant="primary"
-            size="lg"
+           
             className="mt-5 w-full"
             disabled={busy}
             onClick={() => void doImport()}
@@ -412,9 +411,9 @@ function LetterboxdImportCard(): JSX.Element {
       )}
 
       {error && (
-        <p className="mt-4 rounded-sm border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+        <Notice className="mt-4">
           {error}
-        </p>
+        </Notice>
       )}
 
       {summary && (

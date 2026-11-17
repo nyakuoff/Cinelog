@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ActivityFeed } from '../components/ActivityFeed';
-import { TabBar } from '../components/lb';
+import { PageHeader, TabBar } from '../components/lb';
 
 /**
  * The feed as a screen of its own.
@@ -16,10 +16,8 @@ export function ActivityPage(): JSX.Element {
   const [scope, setScope] = useState<Scope>('FOLLOWING');
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="mb-5 font-cond text-2xl font-extrabold uppercase tracking-[0.04em] app:hidden sm:text-3xl">
-        Activity
-      </h1>
+    <div className="mx-auto max-w-3xl px-4 py-8 app:py-4 sm:px-6">
+      <PageHeader title="Activity" />
 
       <TabBar
         tabs={[

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from './ui';
+import { IconX } from './app/Icons';
 
 const DISMISS_KEY = 'cinelog:install-dismissed';
 const DISMISS_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
@@ -62,13 +63,13 @@ export function InstallPrompt(): JSX.Element | null {
   }
 
   return (
-    <div className="fixed bottom-safe-5 left-5 z-30 flex max-w-xs items-center gap-3 rounded-sm border border-border-hi bg-surface p-3 shadow-lift">
+    <div className="fixed inset-x-5 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 flex items-center sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-xs gap-3 rounded-sm border border-border-hi bg-surface p-3 shadow-lift">
       <p className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content">
         Install Cinelog
       </p>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <Button variant="ghost" size="sm" onClick={dismiss} aria-label="Dismiss">
-          ✕
+          <IconX />
         </Button>
         <Button variant="primary" size="sm" onClick={() => void install()}>
           Install

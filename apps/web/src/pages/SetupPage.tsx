@@ -2,10 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { useAuth } from '../lib/auth';
 import { AuthLayout } from '../components/AuthLayout';
 import { Field } from '../components/Field';
-import { Button, Input } from '../components/ui';
+import { Button, Input, Notice } from '../components/ui';
 
 const FEATURES = [
-  'Track movies, TV, anime, docs & more',
+  'Track films, shows, anime, docs & more',
   'Independent library for every user',
   'Ratings, reviews & watch history — self-hosted',
 ];
@@ -90,9 +90,9 @@ export function SetupPage(): JSX.Element {
           />
           {password.length > 0 && (
             <span className="mt-2 flex items-center gap-2">
-              <span className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2">
+              <span className="h-1 flex-1 overflow-hidden bg-surface-2">
                 <span
-                  className="block h-full rounded-full transition-all duration-300"
+                  className="block h-full transition-all duration-300"
                   style={{ width: `${Math.max(8, pw.pct)}%`, background: pw.color }}
                 />
               </span>
@@ -110,12 +110,12 @@ export function SetupPage(): JSX.Element {
         </Field>
 
         {error && (
-          <p className="rounded-lg border border-rose/30 bg-rose/10 px-3 py-2 text-sm text-rose">
+          <Notice>
             {error}
-          </p>
+          </Notice>
         )}
 
-        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={!canSubmit}>
+        <Button type="submit" variant="primary" className="w-full" disabled={!canSubmit}>
           {busy ? 'Creating…' : 'Create admin account'}
         </Button>
         <p className="text-center text-xs text-muted-2">

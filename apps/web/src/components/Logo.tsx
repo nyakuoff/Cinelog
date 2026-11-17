@@ -10,8 +10,6 @@ export function LogoMark({
   className,
 }: {
   size?: number;
-  /** Retained for call-site compatibility; this world has no glow. */
-  glow?: boolean;
   className?: string;
 }): JSX.Element {
   return (
@@ -36,7 +34,6 @@ export function Logo({
   textClassName,
 }: {
   size?: number;
-  glow?: boolean;
   className?: string;
   /** Font-size utility for the wordmark; the topbar wants it noticeably larger. */
   textClassName?: string;

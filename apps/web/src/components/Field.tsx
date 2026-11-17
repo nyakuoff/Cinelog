@@ -18,7 +18,7 @@ export function Field({
         {hint && <span className="text-xs text-muted-2">{hint}</span>}
       </span>
       {children}
-      {error && <span className="mt-1.5 block text-xs text-rose">{error}</span>}
+      {error && <span className="mt-1.5 block text-xs text-cyan">{error}</span>}
     </label>
   );
 }

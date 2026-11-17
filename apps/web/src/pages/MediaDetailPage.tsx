@@ -1,31 +1,53 @@
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import type { CreditPerson, MediaDetail, SearchResult, TrackingStatus } from '@cinelog/contracts';
-import { fromNormalized, scaleForMediaType } from '@cinelog/contracts';
-import { api } from '../lib/api';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import type {
+  CreditPerson,
+  MediaDetail,
+  TrackingResponse,
+  TrackingStatus,
+} from '@cinelog/contracts';
+import { scaleForMediaType } from '@cinelog/contracts';
+import { api, ApiError } from '../lib/api';
+import { invalidateUserMedia } from '../lib/invalidate';
 import { useAuth } from '../lib/auth';
-import { useAppShell, useScreenHeader } from '../lib/appShell';
+import { useAppShell, useGoBack, useScreenHeader } from '../lib/appShell';
 import { cn } from '../lib/cn';
 import { posterGradient } from '../lib/poster';
-import { IconChevronLeft } from '../components/app/Icons';
-import { Button, Spinner } from '../components/ui';
+import { formatDate, localDateString } from '../lib/format';
+import {
+  IconChevronLeft,
+  IconDots,
+  IconEdit,
+  IconList,
+  IconPlay,
+  IconShare,
+} from '../components/app/Icons';
+import { Button, buttonClass, LoadMore, Spinner, StampToggle } from '../components/ui';
+import { useConfirm } from '../components/Dialog';
+import { RatingHistogram, RatingMark, StarInput } from '../components/Rating';
 import { StatusPicker } from '../components/StatusPicker';
-import { RatingWidget } from '../components/RatingWidget';
 import { EpisodesSection } from '../components/EpisodesSection';
 import { ArtworkPickerModal } from '../components/ArtworkPickerModal';
 import { RematchModal } from '../components/RematchModal';
 import { EditCastModal } from '../components/EditCastModal';
 import { ReviewsSection } from '../components/ReviewsSection';
 import { LogModal } from '../components/LogModal';
+import { AddToListsDialog } from '../components/AddToListsDialog';
+import { ListCard } from '../components/ListCard';
 import { WhereToWatch } from '../components/WhereToWatch';
 import {
   Accession,
+  EmptyState,
+  ErrorState,
   formatRuntime,
+  isEpisodic as isEpisodicType,
+  mediaHref,
   Poster,
+  PosterGrid,
   SectionHeader,
-  StarText,
   TabBar,
+  Tag,
   TYPE_LABEL,
 } from '../components/lb';
 import { Avatar } from '../components/Avatar';
@@ -34,11 +56,12 @@ type InfoTab = 'cast' | 'crew' | 'details' | 'genres';
 
 export function MediaDetailPage(): JSX.Element {
   const { id = '' } = useParams();
-  const navigate = useNavigate();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [params] = useSearchParams();
   const appShell = useAppShell();
+  const goBack = useGoBack();
 
   /* A film's own artwork is the header on a phone — it runs under the status
      bar, so the shell's title bar would only be in its way. This screen draws
@@ -58,52 +81,109 @@ export function MediaDetailPage(): JSX.Element {
   const [logging, setLogging] = useState(false);
   const [infoTab, setInfoTab] = useState<InfoTab>('cast');
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['media', id, libraryOf],
     queryFn: () => api.getMedia(id, libraryOf ?? undefined),
     enabled: id.length > 0,
   });
 
-  const invalidate = (): void => {
-    void queryClient.invalidateQueries({ queryKey: ['media', id] });
-    void queryClient.invalidateQueries({ queryKey: ['library'] });
+  const invalidate = (): void => invalidateUserMedia(queryClient, id);
+  // Apply the returned state at once, so the controls never read stale state
+  // while the refetch is in flight (a second tap would act on the old value).
+  const applyState = (res: TrackingResponse): void => {
+    queryClient.setQueryData<MediaDetail>(['media', id, libraryOf], (old) =>
+      old ? { ...old, userState: res.userState } : old,
+    );
+    invalidate();
   };
 
   const statusMut = useMutation({
     mutationFn: (status: TrackingStatus | null) => api.setStatus({ mediaId: id }, status),
-    onSuccess: invalidate,
+    onSuccess: applyState,
   });
   const favoriteMut = useMutation({
     mutationFn: (value: boolean) => api.setFavorite({ mediaId: id }, value),
-    onSuccess: invalidate,
+    onSuccess: applyState,
   });
   const watchlistMut = useMutation({
     mutationFn: (value: boolean) => api.setWatchlist({ mediaId: id }, value),
-    onSuccess: invalidate,
+    onSuccess: applyState,
   });
   // The Watched control is a toggle, so it needs the un-watch path too —
   // previously it could only ever be switched on.
   const watchMut = useMutation({
     mutationFn: (next: boolean) =>
-      next ? api.markWatched({ mediaId: id }) : api.unmarkWatched({ mediaId: id }),
-    onSuccess: invalidate,
+      next
+        ? // Date-only on the server, like every logged watch: today, in the viewer's zone.
+          api.markWatched({ mediaId: id, watchedAt: `${localDateString()}T12:00:00.000Z` })
+        : api.unmarkWatched({ mediaId: id }),
+    onSuccess: applyState,
   });
+  // isPending only flips after the observer's next tick, so a fast double
+  // click can slip past it; this is set synchronously.
+  const watchBusy = useRef(false);
   const ratingMut = useMutation({
     mutationFn: (value: number | null) => api.setRating({ mediaId: id }, value),
     onSuccess: invalidate,
   });
 
-  if (isLoading || !data) {
+  if (isLoading) return <Spinner center />;
+
+  if (isError || !data) {
+    const notFound = error instanceof ApiError && error.status === 404;
+    // The app shell's title bar is hidden on this screen, so "Go back" is its only way out.
+    const back = (
+      <Button variant="ghost" onClick={goBack}>
+        Go back
+      </Button>
+    );
     return (
-      <div className="flex justify-center py-24">
-        <Spinner />
+      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
+        {notFound ? (
+          <EmptyState
+            title="Title not found"
+            body="It may have been removed or rematched."
+            action={back}
+          />
+        ) : (
+          <ErrorState
+            title="Could not load this title"
+            onRetry={() => void refetch()}
+            action={back}
+          />
+        )}
       </div>
     );
   }
 
   const m = data;
   const state = m.userState;
-  const isEpisodic = m.type !== 'MOVIE' && m.type !== 'SPECIAL';
+  const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
+  // Un-watching also deletes the rating server-side, so say so first. Ignored
+  // while a toggle is in flight so a double tap can't write two diary rows.
+  const toggleWatched = async (): Promise<void> => {
+    if (watchBusy.current) return;
+    watchBusy.current = true;
+    const release = (): void => {
+      watchBusy.current = false;
+    };
+    if (
+      watched &&
+      state.rating !== null &&
+      !(await confirm({
+        title: 'Remove from watched?',
+        body: 'This also removes your rating.',
+        confirmLabel: 'Remove',
+        danger: true,
+      }))
+    ) {
+      return release();
+    }
+    watchMut.mutate(!watched, { onSettled: release });
+  };
+  const isEpisodic = isEpisodicType(m.type);
+  // A show has a creator, not a director; the credit line says which.
+  const creditLabel = isEpisodic ? 'Created by' : 'Directed by';
   const scale = scaleForMediaType(m.type);
   const directors = m.crew.filter((c) => c.role === 'Director' || c.role === 'Creator');
 
@@ -121,9 +201,11 @@ export function MediaDetailPage(): JSX.Element {
           media={m}
           scale={scale}
           directors={directors}
+          creditLabel={creditLabel}
           canEditArtwork={canEditArtwork}
           isAdmin={user?.role === 'ADMIN'}
-          onWatch={() => watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))}
+          onWatch={() => void toggleWatched()}
+          watchPending={watchMut.isPending}
           onLike={() => favoriteMut.mutate(!state.isFavorite)}
           onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
           onRate={(v) => ratingMut.mutate(v)}
@@ -139,7 +221,13 @@ export function MediaDetailPage(): JSX.Element {
         <div className="relative">
           {m.backdropUrl && (
             <div className="absolute inset-x-0 top-0 h-[300px] overflow-hidden sm:h-[440px]">
-              <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
+              <img
+                src={m.backdropUrl}
+                alt=""
+                decoding="async"
+                fetchPriority="high"
+                className="h-full w-full object-cover object-top"
+              />
               {/* One gradient, weighted to the bottom, so the image stays legible
                 at the top and only fades where text begins. */}
               <div className="absolute inset-0 bg-gradient-to-b from-bg/40 via-transparent to-bg" />
@@ -155,21 +243,34 @@ export function MediaDetailPage(): JSX.Element {
           >
             <div className="grid gap-6 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
               {/* Poster + action panel */}
-              <div className="flex gap-5 lg:block">
+              <div className="flex items-end gap-5 lg:block">
                 <div className="group relative w-28 shrink-0 sm:w-40 lg:w-full">
                   <div className="aspect-[2/3] overflow-hidden rounded ring-1 ring-border-hi/60 shadow-soft">
-                    {m.posterUrl && (
-                      <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+                    {m.posterUrl ? (
+                      <img
+                        src={m.posterUrl}
+                        alt={m.title}
+                        decoding="async"
+                        fetchPriority="high"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="h-full w-full"
+                        style={{ background: posterGradient(m.title) }}
+                      />
                     )}
                   </div>
                   {canEditArtwork && (
-                    <button
+                    <Button
+                      size="icon"
                       onClick={() => setEditingArtwork(true)}
                       title="Change artwork in your library"
-                      className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-sm border border-border-hi bg-bg-2 text-content opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                      aria-label="Change artwork in your library"
+                      className="absolute bottom-2 right-2 !bg-bg-2 opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100 coarse:opacity-100"
                     >
-                      ✎
-                    </button>
+                      <IconEdit />
+                    </Button>
                   )}
                 </div>
 
@@ -180,19 +281,7 @@ export function MediaDetailPage(): JSX.Element {
                   than with the catalogue coordinates. */}
                 <div className="min-w-0 flex-1 space-y-2 lg:mt-4">
                   <WhereToWatch media={m} />
-                  {m.trailerUrl && (
-                    <a
-                      href={m.trailerUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="flex items-center justify-between gap-2 rounded-sm border border-border-hi bg-surface px-3 py-2.5 hover:bg-surface-2"
-                    >
-                      <span className="font-cond text-[13px] font-bold uppercase tracking-[0.08em] text-content">
-                        Trailer
-                      </span>
-                      <span className="font-data text-[11px] text-muted-2">▶ watch</span>
-                    </a>
-                  )}
+                  {m.trailerUrl && <TrailerLink url={m.trailerUrl} className="w-full" />}
                 </div>
               </div>
 
@@ -200,7 +289,7 @@ export function MediaDetailPage(): JSX.Element {
               <div className="min-w-0">
                 {directors.length > 0 && (
                   <p className="font-cond text-[13px] font-bold uppercase tracking-[0.16em] text-muted-2">
-                    Directed by
+                    {creditLabel}
                   </p>
                 )}
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -233,16 +322,15 @@ export function MediaDetailPage(): JSX.Element {
                   <span className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
                     {TYPE_LABEL[m.type]}
                   </span>
-                  <button
-                    onClick={() => setFixingMismatch(true)}
-                    className="font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2 underline-offset-2 hover:text-cyan hover:underline"
-                  >
-                    Wrong title?
-                  </button>
+                  {user?.role === 'ADMIN' && (
+                    <Button variant="link" size="sm" onClick={() => setFixingMismatch(true)}>
+                      Wrong title?
+                    </Button>
+                  )}
                 </div>
 
                 {m.tagline && (
-                  <p className="mt-5 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-gold">
+                  <p className="mt-5 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-muted">
                     {m.tagline}
                   </p>
                 )}
@@ -269,12 +357,7 @@ export function MediaDetailPage(): JSX.Element {
                       <CastGrid people={m.crew} emptyLabel="No crew recorded for this title." />
                     )}
                     {infoTab === 'details' && <DetailsList media={m} />}
-                    {infoTab === 'genres' && (
-                      <ChipRow
-                        items={m.genres.map((g) => g.name)}
-                        emptyLabel="No genres recorded."
-                      />
-                    )}
+                    {infoTab === 'genres' && <GenreChips media={m} />}
                   </div>
                 </div>
               </div>
@@ -282,11 +365,10 @@ export function MediaDetailPage(): JSX.Element {
               {/* Right rail: community ratings + stats */}
               <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
                 <ActionPanel
-                  state={state}
+                  media={m}
                   scale={scale}
-                  onWatch={() =>
-                    watchMut.mutate(!(state.status === 'COMPLETED' || state.rewatchCount > 0))
-                  }
+                  onWatch={() => void toggleWatched()}
+                  watchPending={watchMut.isPending}
                   onLike={() => favoriteMut.mutate(!state.isFavorite)}
                   onWatchlist={() => watchlistMut.mutate(!state.isWatchlisted)}
                   onRate={(v) => ratingMut.mutate(v)}
@@ -294,7 +376,7 @@ export function MediaDetailPage(): JSX.Element {
                   onLog={() => setLogging(true)}
                 />
                 <RatingsPanel media={m} />
-                <FriendRatingsPanel mediaId={id} />
+                <FriendRatingsPanel mediaId={id} type={m.type} />
                 <StatsPanel media={m} />
               </aside>
             </div>
@@ -309,18 +391,15 @@ export function MediaDetailPage(): JSX.Element {
         )}
       >
         {isEpisodic && <EpisodesSection mediaId={id} scale={scale} />}
-        <ReviewsSection mediaId={id} scale={scale} />
-        <SimilarSection
-          mediaId={id}
-          isEpisodic={isEpisodic}
-          onOpenResolved={(mid) => navigate(`/media/${mid}`)}
-        />
+        <ReviewsSection mediaId={id} scale={scale} ownReview={m.ownReview} />
+        <ListsContaining mediaId={id} />
+        <SimilarSection mediaId={id} isEpisodic={isEpisodic} />
       </div>
 
       {editingArtwork && (
         <ArtworkPickerModal mediaId={id} onClose={() => setEditingArtwork(false)} />
       )}
-      {fixingMismatch && (
+      {fixingMismatch && user?.role === 'ADMIN' && (
         <RematchModal
           mediaId={id}
           currentTitle={m.title}
@@ -349,9 +428,11 @@ function AppFilmScreen({
   media: m,
   scale,
   directors,
+  creditLabel,
   canEditArtwork,
   isAdmin,
   onWatch,
+  watchPending,
   onLike,
   onWatchlist,
   onRate,
@@ -364,9 +445,11 @@ function AppFilmScreen({
   media: MediaDetail;
   scale: ReturnType<typeof scaleForMediaType>;
   directors: CreditPerson[];
+  creditLabel: string;
   canEditArtwork: boolean;
   isAdmin: boolean;
   onWatch: () => void;
+  watchPending: boolean;
   onLike: () => void;
   onWatchlist: () => void;
   onRate: (value: number | null) => void;
@@ -376,7 +459,7 @@ function AppFilmScreen({
   onFixMismatch: () => void;
   onEditCast: () => void;
 }): JSX.Element {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   const state = m.userState;
   const [infoTab, setInfoTab] = useState<InfoTab>('cast');
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
@@ -387,7 +470,13 @@ function AppFilmScreen({
       <div className="relative">
         <div className="h-[38vh] min-h-[230px] w-full overflow-hidden">
           {m.backdropUrl ? (
-            <img src={m.backdropUrl} alt="" className="h-full w-full object-cover object-top" />
+            <img
+              src={m.backdropUrl}
+              alt=""
+              decoding="async"
+              fetchPriority="high"
+              className="h-full w-full object-cover object-top"
+            />
           ) : (
             <div className="h-full w-full" style={{ background: posterGradient(m.title) }} />
           )}
@@ -399,13 +488,9 @@ function AppFilmScreen({
         {/* Screen controls, over the art. They scroll away with it rather than
             floating — nothing in this world hovers. */}
         <div className="absolute inset-x-0 top-0 flex items-center justify-between px-2 pt-safe">
-          <button
-            onClick={() => navigate(-1)}
-            aria-label="Back"
-            className="grid h-10 w-10 place-items-center rounded-sm bg-bg-2/70 text-content backdrop-blur-sm"
-          >
+          <Button size="icon" onClick={goBack} aria-label="Back" className={OVER_ART}>
             <IconChevronLeft />
-          </button>
+          </Button>
           <RecordMenu
             canEditArtwork={canEditArtwork}
             isAdmin={isAdmin}
@@ -423,12 +508,12 @@ function AppFilmScreen({
             <h1 className="font-cond text-[27px] font-extrabold uppercase leading-[0.94] tracking-tight">
               {m.title}
             </h1>
-            <p className="mt-1.5 font-cond text-[12px] font-bold uppercase tracking-[0.12em] text-muted">
+            <p className="mt-1.5 font-cond text-[13px] font-bold uppercase tracking-[0.12em] text-muted">
               {m.releaseDate && <span className="tabular-nums">{m.releaseDate.slice(0, 4)}</span>}
               {m.releaseDate && directors.length > 0 && <span className="px-1.5">·</span>}
               {directors.length > 0 && (
                 <>
-                  <span className="text-muted-2">Directed by </span>
+                  <span className="text-muted-2">{creditLabel} </span>
                   {directors.map((d, i) => (
                     <span key={d.id}>
                       {i > 0 && ', '}
@@ -445,7 +530,13 @@ function AppFilmScreen({
           <div className="w-[88px] shrink-0 overflow-hidden rounded-sm bg-card shadow-lift ring-1 ring-border-hi/60">
             <div className="aspect-[2/3]">
               {m.posterUrl ? (
-                <img src={m.posterUrl} alt={m.title} className="h-full w-full object-cover" />
+                <img
+                  src={m.posterUrl}
+                  alt={m.title}
+                  decoding="async"
+                  fetchPriority="high"
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <div className="h-full w-full" style={{ background: posterGradient(m.title) }} />
               )}
@@ -455,18 +546,9 @@ function AppFilmScreen({
 
         {/* Trailer and length, the two "can I watch this now" facts, on one rule. */}
         <div className="mt-4 flex items-center gap-2.5 border-y border-border py-2.5">
-          {m.trailerUrl && (
-            <a
-              href={m.trailerUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="flex items-center gap-1.5 rounded-sm border border-border-hi px-2.5 py-1.5 font-cond text-[12px] font-bold uppercase tracking-[0.1em] text-content"
-            >
-              <span aria-hidden="true">▶</span> Trailer
-            </a>
-          )}
+          {m.trailerUrl && <TrailerLink url={m.trailerUrl} size="sm" />}
           {m.runtime && (
-            <span className="font-data text-[12px] text-muted">{formatRuntime(m.runtime)}</span>
+            <span className="font-data text-[13px] text-muted">{formatRuntime(m.runtime)}</span>
           )}
           <span className="ml-auto font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-muted-2">
             {TYPE_LABEL[m.type]}
@@ -474,7 +556,7 @@ function AppFilmScreen({
         </div>
 
         {m.tagline && (
-          <p className="mt-4 font-cond text-[12px] font-bold uppercase tracking-[0.14em] text-gold">
+          <p className="mt-4 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-muted">
             {m.tagline}
           </p>
         )}
@@ -487,26 +569,20 @@ function AppFilmScreen({
       <div className="mt-7 space-y-7 px-4">
         <div>
           <SectionHeader title="Your rating" />
-          <div className="flex items-center justify-between gap-3">
-            <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
-            {state.rating !== null && (
-              <button
-                type="button"
-                onClick={() => onRate(null)}
-                className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-muted-2"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="mt-3">
-            <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
+          <StarInput value={state.rating} scale={scale} onChange={onRate} />
+          {isEpisodicType(m.type) && (
+            <div className="mt-3">
+              <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
+            </div>
+          )}
+          <div className="mt-3 overflow-hidden rounded-sm border border-border">
+            <RecordActions media={m} />
           </div>
         </div>
 
         <WhereToWatch media={m} />
         <RatingsPanel media={m} />
-        <FriendRatingsPanel mediaId={m.id} />
+        <FriendRatingsPanel mediaId={m.id} type={m.type} />
         <StatsPanel media={m} />
 
         <div>
@@ -533,30 +609,39 @@ function AppFilmScreen({
               <CastGrid people={m.crew} emptyLabel="No crew recorded for this title." />
             )}
             {infoTab === 'details' && <DetailsList media={m} />}
-            {infoTab === 'genres' && (
-              <ChipRow items={m.genres.map((g) => g.name)} emptyLabel="No genres recorded." />
-            )}
+            {infoTab === 'genres' && <GenreChips media={m} />}
           </div>
         </div>
       </div>
 
       {/* ---- Pinned record bar --------------------------------------- */}
       <div className="fixed inset-x-0 bottom-tabbar z-30 border-t-2 border-border-hi bg-bg-2 pl-safe pr-safe">
-        <div className="mx-auto flex h-[3.25rem] max-w-md items-stretch gap-1 px-2">
-          <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} />
-          <PanelAction label="Liked" active={state.isFavorite} tone="rose" onClick={onLike} />
-          <PanelAction
+        <div className="mx-auto flex h-[var(--actionbar-h)] max-w-md items-center gap-1 px-2">
+          <StampToggle
+            label="Watched"
+            active={watched}
+            tone="cyan"
+            onChange={onWatch}
+            disabled={watchPending}
+            className="flex-1"
+          />
+          <StampToggle
+            label="Liked"
+            active={state.isFavorite}
+            tone="rose"
+            onChange={onLike}
+            className="flex-1"
+          />
+          <StampToggle
             label="Watchlist"
             active={state.isWatchlisted}
             tone="gold"
-            onClick={onWatchlist}
+            onChange={onWatchlist}
+            className="flex-1"
           />
-          <button
-            onClick={onLog}
-            className="my-2 shrink-0 rounded-sm bg-accent px-3 font-cond text-[12px] font-extrabold uppercase tracking-[0.1em] text-ink"
-          >
+          <Button variant="primary" size="sm" onClick={onLog}>
             Log
-          </button>
+          </Button>
         </div>
       </div>
     </>
@@ -575,12 +660,9 @@ function Synopsis({ text }: { text: string }): JSX.Element {
       <p className={cn('text-[15px] leading-relaxed text-content/90', !open && 'line-clamp-4')}>
         {text}
       </p>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="mt-1.5 font-cond text-[11px] font-bold uppercase tracking-[0.14em] text-gold"
-      >
+      <Button variant="link" size="sm" className="mt-1.5" onClick={() => setOpen((v) => !v)}>
         {open ? 'Less' : 'More'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -617,23 +699,24 @@ function RecordMenu({
   }, [open]);
 
   const items: { label: string; run: () => void }[] = [
-    { label: 'Wrong title?', run: onFixMismatch },
+    ...(isAdmin ? [{ label: 'Wrong title?', run: onFixMismatch }] : []),
     ...(canEditArtwork ? [{ label: 'Change artwork', run: onEditArtwork }] : []),
     ...(isAdmin ? [{ label: 'Edit cast', run: onEditCast }] : []),
   ];
 
+  if (items.length === 0) return <span />;
+
   return (
     <div className="relative" ref={ref}>
-      <button
+      <Button
+        size="icon"
         onClick={() => setOpen((v) => !v)}
         aria-label="More actions"
         aria-expanded={open}
-        className="grid h-10 w-10 place-items-center rounded-sm bg-bg-2/70 text-content backdrop-blur-sm"
+        className={OVER_ART}
       >
-        <span aria-hidden="true" className="text-lg leading-none">
-          •••
-        </span>
-      </button>
+        <IconDots className="h-5 w-5" />
+      </Button>
       {open && (
         <div
           role="menu"
@@ -647,7 +730,7 @@ function RecordMenu({
                 setOpen(false);
                 i.run();
               }}
-              className="block w-full rounded-sm px-2.5 py-2 text-left text-sm text-muted"
+              className="block w-full rounded-sm px-2.5 py-2.5 text-left text-sm text-muted hover:bg-surface-2 hover:text-content"
             >
               {i.label}
             </button>
@@ -664,154 +747,201 @@ function RecordMenu({
  * motion in the app, so marking a title watched actually feels like marking it.
  */
 function ActionPanel({
-  state,
+  media,
   scale,
   onWatch,
+  watchPending,
   onLike,
   onWatchlist,
   onRate,
   onStatus,
   onLog,
 }: {
-  state: MediaDetail['userState'];
+  media: MediaDetail;
   scale: ReturnType<typeof scaleForMediaType>;
   onWatch: () => void;
+  watchPending: boolean;
   onLike: () => void;
   onWatchlist: () => void;
   onRate: (value: number | null) => void;
   onStatus: (status: TrackingStatus | null) => void;
   onLog: () => void;
 }): JSX.Element {
+  const state = media.userState;
   const watched = state.status === 'COMPLETED' || state.rewatchCount > 0;
   return (
-    <div className="rounded-sm border border-border-hi bg-surface text-center">
+    <div className="overflow-hidden rounded-sm border border-border-hi bg-surface text-center">
       <p className="border-b border-border px-3 py-1.5 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
         Your record
       </p>
 
       <div className="flex items-stretch gap-1 p-2">
-        <PanelAction label="Watched" active={watched} tone="cyan" onClick={onWatch} />
-        <PanelAction label="Liked" active={state.isFavorite} tone="rose" onClick={onLike} />
-        <PanelAction
+        <StampToggle
+          label="Watched"
+          active={watched}
+          tone="cyan"
+          onChange={onWatch}
+          disabled={watchPending}
+          className="flex-1"
+        />
+        <StampToggle
+          label="Liked"
+          active={state.isFavorite}
+          tone="rose"
+          onChange={onLike}
+          className="flex-1"
+        />
+        <StampToggle
           label="Watchlist"
           active={state.isWatchlisted}
           tone="gold"
-          onClick={onWatchlist}
+          onChange={onWatchlist}
+          className="flex-1"
         />
       </div>
 
-      <div className="border-t border-border px-3 py-3">
-        {/* Clear sits with the label rather than after the stars, where it was
-            being mistaken for part of the rating itself. */}
-        <div className="mb-2 flex items-baseline justify-center gap-2">
-          <p className="font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
-            Your rating
-          </p>
-          {state.rating !== null && (
-            <button
-              type="button"
-              onClick={() => onRate(null)}
-              className="font-cond text-[11px] font-bold uppercase tracking-[0.1em] text-muted-2 hover:text-rose"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-        <RatingWidget value={state.rating} scale={scale} onChange={onRate} />
+      <div className="border-t border-border px-2 py-3">
+        <p className="mb-1 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
+          {state.rating === null ? 'Rate' : 'Your rating'}
+        </p>
+        <StarInput value={state.rating} scale={scale} onChange={onRate} />
       </div>
 
-      <div className="border-t border-border px-3 py-3">
-        <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
-      </div>
+      {/* Watching / on hold / dropped only mean something across episodes. */}
+      {isEpisodicType(media.type) && (
+        <div className="border-t border-border px-3 py-3">
+          <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
+        </div>
+      )}
 
       <div className="border-t border-border p-2">
-        <button
-          onClick={onLog}
-          className="w-full rounded-sm bg-accent px-3 py-2 font-cond text-[13px] font-extrabold uppercase tracking-[0.1em] text-ink hover:bg-gold/90"
-        >
-          Review or log
-        </button>
+        <Button variant="primary" className="w-full" onClick={onLog}>
+          Review or log…
+        </Button>
       </div>
+
+      <RecordActions media={media} />
     </div>
   );
 }
 
+const ACTION_ROW =
+  'flex min-h-[2.75rem] w-full items-center justify-center gap-2 border-t border-border px-3 font-cond text-[13px] font-bold uppercase tracking-[0.09em] text-muted hover:bg-surface-2 hover:text-content focus:outline-none focus-visible:bg-surface-2 focus-visible:text-content';
+
 /**
- * One state on the record card. Unset reads as an empty ruled box waiting to
- * be filled; set reads as struck ink, and strikes on the press that sets it.
+ * The rest of the record card, shared by both shells: add to lists, share,
+ * and the line that says how often you've logged this.
  */
-function PanelAction({
-  label,
-  active,
-  tone,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  tone: 'cyan' | 'rose' | 'gold';
-  onClick: () => void;
-}): JSX.Element {
-  // Only animate a strike the user just caused, never on first paint.
-  const [everPressed, setEverPressed] = useState(false);
-  const activeTone = tone === 'cyan' ? 'text-cyan' : tone === 'rose' ? 'text-rose' : 'text-gold';
+function RecordActions({ media }: { media: MediaDetail }): JSX.Element {
+  const [listing, setListing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { watchCount = 0, lastWatchedAt, status, rating } = media.userState;
+
+  async function share(): Promise<void> {
+    // Without `?libraryOf`, which is about whose artwork you were looking at.
+    const url = `${window.location.origin}/media/${media.id}`;
+    try {
+      if (navigator.share) return await navigator.share({ title: media.title, url });
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      /* share sheet dismissed, or clipboard denied — nothing to report */
+    }
+  }
+
+  const activity =
+    watchCount > 0
+      ? `Watched ${watchCount === 1 ? 'once' : `${watchCount} times`}${
+          lastWatchedAt
+            ? `${watchCount === 1 ? '' : ', last'} on ${formatDate(lastWatchedAt, { dateOnly: true })}`
+            : ''
+        }`
+      : status === 'COMPLETED' || rating !== null
+        ? 'Watched — no diary entry'
+        : null;
+
   return (
-    <button
-      onClick={() => {
-        setEverPressed(true);
-        onClick();
-      }}
-      aria-pressed={active}
-      title={label}
-      className="flex flex-1 items-center justify-center rounded-sm px-1 py-2.5 hover:bg-surface-2"
-    >
-      <span
-        className={cn(
-          'stamp',
-          active ? activeTone : 'text-muted-2 opacity-55',
-          active && everPressed && 'stamp-strike',
-        )}
+    <>
+      <button
+        type="button"
+        className={cn(ACTION_ROW, 'first:border-t-0')}
+        onClick={() => setListing(true)}
       >
-        {label}
-      </span>
-    </button>
+        <IconList /> Add to lists…
+      </button>
+      <button type="button" className={ACTION_ROW} onClick={() => void share()}>
+        <IconShare />
+        <span aria-live="polite">{copied ? 'Link copied' : 'Share'}</span>
+      </button>
+      {activity && (
+        <p className="border-t border-border px-3 py-2.5 text-center font-data text-[11px] text-muted-2">
+          <span className="mr-1.5 font-cond font-bold uppercase tracking-[0.14em]">
+            Your activity
+          </span>
+          {activity}
+        </p>
+      )}
+      {listing && (
+        <AddToListsDialog
+          mediaId={media.id}
+          title={media.title}
+          onClose={() => setListing(false)}
+        />
+      )}
+    </>
   );
 }
 
+/** Opens the trailer off-site. One look for it in both shells. */
+function TrailerLink({
+  url,
+  size = 'md',
+  className,
+}: {
+  url: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}): JSX.Element {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={buttonClass({ variant: 'secondary', size, className })}
+    >
+      <IconPlay className="h-3.5 w-3.5" /> Trailer
+    </a>
+  );
+}
+
+/** Controls drawn over artwork need their own solid ground — matte, not glass. */
+const OVER_ART = '!border-border-hi !bg-bg-2 !text-content';
+
 /** Community rating average + distribution histogram. */
 function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
-  const max = Math.max(1, ...media.ratingDistribution.map((b) => b.count));
   return (
     <div>
       <SectionHeader title="Ratings" />
       {media.ratingCount === 0 ? (
-        <p className="text-sm text-muted-2">
-          No ratings yet
-          {media.providerRating !== null && ` · ${(media.providerRating / 10).toFixed(1)} on TMDB`}
-        </p>
+        <p className="text-sm text-muted-2">No ratings yet.</p>
       ) : (
-        <div className="flex items-end gap-3">
-          <div className="shrink-0">
-            <p className="font-data text-2xl font-bold leading-none text-gold">
-              {fromNormalized(media.communityRating ?? 0, scaleForMediaType(media.type))}
-            </p>
-            <p className="mt-1 font-data text-[11px] text-muted-2">
-              {media.ratingCount} rating{media.ratingCount === 1 ? '' : 's'}
-            </p>
-          </div>
-          {/* Flat bars, no gradient — a printed tally, not a chart widget. */}
-          <div className="flex h-12 flex-1 items-end gap-[2px]" aria-hidden="true">
-            {media.ratingDistribution.map((b) => (
-              <div
-                key={b.bucket}
-                className={cn('flex-1', b.count > 0 ? 'bg-gold' : 'bg-border-hi/50')}
-                // An empty bucket still shows a readable baseline tick, so a
-                // sparsely rated title reads as "few ratings" and not as a
-                // broken chart.
-                style={{ height: b.count > 0 ? `${Math.max(12, (b.count / max) * 100)}%` : '3px' }}
-                title={`${b.bucket}/10 — ${b.count} rating${b.count === 1 ? '' : 's'}`}
-              />
-            ))}
-          </div>
+        <div className="flex items-start gap-3">
+          {/* An average is the archive's arithmetic, not your mark: plain ink. */}
+          <RatingMark
+            value={media.communityRating ?? 0}
+            type={media.type}
+            display="number"
+            average
+            size={24}
+            className="mt-6 shrink-0"
+          />
+          <RatingHistogram
+            buckets={media.ratingDistribution}
+            type={media.type}
+            average
+            className="min-w-0 flex-1"
+          />
         </div>
       )}
     </div>
@@ -819,7 +949,13 @@ function RatingsPanel({ media }: { media: MediaDetail }): JSX.Element {
 }
 
 /** Ratings from people the viewer follows — Letterboxd's "Friends" panel. */
-function FriendRatingsPanel({ mediaId }: { mediaId: string }): JSX.Element | null {
+function FriendRatingsPanel({
+  mediaId,
+  type,
+}: {
+  mediaId: string;
+  type: MediaDetail['type'];
+}): JSX.Element | null {
   const { data } = useQuery({
     queryKey: ['friend-ratings', mediaId],
     queryFn: () => api.getFriendRatings(mediaId),
@@ -842,7 +978,7 @@ function FriendRatingsPanel({ mediaId }: { mediaId: string }): JSX.Element | nul
             >
               {r.user.displayName || r.user.username}
             </Link>
-            <StarText value={r.ratingValue} size={12} />
+            <RatingMark value={r.ratingValue} type={type} size={12} />
           </li>
         ))}
       </ul>
@@ -873,7 +1009,7 @@ function StatsPanel({ media }: { media: MediaDetail }): JSX.Element {
         ))}
         {media.providerRating !== null && (
           <div className="flex items-baseline gap-2 border-t border-border pt-1.5">
-            <dt className="text-muted">TMDB</dt>
+            <dt className="text-muted">TMDB score</dt>
             <span
               aria-hidden="true"
               className="min-w-4 flex-1 border-b border-dotted border-border"
@@ -921,12 +1057,13 @@ function CastGrid({
             className="group flex items-center gap-2.5"
             title={`Everything by ${c.name}`}
           >
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-surface-2 ring-1 ring-transparent transition-colors group-hover:ring-gold">
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-surface-2 ring-1 ring-border-hi/60 group-hover:ring-gold">
               {c.profileUrl && (
                 <img
                   src={c.profileUrl}
                   alt=""
                   loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
               )}
@@ -951,15 +1088,18 @@ function CastGrid({
   );
 }
 
+/** Machine values in the details list are typewritten; names and titles aren't. */
+const DATA_ROWS = new Set(['Released', 'Runtime']);
+
 function DetailsList({ media }: { media: MediaDetail }): JSX.Element {
   const rows: { label: string; value: string }[] = [];
   if (media.originalTitle && media.originalTitle !== media.title) {
     rows.push({ label: 'Original title', value: media.originalTitle });
   }
-  if (media.releaseDate) rows.push({ label: 'Released', value: media.releaseDate });
+  if (media.releaseDate) rows.push({ label: 'Released', value: formatDate(media.releaseDate) });
   if (media.runtime) rows.push({ label: 'Runtime', value: formatRuntime(media.runtime) });
   if (media.studios.length) rows.push({ label: 'Studios', value: media.studios.join(', ') });
-  rows.push({ label: 'Type', value: media.type });
+  rows.push({ label: 'Type', value: TYPE_LABEL[media.type] });
 
   return (
     <dl className="space-y-2 text-sm">
@@ -968,39 +1108,65 @@ function DetailsList({ media }: { media: MediaDetail }): JSX.Element {
           <dt className="font-cond text-[13px] font-bold uppercase tracking-[0.1em] text-muted-2">
             {r.label}
           </dt>
-          <dd className="text-content/90">{r.value}</dd>
+          <dd className={cn('text-content/90', DATA_ROWS.has(r.label) && 'font-data text-[13px]')}>
+            {r.value}
+          </dd>
         </div>
       ))}
     </dl>
   );
 }
 
-function ChipRow({ items, emptyLabel }: { items: string[]; emptyLabel: string }): JSX.Element {
-  if (items.length === 0) return <p className="text-sm text-muted-2">{emptyLabel}</p>;
+/** Genres, each a door to that shelf of the catalogue. */
+function GenreChips({ media }: { media: MediaDetail }): JSX.Element {
+  if (media.genres.length === 0) return <p className="text-sm text-muted-2">No genres recorded.</p>;
+  const type = isEpisodicType(media.type) ? '&type=TV' : '';
   return (
     <div className="flex flex-wrap gap-2">
-      {items.map((g) => (
-        <span
-          key={g}
-          className="rounded-full border border-border bg-surface-2 px-3 py-1 text-xs text-muted"
+      {media.genres.map((g) => (
+        <Link
+          key={g.id}
+          to={`/films?genre=${encodeURIComponent(g.name)}${type}`}
+          className="hover:[&>*]:border-content hover:[&>*]:text-content"
         >
-          {g}
-        </span>
+          <Tag>{g.name}</Tag>
+        </Link>
       ))}
     </div>
+  );
+}
+
+/** Public lists this title sits in — rendered only when there are some. */
+function ListsContaining({ mediaId }: { mediaId: string }): JSX.Element | null {
+  const query = useInfiniteQuery({
+    queryKey: ['media-lists', mediaId],
+    staleTime: 10 * 60_000,
+    queryFn: ({ pageParam }) => api.getMediaLists(mediaId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
+  const lists = query.data?.pages.flatMap((p) => p.lists) ?? [];
+  if (lists.length === 0) return null;
+  return (
+    <section>
+      <SectionHeader title="Lists containing this" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {lists.map((l) => (
+          <ListCard key={l.id} list={l} />
+        ))}
+      </div>
+      <LoadMore query={query} label="All lists" />
+    </section>
   );
 }
 
 function SimilarSection({
   mediaId,
   isEpisodic,
-  onOpenResolved,
 }: {
   mediaId: string;
   isEpisodic: boolean;
-  onOpenResolved: (id: string) => void;
 }): JSX.Element | null {
-  const [opening, setOpening] = useState(false);
   const { data } = useQuery({
     queryKey: ['similar', mediaId],
     queryFn: () => api.getSimilar(mediaId),
@@ -1011,40 +1177,21 @@ function SimilarSection({
   // "Similar films" heading would just be dead weight.
   if (!data || data.results.length === 0) return null;
 
-  async function open(result: SearchResult): Promise<void> {
-    if (result.id) return onOpenResolved(result.id);
-    setOpening(true);
-    try {
-      const detail = await api.resolveMedia({
-        provider: result.provider,
-        externalId: result.externalId,
-        type: result.type,
-      });
-      onOpenResolved(detail.id);
-    } finally {
-      setOpening(false);
-    }
-  }
-
   return (
     <section>
       <SectionHeader title={isEpisodic ? 'Similar shows' : 'Similar films'} />
-      {opening && (
-        <div className="flex justify-center py-3">
-          <Spinner className="h-4 w-4" />
-        </div>
-      )}
-      <div className="grid grid-cols-3 gap-x-2.5 gap-y-4 sm:grid-cols-4 md:grid-cols-6">
+      <PosterGrid variant="dense">
         {data.results.map((r) => (
           <Poster
             key={`${r.provider}:${r.externalId}`}
             title={r.title}
+            year={r.year}
             type={r.type}
             posterUrl={r.posterUrl}
-            onClick={() => void open(r)}
+            to={mediaHref(r)}
           />
         ))}
-      </div>
+      </PosterGrid>
     </section>
   );
 }

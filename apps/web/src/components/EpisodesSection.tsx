@@ -2,10 +2,14 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RatingScale, SeasonWithEpisodes } from '@cinelog/contracts';
 import { api } from '../lib/api';
+import { invalidateUserMedia } from '../lib/invalidate';
 import { cn } from '../lib/cn';
-import { ratingColor, to10 } from '../lib/ratingColor';
-import { StarInput } from './RatingWidget';
-import { Spinner } from './ui';
+import { plural } from '../lib/format';
+import { ratingColor } from '../lib/ratingColor';
+import { IconChevronRight } from './app/Icons';
+import { DateText, SectionHeader } from './lb';
+import { formatRating, RatingMark, StarInput } from './Rating';
+import { Button, Segmented, Spinner } from './ui';
 
 type Order = 'oldest' | 'newest';
 
@@ -24,7 +28,10 @@ export function EpisodesSection({
     queryFn: () => api.getEpisodes(mediaId),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['episodes', mediaId] });
+  const invalidate = (): void => {
+    void queryClient.invalidateQueries({ queryKey: ['episodes', mediaId] });
+    invalidateUserMedia(queryClient, mediaId);
+  };
   const rateMut = useMutation({
     mutationFn: ({ episodeId, value }: { episodeId: string; value: number | null }) =>
       api.rateEpisode(episodeId, value),
@@ -42,56 +49,35 @@ export function EpisodesSection({
     [seasons, order],
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  }
+  if (isLoading) return <Spinner center />;
   if (seasons.length === 0) return null;
 
   return (
     <section>
-      <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-border pb-4">
-        <h2 className="font-cond text-[15px] font-extrabold uppercase tracking-[0.08em] text-muted">
-          Ratings by episode
-        </h2>
-        <span className="text-sm tabular-nums text-muted-2">{totalEpisodes}</span>
-        {data?.showAverage != null && (
-          <span className="ml-auto flex items-center gap-2 text-sm">
-            <span className="text-muted-2">Show average</span>
-            <span className="rounded-md bg-gold px-2 py-0.5 font-cond text-sm font-extrabold tabular-nums text-ink">
-              {to10(data.showAverage)}
-            </span>
-          </span>
-        )}
-      </div>
+      <SectionHeader
+        title="Your ratings by episode"
+        count={totalEpisodes}
+        right={
+          <Segmented
+            label="Season order"
+            value={order}
+            onChange={setOrder}
+            options={[
+              { value: 'oldest', label: 'Oldest first' },
+              { value: 'newest', label: 'Newest first' },
+            ]}
+          />
+        }
+      />
 
-      {/* Sort toggle */}
-      <div className="mb-5 flex items-center gap-3">
-        <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em] text-muted-2">
-          Sort by
-        </span>
-        <div className="flex gap-1.5">
-          {(['oldest', 'newest'] as Order[]).map((o) => (
-            <button
-              key={o}
-              onClick={() => setOrder(o)}
-              className={cn(
-                'rounded-full border px-3.5 py-1 text-sm capitalize transition-colors',
-                order === o
-                  ? 'border-cyan bg-cyan/15 text-cyan'
-                  : 'border-border text-muted hover:text-content',
-              )}
-            >
-              {o}
-            </button>
-          ))}
-        </div>
-      </div>
+      {data?.showAverage != null && (
+        <p className="mb-4 flex items-center gap-2.5 text-sm text-muted">
+          Your average across seasons
+          <RatingMark value={data.showAverage} scale={scale} display="number" average size={15} />
+        </p>
+      )}
 
-      <RatingsGrid seasons={ordered} />
+      <RatingsGrid seasons={ordered} scale={scale} />
 
       {/* Per-season episode lists */}
       <div className="mt-8 space-y-3">
@@ -112,7 +98,13 @@ export function EpisodesSection({
 
 // -------------------------------------------------------------------------
 
-function RatingsGrid({ seasons }: { seasons: SeasonWithEpisodes[] }): JSX.Element {
+function RatingsGrid({
+  seasons,
+  scale,
+}: {
+  seasons: SeasonWithEpisodes[];
+  scale: RatingScale;
+}): JSX.Element {
   const maxEp = Math.max(1, ...seasons.flatMap((s) => s.episodes.map((e) => e.episodeNumber)));
   const cols = Array.from({ length: maxEp }, (_, i) => i + 1);
   // Thin out the episode header labels on very long seasons so they stay legible.
@@ -126,23 +118,31 @@ function RatingsGrid({ seasons }: { seasons: SeasonWithEpisodes[] }): JSX.Elemen
       >
         <div />
         {cols.map((c) => (
-          <div key={c} className="pb-1 font-cond text-[11px] font-bold uppercase tracking-wide text-muted-2">
+          <div key={c} className="pb-1 font-data text-[11px] text-muted-2">
             {c % labelEvery === 0 || c === 1 ? c : ''}
           </div>
         ))}
         {seasons.map((season) => (
-          <GridRow key={season.seasonNumber} season={season} cols={cols} />
+          <GridRow key={season.seasonNumber} season={season} cols={cols} scale={scale} />
         ))}
       </div>
     </div>
   );
 }
 
-function GridRow({ season, cols }: { season: SeasonWithEpisodes; cols: number[] }): JSX.Element {
+function GridRow({
+  season,
+  cols,
+  scale,
+}: {
+  season: SeasonWithEpisodes;
+  cols: number[];
+  scale: RatingScale;
+}): JSX.Element {
   const byNumber = new Map(season.episodes.map((e) => [e.episodeNumber, e]));
   return (
     <>
-      <div className="flex items-center justify-end pr-1 font-cond text-xs font-bold uppercase text-muted-2">
+      <div className="flex items-center justify-end pr-1 font-data text-[11px] text-muted-2">
         S{season.seasonNumber}
       </div>
       {cols.map((c) => {
@@ -152,7 +152,7 @@ function GridRow({ season, cols }: { season: SeasonWithEpisodes; cols: number[] 
           return (
             <div
               key={c}
-              className="h-8 rounded bg-surface-2/40"
+              className="h-8 rounded-sm bg-surface-2/40"
               title={epTitle(ep.episodeNumber, ep.name)}
             />
           );
@@ -161,11 +161,11 @@ function GridRow({ season, cols }: { season: SeasonWithEpisodes; cols: number[] 
         return (
           <div
             key={c}
-            className="grid h-8 place-items-center rounded font-cond text-[13px] font-extrabold tabular-nums"
+            className="grid h-8 place-items-center rounded-sm font-data text-[13px] font-bold"
             style={{ background: bg, color: fg }}
-            title={`${epTitle(ep.episodeNumber, ep.name)} — ${to10(ep.rating)}`}
+            title={`${epTitle(ep.episodeNumber, ep.name)} — ${formatRating(ep.rating, scale)}`}
           >
-            {to10(ep.rating)}
+            {formatRating(ep.rating, scale)}
           </div>
         );
       })}
@@ -189,66 +189,62 @@ function SeasonPanel({
   const [open, setOpen] = useState(defaultOpen);
   const hasRatings = season.averageRating != null;
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-surface">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/50"
-      >
-        <span className={cn('text-muted-2 transition-transform', open && 'rotate-90')}>›</span>
-        <span className="font-cond text-base font-extrabold uppercase tracking-tight">
-          {season.name ?? `Season ${season.seasonNumber}`}
-        </span>
-        <span className="text-xs text-muted-2">{season.episodeCount} episodes</span>
-        {hasRatings && (
-          <span className="ml-auto flex items-center gap-2">
-            <span className="rounded-md bg-gold/15 px-2 py-0.5 font-cond text-sm font-extrabold tabular-nums text-gold">
-              ★ {to10(season.averageRating!)}
-            </span>
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => {
-                e.stopPropagation();
-                onClearSeason();
-              }}
-              className="rounded-md px-2 py-0.5 text-xs text-muted-2 hover:bg-surface-2 hover:text-rose"
-            >
-              Clear
-            </span>
+    <div className="overflow-hidden rounded-sm border border-border bg-surface">
+      {/* The clear control sits beside the disclosure button, not inside it:
+          a button can't hold another button. */}
+      <div className="flex items-center gap-2 pr-2">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          className="flex min-h-[2.75rem] min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-left hover:bg-surface-2/50"
+        >
+          <IconChevronRight
+            className={cn(
+              'h-3.5 w-3.5 shrink-0 text-muted-2 transition-transform',
+              open && 'rotate-90',
+            )}
+          />
+          <span className="font-cond text-[15px] font-extrabold uppercase tracking-[0.04em]">
+            {season.name ?? `Season ${season.seasonNumber}`}
           </span>
+          <span className="font-data text-[11px] text-muted-2">
+            {plural(season.episodeCount, 'episode')}
+          </span>
+        </button>
+        {hasRatings && (
+          <>
+            <RatingMark value={season.averageRating!} scale={scale} display="number" average />
+            <Button variant="link" size="sm" onClick={onClearSeason}>
+              Clear
+            </Button>
+          </>
         )}
-      </button>
+      </div>
       {open && (
         <ul className="divide-y divide-border border-t border-border">
           {season.episodes.map((ep) => (
-            <li key={ep.id} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="w-8 shrink-0 text-center font-cond text-sm font-bold tabular-nums text-muted-2">
+            /* Ten stars need the row to themselves on a phone — beside the
+               title they'd be 14px each — so the row wraps there and the stars
+               take the full width under the title. */
+            <li key={ep.id} className="flex flex-wrap items-center gap-x-3 px-4 py-2">
+              <span className="w-6 shrink-0 text-right font-data text-[13px] font-bold text-muted-2">
                 {ep.episodeNumber}
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-content">{ep.name ?? `Episode ${ep.episodeNumber}`}</p>
-                {ep.airDate && <p className="text-xs tabular-nums text-muted-2">{ep.airDate}</p>}
+              <div className="min-w-0 flex-1 basis-40">
+                <p className="truncate text-sm text-content">
+                  {ep.name ?? `Episode ${ep.episodeNumber}`}
+                </p>
+                {ep.airDate && <DateText iso={ep.airDate} />}
               </div>
-              {/* Ten stars in a list row is a tight target, and half-stars
-                  halve it again — big enough to hit, still subordinate to the
-                  episode title it sits beside. */}
               <StarInput
                 value={ep.rating}
                 scale={scale}
-                size={18}
+                size="sm"
+                label={`Your rating for episode ${ep.episodeNumber}`}
                 onChange={(v) => onRate(ep.id, v)}
+                className="w-full sm:w-[17.5rem]"
               />
-              <button
-                onClick={() => onRate(ep.id, null)}
-                aria-label="Clear rating"
-                className={cn(
-                  'grid h-6 w-6 shrink-0 place-items-center rounded-md text-muted-2 transition-opacity hover:bg-surface-2 hover:text-rose',
-                  ep.rating == null && 'invisible',
-                )}
-                title="Clear rating"
-              >
-                ✕
-              </button>
             </li>
           ))}
         </ul>

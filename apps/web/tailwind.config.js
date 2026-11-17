@@ -68,6 +68,10 @@ export default {
     plugin(({ addVariant }) => {
       addVariant('app', 'html.app-shell &');
       addVariant('not-app', 'html:not(.app-shell) &');
+      // `coarse:` — a finger rather than a cursor. Controls keep their dense
+      // desktop heights and grow to a 44px-class target only where they're
+      // actually touched.
+      addVariant('coarse', '@media (pointer: coarse)');
     }),
   ],
 };

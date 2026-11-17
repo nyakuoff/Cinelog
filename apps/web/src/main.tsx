@@ -34,26 +34,40 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
+// A lazy chunk that 404s after a deploy: reload once to pick up the new build.
+window.addEventListener('vite:preloadError', () => {
+  if (sessionStorage.getItem('cinelog:preload-reload')) return;
+  sessionStorage.setItem('cinelog:preload-reload', '1');
+  window.location.reload();
+});
+
 // Register the PWA service worker in production only (keeps the Vite dev server's
 // HMR untouched). Served from the app root, so its scope is "/".
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    sessionStorage.removeItem('cinelog:preload-reload');
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
-        // A page that's had a controller since before this registration call
-        // was already running an older SW — an `updatefound` from here means
-        // a new version shipped while the (possibly long-lived, installed)
-        // app was sitting open, not just the very first install.
-        const hadController = Boolean(navigator.serviceWorker.controller);
+        // A waiting worker + an existing controller means an update, not a first install.
+        const announce = (): void => {
+          if (registration.waiting && navigator.serviceWorker.controller) {
+            window.dispatchEvent(new CustomEvent(SW_UPDATE_EVENT));
+          }
+        };
+        announce();
         registration.addEventListener('updatefound', () => {
           const installing = registration.installing;
           installing?.addEventListener('statechange', () => {
-            if (installing.state === 'installed' && hadController) {
-              window.dispatchEvent(new CustomEvent(SW_UPDATE_EVENT));
-            }
+            if (installing.state === 'installed') announce();
           });
         });
+        // A resumed (iOS) PWA never re-navigates, so poll for new versions.
+        const check = (): void => void registration.update().catch(() => {});
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') check();
+        });
+        setInterval(check, 60 * 60 * 1000);
       })
       .catch(() => {
         /* best-effort; the app works fine without it */

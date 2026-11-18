@@ -3,7 +3,6 @@ import { Link, Outlet, useLocation, useNavigate, useNavigationType } from 'react
 import { useAuth } from '../../lib/auth';
 import { cn } from '../../lib/cn';
 import { useGoBack, useScreenHeaderConfig } from '../../lib/appShell';
-import { Avatar } from '../Avatar';
 import { Spinner } from '../ui';
 import { TabBar } from '../lb';
 import { LogModal, useLogShortcut } from '../LogModal';
@@ -19,8 +18,9 @@ import { IconBolt, IconChevronLeft, IconPanels, IconPerson, IconPlus, IconSearch
  * point of the app and everything else is navigation around it.
  *
  * The website's masthead nav is not lost, it's redistributed: the home tab
- * and the profile tab each carry a strip of their own sub-screens, which is how
- * a phone app of this shape holds a nav that wide.
+ * carries a strip of its four browse screens, and the profile screen lists its
+ * own sections as rows (see `ProfileMenu`), each pushed with a back chevron —
+ * a sideways-scrolling strip of eleven words is a website habit, not a phone one.
  */
 
 type TabKey = 'home' | 'search' | 'activity' | 'profile';
@@ -46,21 +46,6 @@ const HOME_STRIP = [
   { key: '/lists', to: '/lists', label: 'Lists' },
   { key: '/members', to: '/members', label: 'Members' },
 ];
-/** Your own profile's sections (the same ones a member page tabs through),
- *  then the private shelves that sit beside them. */
-const PROFILE_STRIP = [
-  { key: '/profile', to: '/profile', label: 'Profile' },
-  { key: '/profile/diary', to: '/profile/diary', label: 'Diary' },
-  { key: '/profile/films', to: '/profile/films', label: 'Films' },
-  { key: '/profile/reviews', to: '/profile/reviews', label: 'Reviews' },
-  { key: '/watchlist', to: '/watchlist', label: 'Watchlist' },
-  { key: '/profile/lists', to: '/profile/lists', label: 'Lists' },
-  { key: '/profile/likes', to: '/profile/likes', label: 'Likes' },
-  { key: '/profile/activity', to: '/profile/activity', label: 'Activity' },
-  { key: '/profile/network', to: '/profile/network', label: 'Network' },
-  { key: '/library', to: '/library', label: 'Library' },
-  { key: '/settings', to: '/settings', label: 'Settings' },
-];
 
 /** Route → screen name, for the bar the screen didn't override. */
 const ROUTE_TITLES: { match: RegExp; title: string; back?: boolean }[] = [
@@ -69,15 +54,16 @@ const ROUTE_TITLES: { match: RegExp; title: string; back?: boolean }[] = [
   { match: /^\/members/, title: 'Members' },
   { match: /^\/lists$/, title: 'Lists' },
   { match: /^\/lists\//, title: 'List', back: true },
-  { match: /^\/library/, title: 'Library' },
-  { match: /^\/watchlist/, title: 'Watchlist' },
+  { match: /^\/library/, title: 'Library', back: true },
+  { match: /^\/watchlist/, title: 'Watchlist', back: true },
   { match: /^\/search/, title: 'Search' },
   { match: /^\/activity/, title: 'Activity' },
-  { match: /^\/profile/, title: 'Profile' },
+  { match: /^\/profile$/, title: 'Profile' },
+  { match: /^\/profile\//, title: 'Profile', back: true },
   { match: /^\/u\//, title: 'Member', back: true },
   { match: /^\/review\//, title: 'Review', back: true },
   { match: /^\/person\//, title: 'Person', back: true },
-  { match: /^\/settings/, title: 'Settings' },
+  { match: /^\/settings/, title: 'Settings', back: true },
   { match: /^\/admin/, title: 'Admin', back: true },
 ];
 
@@ -110,11 +96,6 @@ function tabForPath(path: string, ownUsername?: string): TabKey | null {
   return null; // media / person / member / list detail
 }
 
-function stripForPath(path: string): typeof HOME_STRIP | null {
-  if (HOME_STRIP.some((s) => s.to === path)) return HOME_STRIP;
-  if (PROFILE_STRIP.some((s) => s.to === path)) return PROFILE_STRIP;
-  return null;
-}
 
 /**
  * Which tab is lit. A detail screen (a title, a person, a member, a list)
@@ -144,7 +125,7 @@ export function AppShell(): JSX.Element {
   const title = override?.title ?? route?.title ?? 'Cinelog';
   const hidden = override?.hidden ?? false;
   const back = override?.back ?? route?.back ?? tabForPath(path, user?.username) === null;
-  const strip = stripForPath(path);
+  const strip = HOME_STRIP.some((s) => s.to === path) ? HOME_STRIP : null;
   const activeTab = useActiveTab(path, location.key, user?.username);
 
   // A phone app opens each new screen at its top — tapping a poster from
@@ -196,13 +177,7 @@ export function AppShell(): JSX.Element {
             <h1 className="truncate text-center font-cond text-[15px] font-extrabold uppercase tracking-[0.16em] text-content">
               {title}
             </h1>
-            <Link
-              to="/settings"
-              aria-label="Settings"
-              className="grid h-12 w-12 place-items-center justify-self-end"
-            >
-              <Avatar user={user} size={26} />
-            </Link>
+            <span />
           </div>
 
           {/* The strip's own baseline rule is dropped: the header's 2px edge
@@ -233,7 +208,7 @@ export function AppShell(): JSX.Element {
             <button
               onClick={() => setLogging(true)}
               aria-label="Log a title"
-              className="grid h-11 w-11 place-items-center rounded-sm border-2 border-gold text-gold active:bg-gold active:text-ink"
+              className="grid h-11 w-11 place-items-center rounded-sm bg-gold text-ink active:opacity-80"
             >
               <IconPlus className="h-6 w-6" />
             </button>
@@ -265,7 +240,6 @@ function TabButton({
   return (
     <Link
       to={tab.to}
-      aria-label={tab.label}
       aria-current={active ? 'page' : undefined}
       onClick={(e) => {
         if (!here) return;
@@ -274,17 +248,16 @@ function TabButton({
         window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
       }}
       className={cn(
-        'flex flex-1 flex-col items-center justify-center gap-1',
+        'flex flex-1 flex-col items-center justify-center gap-0.5',
         active ? 'text-gold' : 'text-muted-2',
       )}
     >
       <Icon className="h-[22px] w-[22px]" />
-      {/* A 2px ruled tick rather than a label: five words across a 390px bar
-          shrink to unreadable, and the icons already carry the meaning. */}
-      <span
-        aria-hidden="true"
-        className={cn('h-[2px] w-4', active ? 'bg-gold' : 'bg-transparent')}
-      />
+      {/* Labelled: an icon-only bar makes a member learn the glyphs, and four
+          short words fit a 320px bar at this size. */}
+      <span className="font-cond text-[10px] font-bold uppercase tracking-[0.12em]">
+        {tab.label}
+      </span>
     </Link>
   );
 }

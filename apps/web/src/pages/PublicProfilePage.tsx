@@ -18,7 +18,13 @@ import { posterGradient } from '../lib/poster';
 import { cn } from '../lib/cn';
 import { Avatar } from '../components/Avatar';
 import { ActivityFeed } from '../components/ActivityFeed';
-import { IconEdit, IconHeart, IconReview, IconRewatch } from '../components/app/Icons';
+import {
+  IconChevronRight,
+  IconEdit,
+  IconHeart,
+  IconReview,
+  IconRewatch,
+} from '../components/app/Icons';
 import {
   Button,
   Checkbox,
@@ -105,9 +111,17 @@ function ProfileView({
     queryFn: () => api.getPublicProfile(username),
   });
 
-  // A member's screen is titled with their name; your own tab stays "Profile".
+  // A section is titled with its own name (the back chevron returns to the
+  // cover); a member's cover with their name; your own cover stays "Profile".
   useScreenHeader({
-    title: routed ? (profile ? profile.displayName || profile.username : username) : undefined,
+    title:
+      tab !== 'profile'
+        ? TABS.find((t) => t.key === tab)?.label
+        : routed
+          ? profile
+            ? profile.displayName || profile.username
+            : username
+          : undefined,
   });
 
   if (isLoading) return <Spinner center />;
@@ -171,9 +185,9 @@ function ProfileView({
         onEditProfile={() => navigate('/settings')}
       />
 
-      {/* Your own profile in the installed app is tabbed by the shell's strip. */}
+      {/* In the installed app, sections are rows on the cover (ProfileMenu). */}
       <TabBar
-        className={cn('mt-6', !routed && 'app:hidden')}
+        className="mt-6 app:hidden"
         active={tab}
         tabs={TABS.filter((t) => t.key !== 'watchlist' || profile.canViewWatchlist).map((t) => ({
           ...t,
@@ -199,6 +213,7 @@ function ProfileView({
               onEdit={editFavorites}
             />
             <RecentActivity username={u} base={base} />
+            <ProfileMenu profile={profile} base={base} />
             <RecentReviews username={u} base={base} />
           </div>
 
@@ -240,7 +255,7 @@ function ProfileView({
                 </div>
               )}
             </div>
-            <div>
+            <div className="app:hidden">
               <SectionHeader title="Network" more={`${base}/network`} moreLabel="All" />
               <p className="flex gap-5 text-sm text-muted">
                 <Link to={`${base}/network`} className="hover:text-content">
@@ -1050,12 +1065,12 @@ function ProfileHeader({
   const avatar = { username: profile.username, avatarUrl: profile.avatarUrl };
   const favorites = [...profile.favoriteFilms, ...profile.favoriteShows].slice(0, 4);
   return (
-    <div>
+    <div className={cn(compact && 'app:hidden')}>
       {/* Cover: the member's uploaded banner, or — the way a Letterboxd header
           is built from the account's own taste — a collage of their favourites. */}
       {!compact && (
-        <div className="relative mb-10">
-          <div className="relative h-40 overflow-hidden rounded-sm border border-border bg-surface-2 sm:h-52">
+        <div className="relative mb-10 app:-mx-4 app:-mt-4">
+          <div className="relative h-40 overflow-hidden rounded-sm border border-border bg-surface-2 app:rounded-none app:border-0 sm:h-52">
             {profile.bannerUrl ? (
               <img
                 src={profile.bannerUrl}
@@ -1093,7 +1108,7 @@ function ProfileHeader({
             )}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-black/20" />
           </div>
-          <div className="absolute -bottom-8 left-5 rounded-sm ring-4 ring-bg">
+          <div className="absolute -bottom-8 left-5 rounded-sm ring-4 ring-bg app:left-4">
             <Avatar user={avatar} size={80} />
           </div>
         </div>
@@ -1146,34 +1161,83 @@ function ProfileHeader({
   );
 }
 
+/**
+ * The installed app's profile nav: a member's sections as rows, the way a
+ * phone settings-style screen lists its places, each pushed as its own
+ * screen. Replaces the website's tab strip, which on a phone scrolls sideways
+ * with most of its words off-screen.
+ */
+function ProfileMenu({ profile, base }: { profile: PublicProfile; base: string }): JSX.Element {
+  const films = profile.stats.moviesWatched + profile.stats.showsWatched;
+  const rows: { label: string; to: string; count?: number }[] = [
+    { label: 'Films', to: `${base}/films`, count: films },
+    { label: 'Diary', to: `${base}/diary` },
+    { label: 'Reviews', to: `${base}/reviews` },
+    { label: 'Lists', to: `${base}/lists` },
+    ...(profile.canViewWatchlist ? [{ label: 'Watchlist', to: `${base}/watchlist` }] : []),
+    { label: 'Likes', to: `${base}/likes` },
+    { label: 'Activity', to: `${base}/activity` },
+    { label: 'Network', to: `${base}/network`, count: profile.followerCount },
+    ...(profile.isOwnProfile
+      ? [
+          { label: 'Library', to: '/library' },
+          { label: 'Settings', to: '/settings' },
+        ]
+      : []),
+  ];
+  return (
+    <nav aria-label="Profile sections" className="-mx-4 hidden border-y border-border app:block">
+      {rows.map((r) => (
+        <Link
+          key={r.label}
+          to={r.to}
+          className="flex min-h-[3rem] items-center gap-3 border-t border-border px-4 first:border-t-0 active:bg-surface-2"
+        >
+          <span className="flex-1 font-cond text-[15px] font-bold uppercase tracking-[0.08em]">
+            {r.label}
+          </span>
+          {r.count !== undefined && (
+            <span className="font-data text-[13px] text-muted-2">{r.count}</span>
+          )}
+          <IconChevronRight className="h-3.5 w-3.5 text-muted-2" />
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 /** The tallies, each one a door to the shelf it counts. */
 function StatsRow({ profile, base }: { profile: PublicProfile; base: string }): JSX.Element {
   const stats = profile.stats;
-  const items: { label: string; value: number; to?: string }[] = [
+  const items: { label: string; value: number; to?: string; wide?: true }[] = [
     { label: 'Films', value: stats.moviesWatched, to: `${base}/films?type=films` },
     { label: 'Shows', value: stats.showsWatched, to: `${base}/films?type=shows` },
-    { label: 'Episodes', value: stats.episodesWatched },
-    { label: 'Ratings', value: stats.totalRatings, to: `${base}/films?rated=true` },
+    { label: 'Episodes', value: stats.episodesWatched, wide: true },
+    { label: 'Ratings', value: stats.totalRatings, to: `${base}/films?rated=true`, wide: true },
     { label: 'Followers', value: profile.followerCount, to: `${base}/network` },
     { label: 'Following', value: profile.followingCount, to: `${base}/network?side=following` },
   ];
   return (
-    <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border pt-6 sm:grid-cols-6">
+    <div className="mt-6 grid grid-cols-3 gap-3 border-t border-border pt-6 app:mt-5 app:grid-cols-4 app:gap-1 app:pt-4 sm:grid-cols-6">
       {items.map((i) => {
         const inner = (
           <>
-            <p className="font-data text-2xl font-bold text-content">{i.value}</p>
+            <p className="font-data text-2xl font-bold text-content app:text-xl">{i.value}</p>
             <p className="font-cond text-[11px] font-bold uppercase tracking-[0.16em] text-muted-2 group-hover:text-content">
               {i.label}
             </p>
           </>
         );
         return i.to ? (
-          <Link key={i.label} to={i.to} className="group block text-center">
+          <Link
+            key={i.label}
+            to={i.to}
+            className={cn('group block text-center', i.wide && 'app:hidden')}
+          >
             {inner}
           </Link>
         ) : (
-          <div key={i.label} className="text-center">
+          <div key={i.label} className={cn('text-center', i.wide && 'app:hidden')}>
             {inner}
           </div>
         );

@@ -153,9 +153,11 @@ function FilterBar({
   onChange: (next: Partial<Filters>) => void;
   busy: boolean;
 }): JSX.Element {
-  const cell = 'w-full sm:w-auto';
+  // In the installed app the filters are one row that scrolls sideways, so
+  // posters start a third of a screen higher than a 2×2 grid of selects allows.
+  const cell = 'w-full sm:w-auto app:w-auto app:shrink-0';
   return (
-    <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 sm:flex sm:flex-wrap">
+    <div className="grid grid-cols-2 items-center gap-2 border-b border-border pb-5 app:-mx-4 app:flex app:overflow-x-auto app:px-4 app:pb-3 app:[scrollbar-width:none] sm:flex sm:flex-wrap">
       <Segmented
         label="Films or shows"
         value={filters.type}
@@ -164,7 +166,7 @@ function FilterBar({
           { value: 'MOVIE', label: 'Films' },
           { value: 'TV', label: 'Shows' },
         ]}
-        className="col-span-2 w-fit sm:mr-1"
+        className="col-span-2 w-fit shrink-0 sm:mr-1"
       />
 
       <Select

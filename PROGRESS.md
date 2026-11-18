@@ -367,8 +367,10 @@ The web app renders through one of two shells, chosen at runtime in
 
 - **Website** (`components/Layout.tsx`) — masthead, horizontal nav, sidebars. Unchanged.
 - **Installed app** (`components/app/AppShell.tsx`) — a phone-shaped shell: contextual
-  title bar, one screen at a time, fixed bottom tab bar (Browse · Search · **Log** ·
-  Activity · Profile) with the log action struck through its centre.
+  title bar, one screen at a time, fixed labelled bottom tab bar (Home · Search · **Log** ·
+  Activity · Profile) with the log action at its centre. Home carries a four-item strip
+  (Home/Media/Lists/Members); a profile lists its sections as rows (`ProfileMenu` in
+  `PublicProfilePage.tsx`), each pushed with a back chevron, instead of a tab strip.
 
 The switch requires standalone display-mode **and** a viewport under 900px, so an
 installed desktop PWA keeps the website layout. `?app=1` forces the shell on (and
@@ -380,7 +382,8 @@ app's title bar already carries, a sidebar that duplicates the Activity tab) it 
 by the Tailwind `app:` / `not-app:` variants, which key off `html.app-shell` — not by
 branching in component logic. The film page is the one genuine structural fork
 (`AppFilmScreen` in `MediaDetailPage.tsx`): backdrop to the top edge under the status bar,
-poster beside the title, and watched/liked/watchlisted pinned above the tab bar.
+poster beside the title, then Watched/Like/Watchlist/Log as thumb-sized tiles and the stars
+directly under it. Nothing is pinned above the tab bar.
 
 Not yet done: no swipe-back gesture, no offline queue for logs made without a connection,
 and the diary/grouped-by-month view Letterboxd's own Diary tab has (Cinelog's Library is

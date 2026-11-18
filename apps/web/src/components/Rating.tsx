@@ -119,6 +119,7 @@ export function StarInput({
   disabled,
   size = 'md',
   label = 'Your rating',
+  align = 'start',
   className,
 }: {
   /** Normalized 0..100, or null when unrated. */
@@ -129,6 +130,9 @@ export function StarInput({
   /** `sm` for list rows (episodes); `md` wherever the rating is the point. */
   size?: 'sm' | 'md';
   label?: string;
+  /** `center` mirrors the clear button with a spacer, so the stars — not the
+   *  stars plus the button — sit on the centre line. */
+  align?: 'start' | 'center';
   className?: string;
 }): JSX.Element {
   const scale = starScale(scaleProp);
@@ -160,7 +164,7 @@ export function StarInput({
   }
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div className={cn('flex items-center gap-1', align === 'center' && 'justify-center', className)}>
       <button
         type="button"
         onClick={() => onChange(null)}
@@ -260,6 +264,7 @@ export function StarInput({
           );
         })}
       </div>
+      {align === 'center' && <span aria-hidden="true" className="w-8 shrink-0" />}
     </div>
   );
 }

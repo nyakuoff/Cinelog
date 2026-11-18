@@ -17,10 +17,14 @@ import { posterGradient } from '../lib/poster';
 import { formatDate, localDateString } from '../lib/format';
 import {
   IconChevronLeft,
+  IconClock,
   IconDots,
   IconEdit,
+  IconEye,
+  IconHeart,
   IconList,
   IconPlay,
+  IconPlus,
   IconShare,
 } from '../components/app/Icons';
 import { Button, buttonClass, LoadMore, Spinner, StampToggle } from '../components/ui';
@@ -195,7 +199,7 @@ export function MediaDetailPage(): JSX.Element {
   ];
 
   return (
-    <div className={appShell ? 'pb-actionbar' : 'pb-20'}>
+    <div className={appShell ? undefined : 'pb-20'}>
       {appShell ? (
         <AppFilmScreen
           media={m}
@@ -417,12 +421,13 @@ export function MediaDetailPage(): JSX.Element {
 /**
  * The film screen as the installed app draws it.
  *
- * Same record, one column. The backdrop runs to the top edge and under the
- * status bar with the title struck over its fade; the poster sits beside the
- * title rather than above the fold on its own; and the three states you set
- * most often — watched, liked, watchlisted — are pinned to the foot of the
- * screen so they're reachable with a thumb from anywhere in a long page,
- * instead of being a scroll away in a sidebar that a phone has no room for.
+ * Same record, one column, ordered by what you came to do. The backdrop runs
+ * to the top edge under the status bar with the title struck over its fade
+ * and the poster beside it; directly under that, the four things you do to a
+ * title — watched, like, watchlist, log — as thumb-sized tiles, then your
+ * stars. Reading matter (synopsis, ratings, credits) comes after. Nothing is
+ * pinned: a second fixed bar over the tab bar cost a sixth of the screen on
+ * every scroll for actions you take once.
  */
 function AppFilmScreen({
   media: m,
@@ -468,7 +473,7 @@ function AppFilmScreen({
     <>
       {/* ---- Hero ---------------------------------------------------- */}
       <div className="relative">
-        <div className="h-[38vh] min-h-[230px] w-full overflow-hidden">
+        <div className="h-[30vh] min-h-[200px] w-full overflow-hidden">
           {m.backdropUrl ? (
             <img
               src={m.backdropUrl}
@@ -555,8 +560,53 @@ function AppFilmScreen({
           </span>
         </div>
 
+        {/* ---- What you do to a title ----------------------------------- */}
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <ActionTile
+            label="Watched"
+            icon={<IconEye className="h-6 w-6" />}
+            active={watched}
+            tone="text-cyan"
+            onClick={onWatch}
+            disabled={watchPending}
+          />
+          <ActionTile
+            label="Like"
+            icon={<IconHeart filled={state.isFavorite} className="h-6 w-6" />}
+            active={state.isFavorite}
+            tone="text-rose"
+            onClick={onLike}
+          />
+          <ActionTile
+            label="Watchlist"
+            icon={<IconClock className="h-6 w-6" />}
+            active={state.isWatchlisted}
+            tone="text-gold"
+            onClick={onWatchlist}
+          />
+          <button
+            type="button"
+            onClick={onLog}
+            className="flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-sm bg-gold text-ink active:opacity-80"
+          >
+            <IconPlus className="h-6 w-6" />
+            <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em]">Log</span>
+          </button>
+        </div>
+
+        <StarInput value={state.rating} scale={scale} onChange={onRate} align="center" className="mt-4" />
+        {isEpisodicType(m.type) && (
+          <div className="mt-3">
+            <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
+          </div>
+        )}
+        {/* Lists + share side by side; the activity line spans beneath. */}
+        <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-sm border border-border [&>button+button]:border-l [&>button]:border-t-0 [&>p]:col-span-2">
+          <RecordActions media={m} />
+        </div>
+
         {m.tagline && (
-          <p className="mt-4 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-muted">
+          <p className="mt-6 font-cond text-[13px] font-bold uppercase tracking-[0.14em] text-muted">
             {m.tagline}
           </p>
         )}
@@ -567,19 +617,6 @@ function AppFilmScreen({
 
       {/* ---- Record, ratings, credits -------------------------------- */}
       <div className="mt-7 space-y-7 px-4">
-        <div>
-          <SectionHeader title="Your rating" />
-          <StarInput value={state.rating} scale={scale} onChange={onRate} />
-          {isEpisodicType(m.type) && (
-            <div className="mt-3">
-              <StatusPicker value={state.status} onChange={onStatus} className="w-full" />
-            </div>
-          )}
-          <div className="mt-3 overflow-hidden rounded-sm border border-border">
-            <RecordActions media={m} />
-          </div>
-        </div>
-
         <WhereToWatch media={m} />
         <RatingsPanel media={m} />
         <FriendRatingsPanel mediaId={m.id} type={m.type} />
@@ -614,37 +651,41 @@ function AppFilmScreen({
         </div>
       </div>
 
-      {/* ---- Pinned record bar --------------------------------------- */}
-      <div className="fixed inset-x-0 bottom-tabbar z-30 border-t-2 border-border-hi bg-bg-2 pl-safe pr-safe">
-        <div className="mx-auto flex h-[var(--actionbar-h)] max-w-md items-center gap-1 px-2">
-          <StampToggle
-            label="Watched"
-            active={watched}
-            tone="cyan"
-            onChange={onWatch}
-            disabled={watchPending}
-            className="flex-1"
-          />
-          <StampToggle
-            label="Liked"
-            active={state.isFavorite}
-            tone="rose"
-            onChange={onLike}
-            className="flex-1"
-          />
-          <StampToggle
-            label="Watchlist"
-            active={state.isWatchlisted}
-            tone="gold"
-            onChange={onWatchlist}
-            className="flex-1"
-          />
-          <Button variant="primary" size="sm" onClick={onLog}>
-            Log
-          </Button>
-        </div>
-      </div>
     </>
+  );
+}
+
+/** One of the film screen's four action tiles: ruled when unset, inked in its
+ *  stamp colour when set — the same grammar as a stamp, at thumb size. */
+function ActionTile({
+  label,
+  icon,
+  active,
+  tone,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  icon: JSX.Element;
+  active: boolean;
+  tone: string;
+  onClick: () => void;
+  disabled?: boolean;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      className={cn(
+        'flex min-h-[4rem] flex-col items-center justify-center gap-1 rounded-sm border active:bg-surface-2 disabled:opacity-60',
+        active ? cn('border-current', tone) : 'border-border text-muted',
+      )}
+    >
+      {icon}
+      <span className="font-cond text-[11px] font-bold uppercase tracking-[0.12em]">{label}</span>
+    </button>
   );
 }
 
@@ -804,7 +845,7 @@ function ActionPanel({
         <p className="mb-1 font-cond text-[11px] font-extrabold uppercase tracking-[0.18em] text-muted-2">
           {state.rating === null ? 'Rate' : 'Your rating'}
         </p>
-        <StarInput value={state.rating} scale={scale} onChange={onRate} />
+        <StarInput value={state.rating} scale={scale} onChange={onRate} align="center" />
       </div>
 
       {/* Watching / on hold / dropped only mean something across episodes. */}
